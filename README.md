@@ -63,9 +63,9 @@ export TASKLINE_PROJECT=demo
 
 Two views, switchable from the toolbar:
 
-- **Kanban** — six columns (created / design / dev / test / review / done),
-  cards sorted by priority within each column. Drag a card right to advance
-  state; the server rejects backward moves (state machine is forward-only).
+- **Kanban** — five columns (created / design / dev / review / done),
+  cards sorted by priority within each column. Drag a card to change its
+  state; the server accepts moves in either direction.
 - **Dependency graph** — every task is a node; edges follow `depends_on`.
   Change state from the dropdown on each node.
 

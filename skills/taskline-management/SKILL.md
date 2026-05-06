@@ -17,7 +17,7 @@ version: 0.1.0
 You are the operator of a local **taskline** instance: a small HTTP server
 backed by SQLite, fronted by a CLI named `taskline`. taskline tracks
 projects and the tasks (features / bugs) inside them, supports an explicit
-state machine (`created → design → dev → test → review → done`), models
+state machine (`created → design → dev → review → done`), models
 inter-task dependencies as a DAG, and exposes a "what's runnable now"
 query that respects priority and blocked-on relationships.
 
@@ -99,16 +99,17 @@ description.
 | `title`      | required, short                                                      |
 | `description`| optional, longer prose                                               |
 | `type`       | `feature` (default) or `bug`                                         |
-| `state`      | `created` → `design` → `dev` → `test` → `review` → `done`            |
+| `state`      | `created` → `design` → `dev` → `review` → `done`                     |
 | `priority`   | integer, **higher = runs sooner** (default 0)                        |
 | `depends_on` | list of task ids (the task is blocked until each dep reaches `done`) |
 | `images`     | optional binary attachments per task                                 |
 
 ### State machine
 
-State may **only move forward** along the linear order above. Skipping
-ahead is allowed (e.g. `created` → `done`); going backward is rejected
-by the server with HTTP 400.
+State moves between any of the five known names. Forward jumps (e.g.
+`created` → `done`) and drop-backs (`review` → `dev` when a defect
+surfaces) are both accepted. The server only rejects unknown state
+names with HTTP 400.
 
 ### Runnable
 
@@ -192,7 +193,7 @@ terminal via `taskline task list`.
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `server <port>: connection refused`                      | server not running — start `./bin/taskline-server` (or `systemctl --user start taskline`)                |
 | `server 404: project ... does not exist`                 | typo'd `--project`; run `taskline project list` to confirm                                               |
-| `server 400: invalid transition X -> Y: ...backward`     | state machine refuses going backward — only fix is to delete + recreate                                  |
+| `server 400: invalid next state "..."`                   | unrecognized state name (e.g. `test` was retired) — pick one of `created/design/dev/review/done`         |
 | `server 409: dependency would create a cycle`            | the dep edge would loop back; restructure or pick a different anchor task                                |
 | `server 409: project name "X" already exists`            | name collision; pick a different name or reuse the existing project (it's likely what you want)          |
 | `error: project required (--project or $TASKLINE_PROJECT)` | export `TASKLINE_PROJECT` once at session start to avoid repeating the flag                              |

@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   STATES,
   STATE_LABELS,
-  canTransition,
   type Project,
   type Task,
   type TaskState,
@@ -82,21 +81,12 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
               className="w-full border rounded px-2 py-1"
               value={state}
               onChange={(e) => {
-                const next = e.target.value as TaskState;
-                if (canTransition(task.state, next)) {
-                  setState(next);
-                  setError(null);
-                } else {
-                  setError(`Backward transition (${task.state} → ${next}) refused`);
-                }
+                setState(e.target.value as TaskState);
+                setError(null);
               }}
             >
               {STATES.map((s) => (
-                <option
-                  key={s}
-                  value={s}
-                  disabled={!canTransition(task.state, s)}
-                >
+                <option key={s} value={s}>
                   {STATE_LABELS[s]}
                 </option>
               ))}

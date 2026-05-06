@@ -66,11 +66,15 @@ func TestTaskCreateAndState(t *testing.T) {
 }
 
 func TestStateTransitionRules(t *testing.T) {
+	// Forward jumps are allowed.
 	require.NoError(t, model.StateCreated.CanTransitionTo(model.StateDesign))
 	require.NoError(t, model.StateCreated.CanTransitionTo(model.StateDone))
-	require.Error(t, model.StateReview.CanTransitionTo(model.StateDev))
-	require.Error(t, model.StateDone.CanTransitionTo(model.StateCreated))
+	// Backward moves are allowed too — the workflow no longer enforces direction.
+	require.NoError(t, model.StateReview.CanTransitionTo(model.StateDev))
+	require.NoError(t, model.StateDone.CanTransitionTo(model.StateCreated))
+	// Unknown state names still fail validation.
 	require.Error(t, model.TaskState("bogus").CanTransitionTo(model.StateDev))
+	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("test")))
 }
 
 func TestUpdateTaskAndDelete(t *testing.T) {

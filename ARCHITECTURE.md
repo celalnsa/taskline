@@ -95,16 +95,18 @@ directory). Keep them identical.
 ## State machine
 
 ```
-created ──▶ design ──▶ dev ──▶ test ──▶ review ──▶ done
-   │           │         │       │         │
-   └───────────┴─────────┴───────┴─────────┘
-        any forward jump is allowed
+created ──▶ design ──▶ dev ──▶ review ──▶ done
+   ▲           ▲         ▲        ▲
+   └───────────┴─────────┴────────┘
+        any move between known states is allowed
 ```
 
-Implemented as integer ranks in `model.stateOrder`. `CanTransitionTo`
-rejects backward moves; the service layer enforces it before calling
-`store.UpdateTask`. Jumping `created → done` is intentional: it's how
-agents close out trivial work without ceremony.
+Implemented as a membership set in `model.stateOrder`. `CanTransitionTo`
+only rejects unknown state names — direction is the agent's call. The
+service layer enforces validation before calling `store.UpdateTask`.
+Jumping `created → done` is intentional (close trivial work without
+ceremony); dropping `review → dev` is intentional too (a review can
+surface a defect that legitimately reopens the implementation).
 
 There's no automatic transition triggered by completing dependencies —
 "runnable" is a *query*, not a state. State only moves when an agent
@@ -200,7 +202,7 @@ connection initializer.
 ## Test strategy
 
 - **Unit**: `service_test.go` and `store_test.go` cover happy paths and
-  edge cases (cycle rejection, backward-state rejection, idempotent dep
+  edge cases (cycle rejection, invalid-state rejection, idempotent dep
   insert). `:memory:` SQLite for speed.
 - **End-to-end**: `server/tests/e2e_test.go` boots a real Hertz server
   on a random port and exercises the HTTP surface, including the SPA

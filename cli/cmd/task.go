@@ -45,7 +45,7 @@ func init() {
 	taskUpdateCmd.Flags().String("title", "", "new title")
 	taskUpdateCmd.Flags().String("description", "", "new description")
 	taskUpdateCmd.Flags().String("type", "", "new type: feature|bug")
-	taskUpdateCmd.Flags().String("state", "", "new state: created|design|dev|test|review|done")
+	taskUpdateCmd.Flags().String("state", "", "new state: created|design|dev|review|done")
 	taskUpdateCmd.Flags().Int("priority", 0, "new priority")
 
 	taskDependCmd.Flags().String("on", "", "id of the task this one depends on (required)")

@@ -56,9 +56,10 @@ internals see `ARCHITECTURE.md`; for the philosophy behind the model see
 
 - **No CGO.** SQLite via `modernc.org/sqlite`. Never introduce a CGO
   dependency — it breaks cross-compile and the `go run` workflow.
-- **State machine is forward-only.** `created → design → dev → test →
-  review → done`. Skipping ahead is fine; going backward returns 400.
-  Validation lives in `server/api/model/model.go` (`CanTransitionTo`).
+- **State machine.** `created → design → dev → review → done`. Movement
+  in either direction is allowed (review surfacing a bug → drop back to
+  dev is a real workflow); validation only rejects unknown state names.
+  Lives in `server/api/model/model.go` (`CanTransitionTo`).
 - **Dependency DAG.** `AddDependency` rejects cycles with 409. Any new
   graph mutation MUST keep the cycle check.
 - **Errors.** Store layer returns sentinel errors (`ErrNotFound`,
@@ -74,7 +75,7 @@ internals see `ARCHITECTURE.md`; for the philosophy behind the model see
 
 - Domain types in `web/src/lib/api.ts` mirror `server/api/model/model.go`.
   When you add a field on the Go side, update the TS shape and any
-  derived constants (e.g. `STATES`, `STATE_ORDER`).
+  derived constants (e.g. `STATES`, `STATE_LABELS`).
 - The web bundle is embedded into the server binary at build time
   (`server/web/embed.go`). The `dist/.gitkeep` placeholder must stay so
   `go:embed all:dist` succeeds on a fresh checkout.
@@ -92,8 +93,10 @@ internals see `ARCHITECTURE.md`; for the philosophy behind the model see
 
 - Don't add Postgres / Redis / external services. The whole point is one
   binary + one SQLite file. If you think you need a queue, you don't.
-- Don't add backward state transitions or "force" flags to the state
-  machine. Delete + recreate is the documented escape hatch.
+- Don't introduce new task states without updating `model.go`,
+  `STATES`/`STATE_LABELS` in `web/src/lib/api.ts`, the schema CHECK
+  constraint, the SKILL.md state list, and any state-keyed dictionary
+  in the web components — keep the canonical set in lockstep.
 - Don't write to `server/web/dist/` by hand — `pnpm build` owns it.
 - Don't add a second auth layer. taskline is single-user and local; CORS
   is intentionally permissive.

@@ -252,7 +252,7 @@ func TestCycleProtectionViaHTTP(t *testing.T) {
 	require.Equal(t, http.StatusConflict, st)
 }
 
-func TestStateTransitionRejectedAtAPI(t *testing.T) {
+func TestStateTransitionAtAPI(t *testing.T) {
 	base, stop := startServer(t)
 	defer stop()
 	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "states"}, &project{})
@@ -260,13 +260,21 @@ func TestStateTransitionRejectedAtAPI(t *testing.T) {
 	jsonReq(t, "POST", base+"/api/v1/projects/states/tasks",
 		map[string]any{"title": "x", "type": "feature"}, &tk)
 
-	// Forward to review.
+	// Forward jump.
 	st := jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
 		map[string]any{"state": "review"}, &tk)
 	require.Equal(t, http.StatusOK, st)
-	// Backward to dev — service must refuse with 400.
+	require.Equal(t, "review", tk.State)
+
+	// Backward move — accepted (workflow is no longer forward-only).
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
-		map[string]any{"state": "dev"}, nil)
+		map[string]any{"state": "dev"}, &tk)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, "dev", tk.State)
+
+	// Retired state — must be rejected as invalid.
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"state": "test"}, nil)
 	require.Equal(t, http.StatusBadRequest, st)
 }
 
