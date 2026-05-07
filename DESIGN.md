@@ -32,7 +32,7 @@ DAG, a priority field, and a JSON-first CLI.
 
 The CLI defaults to JSON output when stdout isn't a TTY. Exit codes are
 stable. Diagnostics go to stderr. The server's contract is small enough
-to memorize: six states, two task types, one priority integer, one
+to memorize: five states, two task types, one priority integer, one
 edge type. A human-friendly UI exists, but it's a *visualization* layer
 on top of the agent contract — never the source of truth.
 
@@ -49,21 +49,26 @@ are no hidden flags ("archived", "snoozed", "blocked-by-other-team")
 that exist in one view but not another. A single SQL query can answer
 "what should I do next?" — that's the test.
 
-### 3. Forward-only state
+### 3. Reversible state
 
-`created → design → dev → test → review → done`. You cannot move a task
-backward. This is deliberate.
+`created → design → dev → review → done`. The expected motion is
+forward, but the state machine permits any move between known states.
+A review that surfaces a defect should drop the task back to `dev`;
+work that turns out to need redesign should drop back to `design`.
+Forcing the agent to delete-and-recreate in those cases destroys
+history (description, dependencies, attachments) that is exactly the
+context a future agent needs.
 
-The reasoning: if an agent thinks a task should "go back to design",
-the right answer is almost always to **delete the task and create a new
-one**, possibly with a dep on whatever needs to happen first. Backward
-transitions are how kanban boards get into "this card has been in QA
-for 47 days" graveyards. taskline forces the agent to either commit to
-done or to admit the work needs to be re-scoped.
+Skipping forward is fine too (`created → done` is a perfectly valid
+move for trivial work). The state machine's only job is to keep the
+set of legal state names honest; the *direction* of motion is a
+modeling choice the agent gets to make.
 
-Skipping forward is allowed (`created → done` is fine) — agents finish
-trivial things without rituals, and the state machine still rejects
-the failure mode it cares about (silent backsliding).
+The earlier "forward-only" rule was a guard against stalled-card
+graveyards. Priority + the runnable query already prevent that: a
+task that has fallen back to `dev` is just another `dev` task —
+visible, sortable, and surfaced by `task next`. The graveyard problem
+was never about backward edges; it was about invisibility.
 
 ### 4. Dependencies are a DAG, not a tree
 
@@ -99,18 +104,23 @@ importance", "estimated effort", "blocked by user feedback", or any of
 the other decoration humans like to add. If you need that, derive it on
 the agent side and translate to a number.
 
-## Why these specific six states
+## Why these specific five states
 
-`created → design → dev → test → review → done` is opinionated. Other
-shapes were considered:
+`created → design → dev → review → done` is opinionated. Other shapes
+were considered:
 
 - **Three states** (`todo / doing / done`): too coarse. Agents working
   in parallel need to know whether something is in design (still
   malleable) or in dev (already being implemented).
+- **A separate `test` stage** (the original shape): redundant with
+  `dev`. Tests live in the same commit as the implementation; a task
+  isn't "in test" while waiting for someone else to write them.
+  Verification belongs in `review`. Removing `test` shrunk the
+  contract without losing real signal.
 - **Custom per-project workflows**: tempting, but the agent contract
   becomes per-project, and `task next` stops being a single thing. The
-  six states cover ~all of "knowledge work that ships software"; if you
-  need something else, this isn't your tool.
+  five states cover ~all of "knowledge work that ships software"; if
+  you need something else, this isn't your tool.
 - **A separate "blocked" state**: redundant with the dep DAG. A task
   with an unfinished dep is *already* not returned by `task next`;
   adding a state would let the truth get out of sync with the edges.

@@ -18,6 +18,16 @@ import (
 //go:embed schema/0001_init.sql
 var schemaInit string
 
+//go:embed schema/0002_drop_test_state.sql
+var schemaDropTestState string
+
+// schemaMigrations are run in order on every open. Each step must be
+// idempotent (safe on a fresh DB and re-runs against a migrated DB).
+var schemaMigrations = []string{
+	schemaInit,
+	schemaDropTestState,
+}
+
 // ErrNotFound is returned when a lookup misses.
 var ErrNotFound = errors.New("not found")
 
@@ -46,9 +56,11 @@ func New(path string) (*Store, error) {
 	// `cache=shared` isn't honored; bound the pool so foreign-keys + WAL stay
 	// configured. One conn is fine for our load.
 	db.SetMaxOpenConns(1)
-	if _, err := db.ExecContext(context.Background(), schemaInit); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
+	for i, sql := range schemaMigrations {
+		if _, err := db.ExecContext(context.Background(), sql); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("apply schema step %d: %w", i, err)
+		}
 	}
 	return &Store{db: db}, nil
 }

@@ -12,6 +12,8 @@ import (
 	"taskline_server/internal/store"
 )
 
+func ptrState(s model.TaskState) *model.TaskState { return &s }
+
 func newSvc(t *testing.T) *service.Service {
 	t.Helper()
 	st, err := store.New(":memory:")
@@ -38,22 +40,34 @@ func TestResolveProjectByIdOrName(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestUpdateTaskRejectsBackwardTransition(t *testing.T) {
+func TestUpdateTaskAllowsBackwardTransition(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
 	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0)
 
-	// created → review (skip allowed forward).
-	stReview := model.StateReview
-	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: &stReview})
+	// Forward skip is fine.
+	got, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.StateReview)})
 	require.NoError(t, err)
+	require.Equal(t, model.StateReview, got.State)
 
-	// review → dev (backward — refused).
-	stDev := model.StateDev
-	_, err = s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: &stDev})
+	// Backward move (review → dev) is also accepted now: a review can
+	// surface a defect that needs to drop the task back to dev.
+	got, err = s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.StateDev)})
+	require.NoError(t, err)
+	require.Equal(t, model.StateDev, got.State)
+}
+
+func TestUpdateTaskRejectsUnknownState(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+	p, _ := s.CreateProject(ctx, "p", "")
+	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0)
+
+	// 'test' was retired — passing it should be rejected as invalid.
+	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.TaskState("test"))})
 	require.Error(t, err)
-	require.True(t, strings.Contains(err.Error(), "backward"))
+	require.True(t, strings.Contains(err.Error(), "invalid"))
 }
 
 func TestNextRunnableTaskReturnsNilWhenNothingRunnable(t *testing.T) {

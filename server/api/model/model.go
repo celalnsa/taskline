@@ -25,20 +25,20 @@ const (
 	StateCreated TaskState = "created"
 	StateDesign  TaskState = "design"
 	StateDev     TaskState = "dev"
-	StateTest    TaskState = "test"
 	StateReview  TaskState = "review"
 	StateDone    TaskState = "done"
 )
 
-// stateOrder reflects the canonical workflow position. A task may move forward
-// (skipping intermediate stages is allowed) but never backward.
+// stateOrder reflects the canonical workflow position. Transitions are
+// validated for state membership only — movement in either direction is
+// allowed, since work sometimes legitimately needs to drop back (e.g. a
+// review surfaces a bug that must return to dev).
 var stateOrder = map[TaskState]int{
 	StateCreated: 0,
 	StateDesign:  1,
 	StateDev:     2,
-	StateTest:    3,
-	StateReview:  4,
-	StateDone:    5,
+	StateReview:  3,
+	StateDone:    4,
 }
 
 func (s TaskState) Valid() bool {
@@ -47,15 +47,13 @@ func (s TaskState) Valid() bool {
 }
 
 // CanTransitionTo returns nil if moving from s to next is allowed.
+// Backward moves are permitted; only invalid state names are rejected.
 func (s TaskState) CanTransitionTo(next TaskState) error {
 	if !s.Valid() {
 		return errors.New("invalid current state")
 	}
 	if !next.Valid() {
 		return errors.New("invalid next state")
-	}
-	if stateOrder[next] < stateOrder[s] {
-		return errors.New("cannot move task state backward")
 	}
 	return nil
 }

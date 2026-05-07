@@ -14,7 +14,6 @@ import {
   type Project,
   type Task,
   type TaskState,
-  canTransition,
 } from "../lib/api";
 import { useTasks, useUpdateTask } from "../hooks/queries";
 
@@ -22,7 +21,6 @@ const STATE_COLORS: Record<TaskState, string> = {
   created: "#cbd5e1",
   design: "#a5b4fc",
   dev: "#86efac",
-  test: "#fde68a",
   review: "#fdba74",
   done: "#9ca3af",
 };
@@ -39,11 +37,11 @@ export function GraphView({ project }: Props) {
   // Layout: rough column-by-state, ordered top-to-bottom by priority.
   // Not a real DAG layout, but predictable and quick.
   const { nodes, edges } = useMemo(() => {
-    const states: TaskState[] = ["created", "design", "dev", "test", "review", "done"];
+    const states: TaskState[] = ["created", "design", "dev", "review", "done"];
     const colSpacing = 240;
     const rowSpacing = 110;
     const cols: Record<TaskState, Task[]> = {
-      created: [], design: [], dev: [], test: [], review: [], done: [],
+      created: [], design: [], dev: [], review: [], done: [],
     };
     for (const t of tasks) cols[t.state].push(t);
     for (const s of states) {
@@ -117,13 +115,13 @@ function TaskNode({
         value={task.state}
         onChange={(e) => {
           const next = e.target.value as TaskState;
-          if (next !== task.state && canTransition(task.state, next)) {
+          if (next !== task.state) {
             onAdvance(next);
           }
         }}
       >
         {Object.entries(STATE_LABELS).map(([s, label]) => (
-          <option key={s} value={s} disabled={!canTransition(task.state, s as TaskState)}>
+          <option key={s} value={s}>
             {label}
           </option>
         ))}

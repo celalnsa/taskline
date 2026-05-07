@@ -5,7 +5,6 @@ export type TaskState =
   | "created"
   | "design"
   | "dev"
-  | "test"
   | "review"
   | "done";
 
@@ -13,7 +12,6 @@ export const STATES: TaskState[] = [
   "created",
   "design",
   "dev",
-  "test",
   "review",
   "done",
 ];
@@ -22,25 +20,9 @@ export const STATE_LABELS: Record<TaskState, string> = {
   created: "Created",
   design: "Design",
   dev: "Dev",
-  test: "Test",
   review: "Review",
   done: "Done",
 };
-
-// Forward order. Positions index into STATES; the server rejects backward
-// transitions with HTTP 400.
-const STATE_ORDER: Record<TaskState, number> = {
-  created: 0,
-  design: 1,
-  dev: 2,
-  test: 3,
-  review: 4,
-  done: 5,
-};
-
-export function canTransition(from: TaskState, to: TaskState): boolean {
-  return STATE_ORDER[to] >= STATE_ORDER[from];
-}
 
 export type TaskType = "feature" | "bug";
 

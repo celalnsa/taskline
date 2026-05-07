@@ -10,7 +10,6 @@ import { useDroppable } from "@dnd-kit/core";
 import {
   STATES,
   STATE_LABELS,
-  canTransition,
   type Project,
   type Task,
   type TaskState,
@@ -46,7 +45,7 @@ export function KanbanBoard({ project }: Props) {
 
   const grouped = useMemo(() => {
     const out: Record<TaskState, Task[]> = {
-      created: [], design: [], dev: [], test: [], review: [], done: [],
+      created: [], design: [], dev: [], review: [], done: [],
     };
     for (const t of tasks) out[t.state].push(t);
     for (const k of STATES) {
@@ -61,11 +60,6 @@ export function KanbanBoard({ project }: Props) {
     if (!target) return;
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.state === target) return;
-    if (!canTransition(task.state, target)) {
-      setError(`Cannot move ${task.state} → ${target} (state machine is forward-only)`);
-      setTimeout(() => setError(null), 3500);
-      return;
-    }
     updateTask.mutate(
       { id: taskId, patch: { state: target } },
       {
