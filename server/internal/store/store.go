@@ -21,11 +21,20 @@ var schemaInit string
 //go:embed schema/0002_drop_test_state.sql
 var schemaDropTestState string
 
-// schemaMigrations are run in order on every open. Each step must be
-// idempotent (safe on a fresh DB and re-runs against a migrated DB).
-var schemaMigrations = []string{
-	schemaInit,
-	schemaDropTestState,
+// schemaMigrations defines the canonical migration set, keyed by
+// monotonically increasing version. We track the last-applied version in
+// SQLite's built-in `PRAGMA user_version` and only run migrations whose
+// version is strictly greater than it. That makes each migration run
+// exactly once per database, without relying on per-statement
+// idempotency tricks like CREATE TABLE IF NOT EXISTS.
+type migration struct {
+	version int
+	sql     string
+}
+
+var schemaMigrations = []migration{
+	{version: 1, sql: schemaInit},
+	{version: 2, sql: schemaDropTestState},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -56,13 +65,39 @@ func New(path string) (*Store, error) {
 	// `cache=shared` isn't honored; bound the pool so foreign-keys + WAL stay
 	// configured. One conn is fine for our load.
 	db.SetMaxOpenConns(1)
-	for i, sql := range schemaMigrations {
-		if _, err := db.ExecContext(context.Background(), sql); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("apply schema step %d: %w", i, err)
-		}
+	if err := applyMigrations(db); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 	return &Store{db: db}, nil
+}
+
+// applyMigrations advances the database from its current PRAGMA
+// user_version up through the latest entry in schemaMigrations, running
+// each step exactly once. Versions must be strictly increasing in the
+// schemaMigrations slice.
+func applyMigrations(db *sql.DB) error {
+	ctx := context.Background()
+	var current int
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&current); err != nil {
+		return fmt.Errorf("read user_version: %w", err)
+	}
+	for _, m := range schemaMigrations {
+		if m.version <= current {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, m.sql); err != nil {
+			return fmt.Errorf("apply migration v%d: %w", m.version, err)
+		}
+		// PRAGMA user_version doesn't accept parameter binding; format the
+		// version literal directly. m.version is a hard-coded int so there
+		// is no injection risk.
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", m.version)); err != nil {
+			return fmt.Errorf("stamp user_version=%d: %w", m.version, err)
+		}
+		current = m.version
+	}
+	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

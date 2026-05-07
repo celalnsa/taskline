@@ -2,7 +2,9 @@ package store_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -183,4 +185,44 @@ func TestListTasksFilteredByState(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, devOnly, 1)
 	require.Equal(t, t2.ID, devOnly[0].ID)
+}
+
+// TestMigrationsRunOnceAcrossReopens verifies that PRAGMA user_version
+// gates migration application: after a first open the version is at
+// the latest entry in schemaMigrations, and a second open against the
+// same file is effectively a no-op. We use a temp file because
+// :memory: is per-connection and would defeat the test.
+func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "taskline.db")
+
+	st1, err := store.New(path)
+	require.NoError(t, err)
+
+	v1, err := readUserVersion(path)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, v1, 2, "first open should advance to >=2")
+
+	require.NoError(t, st1.Close())
+
+	st2, err := store.New(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = st2.Close() })
+
+	v2, err := readUserVersion(path)
+	require.NoError(t, err)
+	require.Equal(t, v1, v2, "re-opening must not change user_version")
+}
+
+// readUserVersion opens a side-channel SQL handle to inspect the
+// PRAGMA without going through the Store API.
+func readUserVersion(path string) (int, error) {
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	var v int
+	err = db.QueryRowContext(context.Background(), "PRAGMA user_version").Scan(&v)
+	return v, err
 }

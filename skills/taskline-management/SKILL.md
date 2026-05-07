@@ -243,18 +243,41 @@ them — drop the parenthetical if the skill isn't installed.
   4. Open a PR: `gh pr create` with title, summary, and a test plan.
   5. Wait for CI. If it fails, fix the root cause locally, re-run
      tests, push.
-  6. Read PR comments
-     (`gh api repos/<owner>/<repo>/pulls/<n>/comments`).
-     Address each one; re-run tests after each batch of fixes; push.
+  6. **Wait for at least one review** — human or automated bot like
+     `gemini-code-assist`. Don't merge before a review has actually
+     posted; the whole point of opening a PR is the second pair of
+     eyes. Poll with:
+
+     ```
+     gh pr view <n> --json reviews,reviewDecision
+     ```
+
+     Re-check periodically (or use webhooks if available) until
+     `reviews` is non-empty or a human signs off.
+  7. Read **every** comment surface — one endpoint isn't enough:
+
+     ```
+     # Review summaries (the "## Code Review" body from bots etc.):
+     gh api repos/<owner>/<repo>/pulls/<n>/reviews
+     # Inline review comments (line-anchored):
+     gh api repos/<owner>/<repo>/pulls/<n>/comments
+     # Top-level PR conversation:
+     gh api repos/<owner>/<repo>/issues/<n>/comments
+     ```
+
+     Address each finding; re-run tests after each batch of fixes;
+     push. If a comment is wrong, reply with reasoning rather than
+     silently ignoring it.
 - **Advance:** `taskline task update <id> --state done` *only after*
-  CI is green and review comments are addressed.
+  (a) CI is green, (b) at least one review has posted, and
+  (c) every reviewer comment has been addressed or rebutted.
 - **Drop back to dev** with `taskline task update <id> --state dev`
   when the review or CI surfaces a real defect. The bidirectional
   state machine exists for exactly this — don't delete-and-recreate.
 
 ### done — wrap-up
 
-- **Trigger:** PR approved + CI green.
+- **Trigger:** PR approved (or all review comments addressed) + CI green.
 - **Actions:**
   1. `gh pr merge --squash` (or the project's conventional style).
   2. `git checkout main && git pull`

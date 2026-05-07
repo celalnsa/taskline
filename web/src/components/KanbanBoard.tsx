@@ -89,7 +89,7 @@ export function KanbanBoard({ project }: Props) {
       )}
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <div className="flex h-full gap-3 p-4">
+          <div className="flex h-full w-fit min-w-full gap-3 p-4">
             {STATES.map((s) => (
               <Column key={s} state={s}>
                 {grouped[s].map((t) => (
@@ -123,7 +123,7 @@ function Column({ state, children }: { state: TaskState; children: React.ReactNo
     <div
       ref={setNodeRef}
       className={
-        "flex-1 min-w-[12rem] max-w-72 rounded-lg bg-slate-100 p-3 flex flex-col gap-2 transition " +
+        "flex-1 min-w-48 max-w-72 rounded-lg bg-slate-100 p-3 flex flex-col gap-2 transition " +
         (isOver ? "ring-2 ring-emerald-400" : "")
       }
     >
