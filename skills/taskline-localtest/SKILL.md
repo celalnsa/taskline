@@ -113,10 +113,12 @@ through the actual production code path on the running server.
 - **Server code**: `( cd server && go test ./... )` AND a real HTTP
   call against `:8787` covering at least the modified endpoint.
 - **Migration**: read `PRAGMA user_version` against the live DB and
-  confirm it matches the expected post-migration version:
+  confirm it matches the expected post-migration version. Use the
+  configured DB path so the example is right regardless of how the
+  developer set up `.env`:
 
   ```bash
-  sqlite3 .cache/data/taskline.db "PRAGMA user_version;"
+  sqlite3 "${TASKLINE_DB:-./data/taskline.db}" "PRAGMA user_version;"
   ```
 
 - **Web**: open `http://127.0.0.1:8787/` (**NOT** `:5173`) in a real

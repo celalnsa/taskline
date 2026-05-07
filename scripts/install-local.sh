@@ -15,10 +15,13 @@ cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
 BIN_DIR="${HOME}/.local/bin"
-SKILLS=(
-    taskline-management
-    taskline-localtest
-)
+# Auto-discover every directory under skills/ so dropping a new
+# skill in the repo doesn't require editing this script.
+SKILLS=()
+for d in "${REPO_ROOT}/skills"/*/; do
+    [[ -d "${d}" ]] || continue
+    SKILLS+=("$(basename "${d}")")
+done
 SKILL_HARNESS_DIRS=(
     "${HOME}/.agents/skills"
     "${HOME}/.claude/skills"
@@ -45,10 +48,6 @@ link_skill() {
 }
 
 for skill in "${SKILLS[@]}"; do
-    if [[ ! -d "${REPO_ROOT}/skills/${skill}" ]]; then
-        echo "[install] missing source for skill ${skill}" >&2
-        exit 1
-    fi
     for dir in "${SKILL_HARNESS_DIRS[@]}"; do
         link_skill "${skill}" "${dir}"
     done

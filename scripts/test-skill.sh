@@ -5,11 +5,12 @@
 # and shipping a test runner along with them would clutter every
 # harness that imports the skills.
 #
-# Per skill, this checks:
+# For every SKILL.md found, this checks:
 #   1. The YAML frontmatter is present and parses (cheap shape check,
-#      no PyYAML dependency).
-#   2. A small allowlist of required sections is present in the body
-#      so a structural rewrite can't silently drop them.
+#      no PyYAML dependency, comments tolerated).
+#   2. If the skill has an entry in `required_sections`, every listed
+#      section is present in the body — guards against structural
+#      rewrites silently dropping load-bearing headings.
 #
 # Has zero non-stdlib dependencies (python3 only).
 set -euo pipefail
@@ -17,11 +18,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 python3 - <<'PY'
-import re, sys
+import glob, re, sys
 
-# Per-skill required sections. Add new entries here when a new skill
-# lands under skills/. Sections are matched by exact substring on the
-# body (so heading hashes and exact wording are part of the contract).
+# Per-skill required sections. Optional — skills not listed here only
+# get the baseline frontmatter shape check. Sections are matched by
+# exact substring on the body (so heading hashes and exact wording
+# are part of the contract).
 required_sections = {
     "skills/taskline-management/SKILL.md": [
         "### created → design",
@@ -37,8 +39,12 @@ required_sections = {
     ],
 }
 
+paths = sorted(glob.glob("skills/*/SKILL.md"))
+if not paths:
+    sys.exit("FAIL: no SKILL.md files found under skills/")
+
 failed = False
-for path, required in required_sections.items():
+for path in paths:
     with open(path, encoding="utf-8") as f:
         content = f.read()
 
@@ -49,12 +55,12 @@ for path, required in required_sections.items():
         continue
     fm_block, body = m.group(1), m.group(2)
 
-    # Cheap YAML sanity: every non-blank, non-indented line must contain
-    # a colon. Catches unbalanced quotes / missing colons without pulling
-    # in PyYAML.
+    # Cheap YAML sanity: every non-blank, non-indented, non-comment
+    # line must contain a colon. Catches unbalanced quotes / missing
+    # colons without pulling in PyYAML.
     fm_ok = True
     for ln in fm_block.splitlines():
-        if not ln.strip() or ln.startswith(" ") or ln.startswith("\t"):
+        if not ln.strip() or ln.startswith((" ", "\t", "#")):
             continue
         if ":" not in ln:
             print(f"FAIL: {path} frontmatter line missing colon: {ln!r}")
@@ -63,6 +69,7 @@ for path, required in required_sections.items():
     if not fm_ok:
         continue
 
+    required = required_sections.get(path, [])
     missing = [r for r in required if r not in body]
     if missing:
         print(f"FAIL: {path} missing sections: " + ", ".join(missing))
