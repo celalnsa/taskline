@@ -1,21 +1,38 @@
 import { useState } from "react";
+import { useQueryState } from "nuqs";
 import { Sidebar } from "./components/Sidebar";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { GraphView } from "./components/GraphView";
+import { useProjects } from "./hooks/queries";
 import type { Project } from "./lib/api";
 
 type View = "kanban" | "graph";
 
 export default function App() {
-  const [project, setProject] = useState<Project | null>(null);
+  // ?project=<name|id> survives page reload and back/forward; nuqs
+  // keeps the URL and state in lockstep without a router dep.
+  // history: "replace" so picking a project doesn't pollute the back
+  // stack — users browser-back to leave the app, not to step through
+  // every sidebar selection. nuqs defaults to "push".
+  const [projectKey, setProjectKey] = useQueryState("project", {
+    history: "replace",
+  });
+  const projects = useProjects();
+  const project: Project | null =
+    projects.data?.find(
+      (p) => p.name === projectKey || p.id === projectKey
+    ) ?? null;
   const [view, setView] = useState<View>("kanban");
+
+  // Prefer the human-readable name in the URL; the resolver above also
+  // accepts an id, so older saved links keep working.
+  const selectProject = (p: Project) => {
+    void setProjectKey(p.name);
+  };
 
   return (
     <div className="h-screen w-screen flex">
-      <Sidebar
-        selectedId={project?.id ?? null}
-        onSelect={setProject}
-      />
+      <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {project ? (
           <>
@@ -29,7 +46,10 @@ export default function App() {
             )}
           </>
         ) : (
-          <Welcome />
+          <Welcome
+            unresolved={!!projectKey && projects.isSuccess && !project}
+            keyValue={projectKey}
+          />
         )}
       </main>
     </div>
@@ -61,11 +81,23 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
   );
 }
 
-function Welcome() {
+function Welcome({
+  unresolved,
+  keyValue,
+}: {
+  unresolved: boolean;
+  keyValue: string | null;
+}) {
   return (
     <div className="flex-1 flex items-center justify-center text-slate-500">
       <div className="text-center max-w-md space-y-3">
         <h2 className="text-2xl font-bold text-slate-700">taskline</h2>
+        {unresolved && keyValue && (
+          <p className="text-sm text-amber-700">
+            No project matches <code className="font-mono">{keyValue}</code>{" "}
+            in the URL. Pick another from the sidebar.
+          </p>
+        )}
         <p className="text-sm">
           Pick a project from the sidebar, or create one with <kbd>+ New</kbd>.
         </p>

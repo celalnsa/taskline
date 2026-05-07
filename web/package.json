@@ -13,6 +13,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@tanstack/react-query": "^5.62.7",
     "@xyflow/react": "^12.3.6",
+    "nuqs": "^2.8.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
