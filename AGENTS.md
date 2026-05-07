@@ -5,8 +5,8 @@ Guidance for agents (and humans) working in this repository.
 `CLAUDE.md` is a symlink to this file — keep updates here.
 
 For product overview and quick start, see `README.md`. For architecture
-internals see `ARCHITECTURE.md`; for the philosophy behind the model see
-`DESIGN.md`.
+internals see `ARCHITECTURE.md`; for the philosophy behind the product
+see `PRODUCT.md`.
 
 ## Repo layout (TL;DR)
 

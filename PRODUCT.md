@@ -1,7 +1,11 @@
-# Design
+# Product
 
 The motivation behind taskline. For *what's wired to what* see
 `ARCHITECTURE.md`; for *how to work in the repo* see `AGENTS.md`.
+
+(Previously named `DESIGN.md`; renamed because that filename is
+conventionally a UI / visual design spec, while this doc is the
+product-philosophy doc.)
 
 ## The problem
 
@@ -26,7 +30,7 @@ Existing options all fail one of three constraints:
 taskline is the smallest thing that fills the gap: a state machine, a
 DAG, a priority field, and a JSON-first CLI.
 
-## Design principles
+## Product principles
 
 ### 1. Agent-first, human-second
 

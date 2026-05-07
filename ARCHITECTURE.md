@@ -1,6 +1,6 @@
 # Architecture
 
-How taskline is wired together. For the *why* see `DESIGN.md`; for
+How taskline is wired together. For the *why* see `PRODUCT.md`; for
 build/test/contribution mechanics see `AGENTS.md`.
 
 ## Components
