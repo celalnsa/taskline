@@ -11,6 +11,12 @@ description: |
   "rebuild and restart", "verify against the running server",
   "smoke-test in the browser".
 user-invocable: false
+# Project-internal skill — only relevant inside the taskline repo,
+# so install-local.sh deliberately does NOT symlink it into
+# ~/.agents/skills or ~/.claude/skills. Harnesses that auto-discover
+# skills from the project's skills/ directory will still pick it up
+# when working in this repo.
+internal: true
 version: 0.1.0
 ---
 

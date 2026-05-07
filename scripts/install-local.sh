@@ -2,10 +2,16 @@
 # scripts/install-local.sh — install taskline CLI for the current user.
 #
 #   1. builds the CLI (no CGO, no web bundle) into ~/.local/bin/taskline
-#   2. symlinks every skill under skills/ into the well-known agent
-#      skill directories so any harness picks them up:
+#   2. symlinks each *non-internal* skill under skills/ into the
+#      well-known agent skill directories so any harness picks it up:
 #        ~/.agents/skills/<name>
 #        ~/.claude/skills/<name>
+#
+# A skill is "internal" when its frontmatter contains `internal: true`.
+# Internal skills (e.g. taskline-localtest, which only matters when
+# editing taskline itself) are deliberately left out of the global
+# install and any pre-existing global symlink for them is removed —
+# so flipping a skill to internal cleans itself up on the next run.
 #
 # Re-running is safe: existing symlinks at targets are replaced; a real
 # directory at a target aborts the script (we don't clobber user data).
@@ -47,7 +53,38 @@ link_skill() {
     echo "[install] linked ${target} → ${src}" >&2
 }
 
+unlink_internal_skill() {
+    local name="$1"
+    local harness_dir="$2"
+    local target="${harness_dir}/${name}"
+    if [[ -L "${target}" ]]; then
+        rm "${target}"
+        echo "[install] cleaned up stale internal symlink ${target}" >&2
+    fi
+}
+
+# Frontmatter probe: returns 0 when the skill's SKILL.md declares
+# `internal: true`. Comments-and-blank-line tolerant; only inspects
+# the first --- ... --- block.
+is_internal_skill() {
+    local skill_dir="${REPO_ROOT}/skills/$1"
+    local md="${skill_dir}/SKILL.md"
+    [[ -f "${md}" ]] || return 1
+    awk '
+        /^---$/ { fm++; next }
+        fm == 1 && /^[[:space:]]*internal:[[:space:]]*true[[:space:]]*$/ { print "yes"; exit }
+        fm == 2 { exit }
+    ' "${md}" | grep -q yes
+}
+
 for skill in "${SKILLS[@]}"; do
+    if is_internal_skill "${skill}"; then
+        echo "[install] ${skill} marked internal — skipping global install" >&2
+        for dir in "${SKILL_HARNESS_DIRS[@]}"; do
+            unlink_internal_skill "${skill}" "${dir}"
+        done
+        continue
+    fi
     for dir in "${SKILL_HARNESS_DIRS[@]}"; do
         link_skill "${skill}" "${dir}"
     done
