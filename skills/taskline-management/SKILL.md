@@ -248,9 +248,9 @@ them — drop the parenthetical if the skill isn't installed.
      Address each one; re-run tests after each batch of fixes; push.
 - **Advance:** `taskline task update <id> --state done` *only after*
   CI is green and review comments are addressed.
-- **Drop back to dev** when the review or CI surfaces a real defect.
-  The bidirectional state machine exists for exactly this — don't
-  delete-and-recreate.
+- **Drop back to dev** with `taskline task update <id> --state dev`
+  when the review or CI surfaces a real defect. The bidirectional
+  state machine exists for exactly this — don't delete-and-recreate.
 
 ### done — wrap-up
 
