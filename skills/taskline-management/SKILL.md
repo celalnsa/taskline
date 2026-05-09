@@ -137,7 +137,10 @@ When the user says "work the queue" / "do the next task" / "keep
 going through the backlog":
 
 1. Run `taskline task next --project <p> --format json`.
-2. If the response is `null`, report there's nothing runnable and stop.
+2. If the response is `{"task": null}` (the no-runnable wrapper),
+   report there's nothing runnable and stop. Otherwise the response is
+   the task object itself — `id`, `title`, `state`, etc. as top-level
+   fields, **not** wrapped in a `{"task": ...}` envelope.
 3. Read `title`, `description`, and any `images` (when present, the
    server returns paths the user can open locally — surface them in
    your reply if they're material to the task).
@@ -265,7 +268,10 @@ one-line message. The state machine still records what happened.
 ## Gotchas
 
 - **Forgot `--project`?** Export `TASKLINE_PROJECT` once at session
-  start. Otherwise every task command needs the flag.
+  start. Only `task create`, `task list`, and `task next` accept
+  `--project` — the rest (`get`, `update`, `delete`, `depend`,
+  `upload`) operate on the task id directly and reject the flag with
+  "unknown flag".
 - **`server 400: invalid next state "..."`** — you used a name that
   isn't in `created/design/dev/review/done`. The state `test` was
   retired; don't reintroduce it.
@@ -276,8 +282,8 @@ one-line message. The state machine still records what happened.
   name.
 - **`error: project required`** — neither `--project` nor
   `$TASKLINE_PROJECT` is set.
-- **`task next` returned `null`** — nothing runnable. Either the
-  project is empty, or every non-done task is blocked. Run
+- **`task next` returned `{"task": null}`** — nothing runnable.
+  Either the project is empty, or every non-done task is blocked. Run
   `taskline task list --project <p> --state created,design,dev,review`
   to see what's stuck and why.
 - **The user said "remind me to X"** — that's a one-off note, not a
