@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Project, TaskType } from "../lib/api";
 import { useCreateTask } from "../hooks/queries";
 
@@ -10,14 +10,47 @@ export function CreateTaskButton({ project }: { project: Project }) {
   const [priority, setPriority] = useState(0);
   const create = useCreateTask(project.id);
 
-  useEffect(() => {
+  const submit = () => {
+    if (!title.trim() || create.isPending) return;
+    create.mutate(
+      { title, description, type, priority },
+      {
+        onSuccess: () => {
+          setTitle("");
+          setDescription("");
+          setPriority(0);
+          setOpen(false);
+        },
+      }
+    );
+  };
+
+  // Keep a ref to the latest keydown handler so the window listener can
+  // be bound exactly once (instead of re-attaching on every keystroke).
+  const handlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  handlerRef.current = (e: KeyboardEvent) => {
+    const cmd = e.metaKey || e.ctrlKey;
+    if (!open && cmd && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      setOpen(true);
+      return;
+    }
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
+    if (e.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (cmd && e.key === "Enter") {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => handlerRef.current(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, []);
 
   return (
     <>
@@ -40,14 +73,9 @@ export function CreateTaskButton({ project }: { project: Project }) {
             </button>
             <form
               className="p-6 space-y-3 overflow-y-auto"
-              onSubmit={async (e) => {
+              onSubmit={(e) => {
                 e.preventDefault();
-                if (!title.trim()) return;
-                await create.mutateAsync({ title, description, type, priority });
-                setTitle("");
-                setDescription("");
-                setPriority(0);
-                setOpen(false);
+                submit();
               }}
             >
               <h3 className="font-bold pr-8">New task in {project.name}</h3>
