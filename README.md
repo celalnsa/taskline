@@ -28,7 +28,7 @@ taskline/
 │   ├── src/{components,hooks,lib}/
 │   ├── package.json vite.config.ts
 ├── skills/taskline-management/SKILL.md   # for AI agents
-├── scripts/{build,run-server}.sh
+├── scripts/{build,start-local}.sh
 ├── dist/                   # build output: taskline-server, taskline
 ├── .env.example            # server runtime config
 └── README.md

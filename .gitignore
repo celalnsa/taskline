@@ -16,3 +16,4 @@
 !/server/web/dist/.gitkeep
 
 .cache/
+.log/

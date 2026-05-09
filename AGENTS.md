@@ -37,7 +37,11 @@ see `PRODUCT.md`.
 ( cd cli    && go test ./... )
 ```
 
-`scripts/run-server.sh` is the lazy "build if missing, then run" wrapper.
+`scripts/start-local.sh` builds the binaries and (re)starts the server in
+the background, logging to `.log/server.log` and writing the PID to
+`.log/server.pid`. It frees the configured port (default `8787`,
+override with `PORT` or `TASKLINE_LISTEN`) by killing only the LISTEN
+holder before relaunching.
 
 ## Module boundaries (don't break these)
 
