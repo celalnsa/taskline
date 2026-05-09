@@ -275,14 +275,13 @@ one-line message. The state machine still records what happened.
   `--project` — the rest (`get`, `update`, `delete`, `depend`,
   `upload`) operate on the task id directly and reject the flag with
   "unknown flag".
-- **CLI error `invalid next state "..."`** — you used a name that
-  isn't in `created/design/dev/review/done`. The state `test` was
-  retired; don't reintroduce it.
-- **CLI error `dependency would create a cycle`** — the edge would
-  loop back. Restructure the graph or pick a different anchor.
-- **CLI error `project name "X" already exists`** — name collision.
-  Reuse the existing project (likely what you wanted) or pick a new
-  name.
+- **`invalid next state "..."`** — you used a name that isn't in
+  `created/design/dev/review/done`. The state `test` was retired;
+  don't reintroduce it.
+- **`dependency would create a cycle`** — the edge would loop back.
+  Restructure the graph or pick a different anchor.
+- **`project name "X" already exists`** — name collision. Reuse the
+  existing project (likely what you wanted) or pick a new name.
 - **`error: project required`** — neither `--project` nor
   `$TASKLINE_PROJECT` is set.
 - **`task next` returned `null`** — nothing runnable. Either the
