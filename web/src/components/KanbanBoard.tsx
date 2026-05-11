@@ -23,6 +23,11 @@ interface Props {
   project: Project;
 }
 
+// Module-level stable empty reference so `tasks` keeps the same identity
+// across renders while the query is loading. Otherwise `[] !== []` would
+// invalidate every dependent useMemo on each render.
+const NO_TASKS: Task[] = [];
+
 export function KanbanBoard({ project }: Props) {
   const tasksQ = useTasks(project.id);
   const updateTask = useUpdateTask(project.id);
@@ -33,7 +38,7 @@ export function KanbanBoard({ project }: Props) {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
-  const tasks = tasksQ.data ?? [];
+  const tasks = tasksQ.data ?? NO_TASKS;
 
   // doneIds drives the "blocked" badge — every dep must be in done state.
   const doneIds = useMemo(
@@ -52,8 +57,16 @@ export function KanbanBoard({ project }: Props) {
       // Tolerate states the web doesn't know about (server one rev ahead).
       if (out[t.state]) out[t.state].push(t);
     }
+    // `start` column mirrors `task next`'s ordering — agents pick from the
+    // top, so this column needs priority-first / oldest-first. Every other
+    // column is browse-mode; "what changed recently" is what the user wants
+    // to see at a glance, so sort by updated_at descending.
     for (const k of STATES) {
-      out[k].sort((a, b) => b.priority - a.priority || a.created_at - b.created_at);
+      if (k === "start") {
+        out[k].sort((a, b) => b.priority - a.priority || a.created_at - b.created_at);
+      } else {
+        out[k].sort((a, b) => b.updated_at - a.updated_at);
+      }
     }
     return out;
   }, [tasks]);
