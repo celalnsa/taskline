@@ -22,7 +22,10 @@ func (t TaskType) Valid() bool {
 type TaskState string
 
 const (
-	StateCreated TaskState = "created"
+	// StatePending is a parking lot — created but explicitly not yet
+	// runnable. ListRunnableTasks skips it.
+	StatePending TaskState = "pending"
+	StateStart   TaskState = "start"
 	StateDesign  TaskState = "design"
 	StateDev     TaskState = "dev"
 	StateReview  TaskState = "review"
@@ -32,9 +35,11 @@ const (
 // stateOrder reflects the canonical workflow position. Transitions are
 // validated for state membership only — movement in either direction is
 // allowed, since work sometimes legitimately needs to drop back (e.g. a
-// review surfaces a bug that must return to dev).
+// review surfaces a bug that must return to dev). 'pending' lives off to
+// the side of the main pipeline; any state may drop into it.
 var stateOrder = map[TaskState]int{
-	StateCreated: 0,
+	StatePending: -1,
+	StateStart:   0,
 	StateDesign:  1,
 	StateDev:     2,
 	StateReview:  3,

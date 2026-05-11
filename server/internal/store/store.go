@@ -21,6 +21,9 @@ var schemaInit string
 //go:embed schema/0002_drop_test_state.sql
 var schemaDropTestState string
 
+//go:embed schema/0003_pending_state.sql
+var schemaPendingState string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -35,6 +38,7 @@ type migration struct {
 var schemaMigrations = []migration{
 	{version: 1, sql: schemaInit},
 	{version: 2, sql: schemaDropTestState},
+	{version: 3, sql: schemaPendingState},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -191,10 +195,13 @@ func (s *Store) ListProjects(ctx context.Context) ([]*model.Project, error) {
 
 // ─── Tasks ──────────────────────────────────────────────────────────────
 
-// CreateTask inserts a new task in state `created`.
-func (s *Store) CreateTask(ctx context.Context, projectID, title, description string, taskType model.TaskType, priority int) (*model.Task, error) {
+// CreateTask inserts a new task with the given initial state.
+func (s *Store) CreateTask(ctx context.Context, projectID, title, description string, taskType model.TaskType, priority int, initialState model.TaskState) (*model.Task, error) {
 	if !taskType.Valid() {
 		return nil, fmt.Errorf("invalid task type %q", taskType)
+	}
+	if !initialState.Valid() {
+		return nil, fmt.Errorf("invalid initial state %q", initialState)
 	}
 	t := &model.Task{
 		ID:          newID(),
@@ -202,7 +209,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 		Title:       title,
 		Description: description,
 		Type:        taskType,
-		State:       model.StateCreated,
+		State:       initialState,
 		Priority:    priority,
 		CreatedAt:   now(),
 		UpdatedAt:   now(),
@@ -293,14 +300,15 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	return out, nil
 }
 
-// ListRunnableTasks returns tasks whose state is not `done` and whose every
-// declared dependency is in state `done`. Sorted priority DESC, created_at ASC.
+// ListRunnableTasks returns tasks whose state is neither `done` nor
+// `pending` and whose every declared dependency is in state `done`.
+// Sorted priority DESC, created_at ASC.
 func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*model.Task, error) {
 	q := `
 		SELECT t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.created_at,t.updated_at
 		  FROM tasks t
 		 WHERE t.project_id = ?
-		   AND t.state <> 'done'
+		   AND t.state NOT IN ('done','pending')
 		   AND NOT EXISTS (
 		         SELECT 1 FROM task_deps d
 		           JOIN tasks dt ON dt.id = d.depends_on_task_id

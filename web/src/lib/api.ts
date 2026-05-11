@@ -2,14 +2,16 @@
 // Task shapes from server/api/model/model.go — keep them in sync.
 
 export type TaskState =
-  | "created"
+  | "pending"
+  | "start"
   | "design"
   | "dev"
   | "review"
   | "done";
 
 export const STATES: TaskState[] = [
-  "created",
+  "pending",
+  "start",
   "design",
   "dev",
   "review",
@@ -17,7 +19,8 @@ export const STATES: TaskState[] = [
 ];
 
 export const STATE_LABELS: Record<TaskState, string> = {
-  created: "Created",
+  pending: "Pending",
+  start: "Start",
   design: "Design",
   dev: "Dev",
   review: "Review",
@@ -113,7 +116,13 @@ export async function listTasks(projectIdOrName: string): Promise<Task[]> {
 
 export async function createTask(
   projectIdOrName: string,
-  input: { title: string; description?: string; type: TaskType; priority: number }
+  input: {
+    title: string;
+    description?: string;
+    type: TaskType;
+    priority: number;
+    auto_start?: boolean;
+  }
 ): Promise<Task> {
   return request<Task>(
     "POST",

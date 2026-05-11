@@ -69,7 +69,8 @@ once and passed through to the handler (for `ImagesDir`).
 ```sql
 projects(id, name UNIQUE, description, created_at, updated_at)
 tasks   (id, project_id → projects.id, title, description,
-         type ∈ {feature,bug}, state ∈ {created..done}, priority,
+         type ∈ {feature,bug},
+         state ∈ {pending,start,design,dev,review,done}, priority,
          created_at, updated_at)
 task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              PRIMARY KEY(task_id, depends_on_task_id),
@@ -95,18 +96,23 @@ directory). Keep them identical.
 ## State machine
 
 ```
-created ──▶ design ──▶ dev ──▶ review ──▶ done
-   ▲           ▲         ▲        ▲
-   └───────────┴─────────┴────────┘
-        any move between known states is allowed
+pending ⇄ start ──▶ design ──▶ dev ──▶ review ──▶ done
+              ▲         ▲         ▲        ▲
+              └─────────┴─────────┴────────┘
+              any move between known states is allowed
+              any state may also transition into pending
 ```
 
 Implemented as a membership set in `model.stateOrder`. `CanTransitionTo`
 only rejects unknown state names — direction is the agent's call. The
 service layer enforces validation before calling `store.UpdateTask`.
-Jumping `created → done` is intentional (close trivial work without
+Jumping `start → done` is intentional (close trivial work without
 ceremony); dropping `review → dev` is intentional too (a review can
 surface a defect that legitimately reopens the implementation).
+
+`pending` lives off the main pipeline: tasks created without
+`auto_start=true` land there, and any state may transition into it to
+"park" work. The runnable query skips both `done` and `pending`.
 
 There's no automatic transition triggered by completing dependencies —
 "runnable" is a *query*, not a state. State only moves when an agent
@@ -120,7 +126,7 @@ single SQL query:
 ```sql
 SELECT … FROM tasks t
  WHERE t.project_id = ?
-   AND t.state <> 'done'
+   AND t.state NOT IN ('done','pending')
    AND NOT EXISTS (
          SELECT 1 FROM task_deps d
            JOIN tasks dt ON dt.id = d.depends_on_task_id

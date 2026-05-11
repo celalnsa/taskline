@@ -53,37 +53,52 @@ func TestTaskCreateAndState(t *testing.T) {
 	p, err := st.CreateProject(ctx, "p1", "")
 	require.NoError(t, err)
 
-	tk, err := st.CreateTask(ctx, p.ID, "first", "desc", model.TaskTypeFeature, 1)
+	tk, err := st.CreateTask(ctx, p.ID, "first", "desc", model.TaskTypeFeature, 1, model.StateStart)
 	require.NoError(t, err)
-	require.Equal(t, model.StateCreated, tk.State)
+	require.Equal(t, model.StateStart, tk.State)
 	require.Equal(t, model.TaskTypeFeature, tk.Type)
 
+	// Tasks created in pending preserve that state.
+	tkPending, err := st.CreateTask(ctx, p.ID, "later", "", model.TaskTypeFeature, 0, model.StatePending)
+	require.NoError(t, err)
+	require.Equal(t, model.StatePending, tkPending.State)
+
 	// Bad project id → not found.
-	_, err = st.CreateTask(ctx, "no-such-project", "x", "", model.TaskTypeFeature, 0)
+	_, err = st.CreateTask(ctx, "no-such-project", "x", "", model.TaskTypeFeature, 0, model.StateStart)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	// Bad type rejected.
-	_, err = st.CreateTask(ctx, p.ID, "x", "", model.TaskType("bogus"), 0)
+	_, err = st.CreateTask(ctx, p.ID, "x", "", model.TaskType("bogus"), 0, model.StateStart)
+	require.Error(t, err)
+
+	// Bad initial state rejected.
+	_, err = st.CreateTask(ctx, p.ID, "x", "", model.TaskTypeFeature, 0, model.TaskState("bogus"))
 	require.Error(t, err)
 }
 
 func TestStateTransitionRules(t *testing.T) {
 	// Forward jumps are allowed.
-	require.NoError(t, model.StateCreated.CanTransitionTo(model.StateDesign))
-	require.NoError(t, model.StateCreated.CanTransitionTo(model.StateDone))
+	require.NoError(t, model.StateStart.CanTransitionTo(model.StateDesign))
+	require.NoError(t, model.StateStart.CanTransitionTo(model.StateDone))
 	// Backward moves are allowed too — the workflow no longer enforces direction.
 	require.NoError(t, model.StateReview.CanTransitionTo(model.StateDev))
-	require.NoError(t, model.StateDone.CanTransitionTo(model.StateCreated))
+	require.NoError(t, model.StateDone.CanTransitionTo(model.StateStart))
+	// Pending may be reached from any state, including done.
+	require.NoError(t, model.StateDone.CanTransitionTo(model.StatePending))
+	require.NoError(t, model.StateDev.CanTransitionTo(model.StatePending))
+	require.NoError(t, model.StatePending.CanTransitionTo(model.StateStart))
 	// Unknown state names still fail validation.
 	require.Error(t, model.TaskState("bogus").CanTransitionTo(model.StateDev))
 	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("test")))
+	// 'created' was renamed to 'start' — passing it should now be rejected.
+	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("created")))
 }
 
 func TestUpdateTaskAndDelete(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 	p, _ := st.CreateProject(ctx, "p", "")
-	tk, _ := st.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0)
+	tk, _ := st.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, model.StateStart)
 
 	newTitle := "renamed"
 	newPrio := 7
@@ -100,9 +115,9 @@ func TestDependencyCycleProtection(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 	p, _ := st.CreateProject(ctx, "p", "")
-	a, _ := st.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 0)
-	b, _ := st.CreateTask(ctx, p.ID, "b", "", model.TaskTypeFeature, 0)
-	c, _ := st.CreateTask(ctx, p.ID, "c", "", model.TaskTypeFeature, 0)
+	a, _ := st.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 0, model.StateStart)
+	b, _ := st.CreateTask(ctx, p.ID, "b", "", model.TaskTypeFeature, 0, model.StateStart)
+	c, _ := st.CreateTask(ctx, p.ID, "c", "", model.TaskTypeFeature, 0, model.StateStart)
 
 	require.NoError(t, st.AddDependency(ctx, b.ID, a.ID))
 	require.NoError(t, st.AddDependency(ctx, c.ID, b.ID))
@@ -123,9 +138,9 @@ func TestRunnableTasksRespectsDependencies(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 	p, _ := st.CreateProject(ctx, "p", "")
-	a, _ := st.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 1)
-	b, _ := st.CreateTask(ctx, p.ID, "b", "", model.TaskTypeFeature, 5)
-	c, _ := st.CreateTask(ctx, p.ID, "c", "", model.TaskTypeFeature, 9)
+	a, _ := st.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 1, model.StateStart)
+	b, _ := st.CreateTask(ctx, p.ID, "b", "", model.TaskTypeFeature, 5, model.StateStart)
+	c, _ := st.CreateTask(ctx, p.ID, "c", "", model.TaskTypeFeature, 9, model.StateStart)
 
 	require.NoError(t, st.AddDependency(ctx, b.ID, a.ID))
 	require.NoError(t, st.AddDependency(ctx, c.ID, b.ID))
@@ -156,9 +171,9 @@ func TestRunnableTasksOrderedByPriority(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 	p, _ := st.CreateProject(ctx, "p", "")
-	low, _ := st.CreateTask(ctx, p.ID, "low", "", model.TaskTypeFeature, 1)
-	high, _ := st.CreateTask(ctx, p.ID, "high", "", model.TaskTypeFeature, 9)
-	mid, _ := st.CreateTask(ctx, p.ID, "mid", "", model.TaskTypeFeature, 5)
+	low, _ := st.CreateTask(ctx, p.ID, "low", "", model.TaskTypeFeature, 1, model.StateStart)
+	high, _ := st.CreateTask(ctx, p.ID, "high", "", model.TaskTypeFeature, 9, model.StateStart)
+	mid, _ := st.CreateTask(ctx, p.ID, "mid", "", model.TaskTypeFeature, 5, model.StateStart)
 
 	rs, err := st.ListRunnableTasks(ctx, p.ID)
 	require.NoError(t, err)
@@ -172,8 +187,8 @@ func TestListTasksFilteredByState(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 	p, _ := st.CreateProject(ctx, "p", "")
-	_, _ = st.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 0)
-	t2, _ := st.CreateTask(ctx, p.ID, "b", "", model.TaskTypeFeature, 0)
+	_, _ = st.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 0, model.StateStart)
+	t2, _ := st.CreateTask(ctx, p.ID, "b", "", model.TaskTypeFeature, 0, model.StateStart)
 	stDev := model.StateDev
 	_, _ = st.UpdateTask(ctx, t2.ID, store.TaskUpdate{State: &stDev})
 
@@ -201,7 +216,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v1, 2, "first open should advance to >=2")
+	require.GreaterOrEqual(t, v1, 3, "first open should advance to >=3")
 
 	require.NoError(t, st1.Close())
 

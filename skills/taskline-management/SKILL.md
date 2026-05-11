@@ -4,24 +4,25 @@ description: |
   Use whenever the user wants to track agent work as structured tasks
   inside a project — capturing a feature or bug, sequencing dependent
   work, picking the next thing to pull, advancing a task through the
-  created → design → dev → review → done lifecycle, recording progress,
-  or asking "what's left?". Trigger phrases include "create a task",
-  "add a feature", "what should I work on next", "block this task on
-  …", "mark X as in review / done", "show me the open bugs", and any
-  project / kanban / backlog management ask. Use even when the user
-  doesn't say "task" or "taskline" — phrases like "let's plan this",
-  "queue this up", "track this", "what's runnable now" all qualify.
-  Skip for one-off todo notes with no state, dependencies, or
-  follow-up — just answer those directly.
-version: 0.3.0
+  pending → start → design → dev → review → done lifecycle, recording
+  progress, or asking "what's left?". Trigger phrases include "create
+  a task", "add a feature", "what should I work on next", "block this
+  task on …", "mark X as in review / done", "show me the open bugs",
+  "park this for later", and any project / kanban / backlog management
+  ask. Use even when the user doesn't say "task" or "taskline" —
+  phrases like "let's plan this", "queue this up", "track this",
+  "what's runnable now" all qualify. Skip for one-off todo notes with
+  no state, dependencies, or follow-up — just answer those directly.
+version: 0.4.0
 ---
 
 # taskline — task management for AI agents
 
 The `taskline` CLI is your only interface to taskline. It tracks
 projects and the tasks (features / bugs) inside them, enforces a
-five-state lifecycle (`created → design → dev → review → done`), models
-inter-task dependencies as a DAG, and answers "what's runnable now?".
+six-state lifecycle (`pending → start → design → dev → review → done`),
+models inter-task dependencies as a DAG, and answers "what's runnable
+now?".
 
 **Always go through the CLI.** Don't `curl` anywhere, don't try to read
 or write the database, don't shell out to internal endpoints — even if
@@ -75,20 +76,29 @@ focused on a single project.
 | `title`       | required, short                                                            |
 | `description` | optional, longer prose                                                     |
 | `type`        | `feature` (default) or `bug`                                               |
-| `state`       | `created`, `design`, `dev`, `review`, `done`                               |
+| `state`       | `pending`, `start`, `design`, `dev`, `review`, `done`                      |
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments                                                |
 
 **State machine.** Any state may transition to any other named state.
-Forward jumps (`created` → `done`) and drop-backs (`review` → `dev`
+Forward jumps (`start` → `done`) and drop-backs (`review` → `dev`
 when a defect surfaces) are both legal. Unknown state names are
 rejected — don't invent new ones.
 
-**Runnable.** A task is runnable when its state is not `done` AND
-every task it depends on has state `done`. Runnable tasks are returned
-sorted by `priority DESC`, then `created_at ASC`. Use `taskline task
-next` for the single highest-priority runnable task.
+**`pending` is the parking lot.** Tasks in `pending` are explicitly
+**not runnable**: `task next` and `task list --runnable` skip them.
+Use it when you want to capture work without offering it to the queue
+yet (rough drafts, future ideas, things that need refinement). Any
+state may transition into `pending` — drop a task back into the lot
+whenever it should stop being a candidate. Move it to `start` (or
+further along) when it's ready to be worked.
+
+**Runnable.** A task is runnable when its state is neither `done` nor
+`pending` AND every task it depends on has state `done`. Runnable
+tasks are returned sorted by `priority DESC`, then `created_at ASC`.
+Use `taskline task next` for the single highest-priority runnable
+task.
 
 **Dependency DAG.** Adding an edge that would close a cycle is
 rejected. Self-deps are rejected. Re-adding an existing edge is a
@@ -108,12 +118,15 @@ taskline project list
 ### Tasks
 
 ```bash
-# Create
+# Create (defaults to 'start' state — immediately runnable)
 taskline task create --project demo --title "first task" --type feature --priority 1
+
+# Create and park in 'pending' (won't show up in `task next`)
+taskline task create --project demo --title "later idea" --auto-start=false
 
 # List (filter by state with comma-separated names)
 taskline task list --project demo
-taskline task list --project demo --state created,dev
+taskline task list --project demo --state start,dev
 
 # Pick / inspect
 taskline task next --project demo            # highest-priority runnable, or null
@@ -159,7 +172,7 @@ referenced by what they do, with a Superpowers skill name in
 parentheses if your harness has them; drop the parenthetical if not
 installed.
 
-### created → design
+### start → design
 
 - **Trigger:** you just picked the task off the queue.
 - **Actions:**
@@ -268,6 +281,10 @@ created → dev → done
 No branch, no design note, no PR. Commit directly on main with a
 one-line message. The state machine still records what happened.
 
+```
+start → dev → done
+```
+
 ## Gotchas
 
 - **Forgot `--project`?** Export `TASKLINE_PROJECT` once at session
@@ -276,8 +293,8 @@ one-line message. The state machine still records what happened.
   `upload`) operate on the task id directly and reject the flag with
   "unknown flag".
 - **`invalid next state "..."`** — you used a name that isn't in
-  `created/design/dev/review/done`. The state `test` was retired;
-  don't reintroduce it.
+  `pending/start/design/dev/review/done`. The state `created` was
+  renamed to `start` and `test` was retired; don't reintroduce either.
 - **`dependency would create a cycle`** — the edge would loop back.
   Restructure the graph or pick a different anchor.
 - **`project name "X" already exists`** — name collision. Reuse the
@@ -285,8 +302,10 @@ one-line message. The state machine still records what happened.
 - **`error: project required`** — neither `--project` nor
   `$TASKLINE_PROJECT` is set.
 - **`task next` returned `null`** — nothing runnable. Either the
-  project is empty, or every non-done task is blocked. Run
-  `taskline task list --project <p> --state created,design,dev,review`
-  to see what's stuck and why.
+  project is empty, every non-done task is blocked, or everything
+  left is parked in `pending`. Run
+  `taskline task list --project <p> --state pending,start,design,dev,review`
+  to see what's stuck and why; bump pending tasks into `start` when
+  they're ready to run.
 - **The user said "remind me to X"** — that's a one-off note, not a
   task. Reply directly; don't create a taskline entry.

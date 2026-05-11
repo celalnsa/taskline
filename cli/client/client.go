@@ -96,6 +96,9 @@ type CreateTaskInput struct {
 	Description string `json:"description"`
 	Type        string `json:"type"`
 	Priority    int    `json:"priority"`
+	// AutoStart, when true, creates the task directly in 'start' rather
+	// than 'pending'. Omitted = pending (the server default).
+	AutoStart *bool `json:"auto_start,omitempty"`
 }
 
 func (c *Client) CreateTask(projectIDOrName string, in CreateTaskInput) (*Task, error) {

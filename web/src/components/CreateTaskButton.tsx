@@ -8,17 +8,19 @@ export function CreateTaskButton({ project }: { project: Project }) {
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("feature");
   const [priority, setPriority] = useState(0);
+  const [autoStart, setAutoStart] = useState(true);
   const create = useCreateTask(project.id);
 
   const submit = () => {
     if (!title.trim() || create.isPending) return;
     create.mutate(
-      { title, description, type, priority },
+      { title, description, type, priority, auto_start: autoStart },
       {
         onSuccess: () => {
           setTitle("");
           setDescription("");
           setPriority(0);
+          setAutoStart(true);
           setOpen(false);
         },
       }
@@ -110,6 +112,17 @@ export function CreateTaskButton({ project }: { project: Project }) {
                   placeholder="priority"
                 />
               </div>
+              <label className="flex items-center gap-2 text-xs text-slate-600 select-none">
+                <input
+                  type="checkbox"
+                  className="accent-emerald-600"
+                  checked={autoStart}
+                  onChange={(e) => setAutoStart(e.target.checked)}
+                />
+                <span>
+                  Auto-start <span className="text-slate-400">(uncheck to park as pending)</span>
+                </span>
+              </label>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"

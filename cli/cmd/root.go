@@ -36,7 +36,7 @@ Environment:
 Examples:
   taskline project create --name demo
   taskline task create --project demo --title "first task" --type feature
-  taskline task list --project demo --state created,dev
+  taskline task list --project demo --state start,dev
   taskline task next --project demo
   taskline task update <id> --state review
   taskline task depend <id> --on <other-id>`,

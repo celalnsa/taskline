@@ -55,18 +55,27 @@ that exist in one view but not another. A single SQL query can answer
 
 ### 3. Reversible state
 
-`created → design → dev → review → done`. The expected motion is
-forward, but the state machine permits any move between known states.
-A review that surfaces a defect should drop the task back to `dev`;
-work that turns out to need redesign should drop back to `design`.
-Forcing the agent to delete-and-recreate in those cases destroys
-history (description, dependencies, attachments) that is exactly the
-context a future agent needs.
+`pending → start → design → dev → review → done`. The expected motion
+is forward from `start`, but the state machine permits any move between
+known states. A review that surfaces a defect should drop the task
+back to `dev`; work that turns out to need redesign should drop back
+to `design`. Forcing the agent to delete-and-recreate in those cases
+destroys history (description, dependencies, attachments) that is
+exactly the context a future agent needs.
 
-Skipping forward is fine too (`created → done` is a perfectly valid
+Skipping forward is fine too (`start → done` is a perfectly valid
 move for trivial work). The state machine's only job is to keep the
 set of legal state names honest; the *direction* of motion is a
 modeling choice the agent gets to make.
+
+`pending` lives off the main pipeline. It captures the difference
+between "I want to work on this" and "I want to remember this". A
+task in `pending` is not runnable — `task next` skips it — so a
+backlog of half-formed ideas doesn't drown the queue. Promote with
+`task update --state start` (or any forward state) when it's ready,
+or drop a runnable task into `pending` when it should stop being a
+candidate. The web modal exposes an *auto-start* toggle on create;
+the CLI flag is `--auto-start` (default true).
 
 The earlier "forward-only" rule was a guard against stalled-card
 graveyards. Priority + the runnable query already prevent that: a
@@ -108,10 +117,10 @@ importance", "estimated effort", "blocked by user feedback", or any of
 the other decoration humans like to add. If you need that, derive it on
 the agent side and translate to a number.
 
-## Why these specific five states
+## Why these specific six states
 
-`created → design → dev → review → done` is opinionated. Other shapes
-were considered:
+`pending → start → design → dev → review → done` is opinionated. Other
+shapes were considered:
 
 - **Three states** (`todo / doing / done`): too coarse. Agents working
   in parallel need to know whether something is in design (still

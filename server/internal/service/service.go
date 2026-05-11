@@ -43,8 +43,10 @@ func (s *Service) ResolveProject(ctx context.Context, idOrName string) (*model.P
 	return s.st.GetProjectByName(ctx, idOrName)
 }
 
-// CreateTask creates a task under the resolved project.
-func (s *Service) CreateTask(ctx context.Context, projectIDOrName, title, description string, taskType model.TaskType, priority int) (*model.Task, error) {
+// CreateTask creates a task under the resolved project. autoStart picks
+// the initial state: true → 'start' (immediately runnable), false →
+// 'pending' (a parking lot the agent loop will skip).
+func (s *Service) CreateTask(ctx context.Context, projectIDOrName, title, description string, taskType model.TaskType, priority int, autoStart bool) (*model.Task, error) {
 	if title == "" {
 		return nil, errors.New("task title required")
 	}
@@ -55,7 +57,11 @@ func (s *Service) CreateTask(ctx context.Context, projectIDOrName, title, descri
 	if err != nil {
 		return nil, err
 	}
-	return s.st.CreateTask(ctx, p.ID, title, description, taskType, priority)
+	initial := model.StatePending
+	if autoStart {
+		initial = model.StateStart
+	}
+	return s.st.CreateTask(ctx, p.ID, title, description, taskType, priority, initial)
 }
 
 // GetTask fetches a task by id.

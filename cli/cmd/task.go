@@ -38,6 +38,7 @@ func init() {
 	taskCreateCmd.Flags().String("description", "", "task description")
 	taskCreateCmd.Flags().String("type", "feature", "task type: feature|bug")
 	taskCreateCmd.Flags().Int("priority", 0, "task priority (higher = runs sooner)")
+	taskCreateCmd.Flags().Bool("auto-start", true, "start the task immediately ('start'); pass --auto-start=false to park it as 'pending'")
 	_ = taskCreateCmd.MarkFlagRequired("title")
 
 	taskListCmd.Flags().String("state", "", "comma-separated states to include (default: all)")
@@ -45,7 +46,7 @@ func init() {
 	taskUpdateCmd.Flags().String("title", "", "new title")
 	taskUpdateCmd.Flags().String("description", "", "new description")
 	taskUpdateCmd.Flags().String("type", "", "new type: feature|bug")
-	taskUpdateCmd.Flags().String("state", "", "new state: created|design|dev|review|done")
+	taskUpdateCmd.Flags().String("state", "", "new state: pending|start|design|dev|review|done")
 	taskUpdateCmd.Flags().Int("priority", 0, "new priority")
 
 	taskDependCmd.Flags().String("on", "", "id of the task this one depends on (required)")
@@ -73,9 +74,11 @@ var taskCreateCmd = &cobra.Command{
 		desc, _ := cmd.Flags().GetString("description")
 		typ, _ := cmd.Flags().GetString("type")
 		prio, _ := cmd.Flags().GetInt("priority")
+		autoStart, _ := cmd.Flags().GetBool("auto-start")
 		c := newClient()
 		t, err := c.CreateTask(project, client.CreateTaskInput{
 			Title: title, Description: desc, Type: typ, Priority: prio,
+			AutoStart: &autoStart,
 		})
 		if err != nil {
 			return err

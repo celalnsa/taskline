@@ -60,10 +60,13 @@ holder before relaunching.
 
 - **No CGO.** SQLite via `modernc.org/sqlite`. Never introduce a CGO
   dependency — it breaks cross-compile and the `go run` workflow.
-- **State machine.** `created → design → dev → review → done`. Movement
-  in either direction is allowed (review surfacing a bug → drop back to
-  dev is a real workflow); validation only rejects unknown state names.
-  Lives in `server/api/model/model.go` (`CanTransitionTo`).
+- **State machine.** `pending → start → design → dev → review → done`.
+  Movement in either direction is allowed (review surfacing a bug →
+  drop back to dev is a real workflow); validation only rejects unknown
+  state names. `pending` is a non-runnable parking lot; the entry-point
+  state is `start` (formerly `created`). Tasks created without
+  `auto_start` land in `pending`. Lives in `server/api/model/model.go`
+  (`CanTransitionTo`).
 - **Dependency DAG.** `AddDependency` rejects cycles with 409. Any new
   graph mutation MUST keep the cycle check.
 - **Errors.** Store layer returns sentinel errors (`ErrNotFound`,

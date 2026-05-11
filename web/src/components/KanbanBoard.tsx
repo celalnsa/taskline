@@ -44,10 +44,14 @@ export function KanbanBoard({ project }: Props) {
     !!t.depends_on?.length && t.depends_on.some((d) => !doneIds.has(d));
 
   const grouped = useMemo(() => {
-    const out: Record<TaskState, Task[]> = {
-      created: [], design: [], dev: [], review: [], done: [],
-    };
-    for (const t of tasks) out[t.state].push(t);
+    const out = Object.fromEntries(STATES.map((s) => [s, [] as Task[]])) as Record<
+      TaskState,
+      Task[]
+    >;
+    for (const t of tasks) {
+      // Tolerate states the web doesn't know about (server one rev ahead).
+      if (out[t.state]) out[t.state].push(t);
+    }
     for (const k of STATES) {
       out[k].sort((a, b) => b.priority - a.priority || a.created_at - b.created_at);
     }

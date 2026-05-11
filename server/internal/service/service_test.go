@@ -44,7 +44,7 @@ func TestUpdateTaskAllowsBackwardTransition(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
-	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0)
+	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
 
 	// Forward skip is fine.
 	got, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.StateReview)})
@@ -62,7 +62,7 @@ func TestUpdateTaskRejectsUnknownState(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
-	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0)
+	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
 
 	// 'test' was retired — passing it should be rejected as invalid.
 	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.TaskState("test"))})
@@ -74,7 +74,7 @@ func TestNextRunnableTaskReturnsNilWhenNothingRunnable(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
-	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0)
+	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
 
 	stDone := model.StateDone
 	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: &stDone})
@@ -89,10 +89,44 @@ func TestAddDependencyValidatesBothTasks(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
-	a, _ := s.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 0)
+	a, _ := s.CreateTask(ctx, p.ID, "a", "", model.TaskTypeFeature, 0, true)
 
 	// Dependency on non-existent task → error mentions the dep id.
 	err := s.AddDependency(ctx, a.ID, "no-such")
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "no-such"))
+}
+
+func TestCreateTaskAutoStartFalseLandsInPending(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+	p, _ := s.CreateProject(ctx, "p", "")
+
+	parked, err := s.CreateTask(ctx, p.ID, "later", "", model.TaskTypeFeature, 0, false)
+	require.NoError(t, err)
+	require.Equal(t, model.StatePending, parked.State)
+
+	// Pending tasks must NOT show up in the runnable queue.
+	got, err := s.NextRunnableTask(ctx, p.ID)
+	require.NoError(t, err)
+	require.Nil(t, got)
+
+	// Promoting it to start makes it runnable.
+	stStart := model.StateStart
+	_, err = s.UpdateTask(ctx, parked.ID, store.TaskUpdate{State: &stStart})
+	require.NoError(t, err)
+	got, err = s.NextRunnableTask(ctx, p.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, parked.ID, got.ID)
+}
+
+func TestCreateTaskAutoStartTrueLandsInStart(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+	p, _ := s.CreateProject(ctx, "p", "")
+
+	tk, err := s.CreateTask(ctx, p.ID, "go", "", model.TaskTypeFeature, 0, true)
+	require.NoError(t, err)
+	require.Equal(t, model.StateStart, tk.State)
 }

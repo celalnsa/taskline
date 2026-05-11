@@ -154,6 +154,10 @@ type createTaskReq struct {
 	Description string `json:"description"`
 	Type        string `json:"type"`
 	Priority    int    `json:"priority"`
+	// AutoStart picks the initial state: true → "start", omitted/false →
+	// "pending". Pointer so callers that don't send the field get the
+	// documented default (pending), instead of silent auto-start.
+	AutoStart *bool `json:"auto_start,omitempty"`
 }
 
 func (h *Handler) createTask(ctx context.Context, c *app.RequestContext) {
@@ -166,7 +170,8 @@ func (h *Handler) createTask(ctx context.Context, c *app.RequestContext) {
 	if req.Type == "" {
 		req.Type = string(model.TaskTypeFeature)
 	}
-	t, err := h.svc.CreateTask(ctx, project, req.Title, req.Description, model.TaskType(req.Type), req.Priority)
+	autoStart := req.AutoStart != nil && *req.AutoStart
+	t, err := h.svc.CreateTask(ctx, project, req.Title, req.Description, model.TaskType(req.Type), req.Priority, autoStart)
 	if err != nil {
 		writeServiceError(c, err)
 		return

@@ -123,13 +123,15 @@ func TestEndToEndHappyPath(t *testing.T) {
 	require.Equal(t, http.StatusCreated, st)
 	require.Equal(t, "demo", p.Name)
 
-	// Two tasks; t2 depends on t1 but has higher priority.
+	// Two tasks created with auto_start=true so they're immediately
+	// runnable. t2 depends on t1 but has higher priority.
 	var t1, t2 task
 	st = jsonReq(t, "POST", base+"/api/v1/projects/demo/tasks",
-		map[string]any{"title": "first", "type": "feature", "priority": 1}, &t1)
+		map[string]any{"title": "first", "type": "feature", "priority": 1, "auto_start": true}, &t1)
 	require.Equal(t, http.StatusCreated, st)
+	require.Equal(t, "start", t1.State)
 	st = jsonReq(t, "POST", base+"/api/v1/projects/demo/tasks",
-		map[string]any{"title": "second", "type": "bug", "priority": 9}, &t2)
+		map[string]any{"title": "second", "type": "bug", "priority": 9, "auto_start": true}, &t2)
 	require.Equal(t, http.StatusCreated, st)
 
 	// Add dependency.
@@ -162,12 +164,12 @@ func TestEndToEndHappyPath(t *testing.T) {
 	require.Len(t, runnable.Tasks, 1)
 	require.Equal(t, t2.ID, runnable.Tasks[0].ID)
 
-	// State filter.
-	var createdOnly taskListResp
-	st = jsonReq(t, "GET", base+"/api/v1/projects/demo/tasks?state=created", nil, &createdOnly)
+	// State filter — t2 stayed in `start`; t1 was advanced to `done`.
+	var startOnly taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/demo/tasks?state=start", nil, &startOnly)
 	require.Equal(t, http.StatusOK, st)
-	require.Len(t, createdOnly.Tasks, 1)
-	require.Equal(t, t2.ID, createdOnly.Tasks[0].ID)
+	require.Len(t, startOnly.Tasks, 1)
+	require.Equal(t, t2.ID, startOnly.Tasks[0].ID)
 
 	// Description update + delete.
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+t2.ID,
@@ -276,6 +278,48 @@ func TestStateTransitionAtAPI(t *testing.T) {
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
 		map[string]any{"state": "test"}, nil)
 	require.Equal(t, http.StatusBadRequest, st)
+}
+
+func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "parked"}, &project{})
+
+	// Omitted auto_start → server parks the task in `pending`.
+	var parked task
+	st := jsonReq(t, "POST", base+"/api/v1/projects/parked/tasks",
+		map[string]any{"title": "later", "type": "feature"}, &parked)
+	require.Equal(t, http.StatusCreated, st)
+	require.Equal(t, "pending", parked.State)
+
+	// Runnable list must skip it; `task next` must return null.
+	var rs taskListResp
+	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/runnable", nil, &rs)
+	require.Len(t, rs.Tasks, 0)
+	var nx nextResp
+	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/next", nil, &nx)
+	require.Nil(t, nx.Task)
+
+	// auto_start=true short-circuits the parking lot.
+	var hot task
+	jsonReq(t, "POST", base+"/api/v1/projects/parked/tasks",
+		map[string]any{"title": "now", "type": "feature", "auto_start": true}, &hot)
+	require.Equal(t, "start", hot.State)
+	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/runnable", nil, &rs)
+	require.Len(t, rs.Tasks, 1)
+	require.Equal(t, hot.ID, rs.Tasks[0].ID)
+
+	// Promoting `parked` into a runnable state unblocks it too.
+	jsonReq(t, "PATCH", base+"/api/v1/tasks/"+parked.ID, map[string]any{"state": "design"}, &parked)
+	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/runnable", nil, &rs)
+	require.Len(t, rs.Tasks, 2)
+
+	// And dropping a runnable task back into pending re-parks it.
+	jsonReq(t, "PATCH", base+"/api/v1/tasks/"+hot.ID, map[string]any{"state": "pending"}, &hot)
+	require.Equal(t, "pending", hot.State)
+	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/runnable", nil, &rs)
+	require.Len(t, rs.Tasks, 1)
+	require.Equal(t, parked.ID, rs.Tasks[0].ID)
 }
 
 // Sanity: status code for unknown project.
