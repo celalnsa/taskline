@@ -6,40 +6,65 @@ interface Props {
   task: Task;
   isBlocked: boolean;
   onClick: () => void;
+  // When true, the card renders as a static clone for use inside
+  // <DragOverlay/> — no useDraggable wiring, no transform, the
+  // overlay handles positioning. The original card in the column
+  // also accepts this flag indirectly via `isDragging`, where it
+  // fades out so only the overlay clone is visible during drag.
+  overlay?: boolean;
 }
 
-export function TaskCard({ task, isBlocked, onClick }: Props) {
+export function TaskCard({ task, isBlocked, onClick, overlay = false }: Props) {
+  // Disable the draggable hook entirely on the overlay clone so the
+  // DOM only has a single registered draggable per task id.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
+    disabled: overlay,
   });
 
-  const style: React.CSSProperties = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        zIndex: 50,
-      }
-    : {};
+  // The overlay positions itself via dnd-kit; we must NOT also apply
+  // the transform here or the card would double-translate.
+  const style: React.CSSProperties =
+    !overlay && transform
+      ? {
+          transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+          zIndex: 50,
+        }
+      : {};
 
   const typeColor =
     task.type === "bug"
       ? "border-l-red-500"
       : "border-l-sky-500";
 
+  // While the real card is being dragged, fade it almost-out so the
+  // overlay clone is what the eye tracks. Without this, you'd see
+  // both the source and the overlay at once.
+  const dragVisualClass = overlay
+    ? " shadow-2xl ring-1 ring-slate-300 cursor-grabbing"
+    : isDragging
+    ? " opacity-30"
+    : isBlocked
+    ? " opacity-70"
+    : "";
+
   return (
     <div
-      ref={setNodeRef}
+      ref={overlay ? undefined : setNodeRef}
       style={style}
       className={
         "rounded-md border border-slate-200 bg-white p-3 shadow-sm border-l-4 " +
         typeColor +
-        (isDragging ? " opacity-60" : "") +
-        (isBlocked ? " opacity-70" : "")
+        dragVisualClass
       }
     >
       <div
-        className="flex items-start gap-2 cursor-grab active:cursor-grabbing"
-        {...attributes}
-        {...listeners}
+        className={
+          "flex items-start gap-2" +
+          (overlay ? "" : " cursor-grab active:cursor-grabbing")
+        }
+        {...(overlay ? {} : attributes)}
+        {...(overlay ? {} : listeners)}
       >
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import {
   DndContext,
+  DragOverlay,
   type DragEndEvent,
+  type DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
@@ -33,6 +35,12 @@ export function KanbanBoard({ project }: Props) {
   const updateTask = useUpdateTask(project.id);
   const [editing, setEditing] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Track which task is currently being dragged so we can render it in a
+  // <DragOverlay>. Without the overlay, the card stays in its source
+  // column's DOM and gets visually clipped by the column's overflow-auto
+  // (and the kanban scroller's overflow-x-auto/overflow-y-hidden), which
+  // is what made cards "disappear" mid-drag.
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
   const sensors = useSensors(
     // 4px movement before a drag begins so click-to-edit isn't hijacked.
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -71,7 +79,13 @@ export function KanbanBoard({ project }: Props) {
     return out;
   }, [tasks]);
 
+  function onDragStart(ev: DragStartEvent) {
+    const t = tasks.find((t) => t.id === String(ev.active.id));
+    setActiveTask(t ?? null);
+  }
+
   function onDragEnd(ev: DragEndEvent) {
+    setActiveTask(null);
     const taskId = String(ev.active.id);
     const target = ev.over?.id as TaskState | undefined;
     if (!target) return;
@@ -104,7 +118,12 @@ export function KanbanBoard({ project }: Props) {
           {error}
         </div>
       )}
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setActiveTask(null)}
+      >
         <div className="flex-1 overflow-x-auto overflow-y-hidden">
           <div className="flex h-full w-fit min-w-full gap-3 p-4">
             {STATES.map((s) => (
@@ -121,6 +140,18 @@ export function KanbanBoard({ project }: Props) {
             ))}
           </div>
         </div>
+        {/* Render the dragged card in a portal-positioned overlay so it
+            isn't clipped by the column / scroller overflow boxes. */}
+        <DragOverlay dropAnimation={null}>
+          {activeTask ? (
+            <TaskCard
+              task={activeTask}
+              isBlocked={isBlocked(activeTask)}
+              onClick={() => {}}
+              overlay
+            />
+          ) : null}
+        </DragOverlay>
       </DndContext>
       {editing && (
         <TaskEditor
