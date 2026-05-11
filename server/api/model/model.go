@@ -86,8 +86,19 @@ type Task struct {
 	Priority    int       `json:"priority"`
 	DependsOn   []string  `json:"depends_on,omitempty"`
 	Images      []Image   `json:"images,omitempty"`
+	Links       []Link    `json:"links,omitempty"`
 	CreatedAt   int64     `json:"created_at"`
 	UpdatedAt   int64     `json:"updated_at"`
+}
+
+// Link is a URL attached to a task — typically a plan doc, PR, design
+// note, or other artifact the agent wants to keep alongside the task.
+type Link struct {
+	ID        string `json:"id"`
+	TaskID    string `json:"task_id"`
+	URL       string `json:"url"`
+	Label     string `json:"label"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 // Image is a binary attachment uploaded against a task.

@@ -47,6 +47,7 @@ export interface Task {
   priority: number;
   depends_on?: string[];
   images?: TaskImage[];
+  links?: TaskLink[];
   created_at: number;
   updated_at: number;
 }
@@ -58,6 +59,14 @@ export interface TaskImage {
   mime_type: string;
   size_bytes: number;
   uploaded_at: number;
+}
+
+export interface TaskLink {
+  id: string;
+  task_id: string;
+  url: string;
+  label: string;
+  created_at: number;
 }
 
 class ApiError extends Error {
@@ -150,6 +159,25 @@ export async function addDependency(
     "POST",
     `/api/v1/tasks/${encodeURIComponent(taskId)}/deps`,
     { depends_on: dependsOn }
+  );
+}
+
+export async function addLink(
+  taskId: string,
+  url: string,
+  label: string
+): Promise<TaskLink> {
+  return request<TaskLink>(
+    "POST",
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/links`,
+    { url, label }
+  );
+}
+
+export async function deleteLink(linkId: string): Promise<void> {
+  await request<unknown>(
+    "DELETE",
+    `/api/v1/links/${encodeURIComponent(linkId)}`
   );
 }
 

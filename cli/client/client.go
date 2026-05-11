@@ -48,8 +48,18 @@ type Task struct {
 	Priority    int      `json:"priority"`
 	DependsOn   []string `json:"depends_on,omitempty"`
 	Images      []Image  `json:"images,omitempty"`
+	Links       []Link   `json:"links,omitempty"`
 	CreatedAt   int64    `json:"created_at"`
 	UpdatedAt   int64    `json:"updated_at"`
+}
+
+// Link is a URL attached to a task.
+type Link struct {
+	ID        string `json:"id"`
+	TaskID    string `json:"task_id"`
+	URL       string `json:"url"`
+	Label     string `json:"label"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 // Image is an attachment record.
@@ -189,6 +199,25 @@ type addDepReq struct {
 func (c *Client) AddDependency(taskID, dependsOnID string) error {
 	path := fmt.Sprintf("/api/v1/tasks/%s/deps", url.PathEscape(taskID))
 	return c.do("POST", path, addDepReq{DependsOn: dependsOnID}, nil)
+}
+
+type AddLinkInput struct {
+	URL   string `json:"url"`
+	Label string `json:"label"`
+}
+
+func (c *Client) AddLink(taskID string, in AddLinkInput) (*Link, error) {
+	var out Link
+	path := fmt.Sprintf("/api/v1/tasks/%s/links", url.PathEscape(taskID))
+	if err := c.do("POST", path, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteLink(linkID string) error {
+	path := fmt.Sprintf("/api/v1/links/%s", url.PathEscape(linkID))
+	return c.do("DELETE", path, nil, nil)
 }
 
 func (c *Client) UploadImage(taskID, filePath string) (*Image, error) {

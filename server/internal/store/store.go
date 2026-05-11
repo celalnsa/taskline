@@ -24,6 +24,9 @@ var schemaDropTestState string
 //go:embed schema/0003_pending_state.sql
 var schemaPendingState string
 
+//go:embed schema/0004_task_links.sql
+var schemaTaskLinks string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -39,6 +42,7 @@ var schemaMigrations = []migration{
 	{version: 1, sql: schemaInit},
 	{version: 2, sql: schemaDropTestState},
 	{version: 3, sql: schemaPendingState},
+	{version: 4, sql: schemaTaskLinks},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -242,6 +246,9 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	if err := s.attachImages(ctx, t); err != nil {
 		return nil, err
 	}
+	if err := s.attachLinks(ctx, t); err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
@@ -294,6 +301,9 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 			return nil, err
 		}
 		if err := s.attachImages(ctx, t); err != nil {
+			return nil, err
+		}
+		if err := s.attachLinks(ctx, t); err != nil {
 			return nil, err
 		}
 	}
@@ -466,6 +476,55 @@ func (s *Store) dependsOn(ctx context.Context, start, target string) (bool, erro
 
 // ─── Images ─────────────────────────────────────────────────────────────
 
+// AddLink attaches a URL to a task. id and created_at are generated if zero.
+// Returns ErrNotFound if the task does not exist.
+func (s *Store) AddLink(ctx context.Context, link *model.Link) error {
+	if link.ID == "" {
+		link.ID = newID()
+	}
+	if link.CreatedAt == 0 {
+		link.CreatedAt = now()
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO task_links(id,task_id,url,label,created_at) VALUES(?,?,?,?,?)`,
+		link.ID, link.TaskID, link.URL, link.Label, link.CreatedAt,
+	)
+	if err != nil {
+		if isFKErr(err) {
+			return fmt.Errorf("%w: task %s does not exist", ErrNotFound, link.TaskID)
+		}
+		return err
+	}
+	return nil
+}
+
+// GetLink returns a link by id.
+func (s *Store) GetLink(ctx context.Context, id string) (*model.Link, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id,task_id,url,label,created_at FROM task_links WHERE id = ?`, id)
+	var l model.Link
+	if err := row.Scan(&l.ID, &l.TaskID, &l.URL, &l.Label, &l.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &l, nil
+}
+
+// DeleteLink removes a single link by id. Returns ErrNotFound if absent.
+func (s *Store) DeleteLink(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM task_links WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // AddImage records a stored image attachment for a task.
 func (s *Store) AddImage(ctx context.Context, img *model.Image) error {
 	if img.ID == "" {
@@ -529,6 +588,24 @@ func (s *Store) attachDeps(ctx context.Context, t *model.Task) error {
 			return err
 		}
 		t.DependsOn = append(t.DependsOn, d)
+	}
+	return rows.Err()
+}
+
+func (s *Store) attachLinks(ctx context.Context, t *model.Task) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,task_id,url,label,created_at
+		   FROM task_links WHERE task_id = ? ORDER BY created_at ASC`, t.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var l model.Link
+		if err := rows.Scan(&l.ID, &l.TaskID, &l.URL, &l.Label, &l.CreatedAt); err != nil {
+			return err
+		}
+		t.Links = append(t.Links, l)
 	}
 	return rows.Err()
 }

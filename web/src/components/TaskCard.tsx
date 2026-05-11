@@ -62,6 +62,11 @@ export function TaskCard({ task, isBlocked, onClick }: Props) {
                 deps: {task.depends_on.length}
               </span>
             )}
+            {task.links && task.links.length > 0 && (
+              <span className="text-[10px] text-slate-400" title="attached links">
+                🔗 {task.links.length}
+              </span>
+            )}
           </div>
           <p className="text-sm font-medium leading-snug">{task.title}</p>
         </div>

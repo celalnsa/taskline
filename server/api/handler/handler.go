@@ -61,6 +61,8 @@ func (h *Handler) Register(s *server.Hertz) {
 	v1.DELETE("/tasks/:id", h.deleteTask)
 	v1.POST("/tasks/:id/deps", h.addDependency)
 	v1.POST("/tasks/:id/images", h.uploadImage)
+	v1.POST("/tasks/:id/links", h.addLink)
+	v1.DELETE("/links/:id", h.deleteLink)
 
 	// Mount the bundled UI last so /api/* and /healthz keep their handlers.
 	if uiFS, ok := webfs.FS(); ok {
@@ -302,6 +304,35 @@ func (h *Handler) addDependency(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	writeJSON(c, http.StatusCreated, map[string]any{"task_id": id, "depends_on": req.DependsOn})
+}
+
+type addLinkReq struct {
+	URL   string `json:"url"`
+	Label string `json:"label"`
+}
+
+func (h *Handler) addLink(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	var req addLinkReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	link, err := h.svc.AddLink(ctx, id, req.URL, req.Label)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	writeJSON(c, http.StatusCreated, link)
+}
+
+func (h *Handler) deleteLink(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	if err := h.svc.DeleteLink(ctx, id); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	writeJSON(c, http.StatusOK, map[string]any{"deleted": true, "id": id})
 }
 
 func (h *Handler) uploadImage(ctx context.Context, c *app.RequestContext) {

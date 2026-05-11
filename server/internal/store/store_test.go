@@ -202,6 +202,46 @@ func TestListTasksFilteredByState(t *testing.T) {
 	require.Equal(t, t2.ID, devOnly[0].ID)
 }
 
+func TestLinkCRUD(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, _ := st.CreateProject(ctx, "p", "")
+	tk, _ := st.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, model.StateStart)
+
+	l1 := &model.Link{TaskID: tk.ID, URL: "https://example.com/pr/1", Label: "PR #1"}
+	require.NoError(t, st.AddLink(ctx, l1))
+	require.NotEmpty(t, l1.ID)
+	require.NotZero(t, l1.CreatedAt)
+
+	l2 := &model.Link{TaskID: tk.ID, URL: "https://example.com/doc"}
+	require.NoError(t, st.AddLink(ctx, l2))
+
+	// FK violation: attach to a missing task.
+	bogus := &model.Link{TaskID: "no-such", URL: "https://x"}
+	require.ErrorIs(t, st.AddLink(ctx, bogus), store.ErrNotFound)
+
+	// Task fetch surfaces both links in insertion order.
+	got, err := st.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Len(t, got.Links, 2)
+	require.Equal(t, "https://example.com/pr/1", got.Links[0].URL)
+	require.Equal(t, "PR #1", got.Links[0].Label)
+	require.Equal(t, "https://example.com/doc", got.Links[1].URL)
+	require.Equal(t, "", got.Links[1].Label)
+
+	// DeleteLink removes one.
+	require.NoError(t, st.DeleteLink(ctx, l1.ID))
+	require.ErrorIs(t, st.DeleteLink(ctx, l1.ID), store.ErrNotFound)
+	got2, _ := st.GetTask(ctx, tk.ID)
+	require.Len(t, got2.Links, 1)
+	require.Equal(t, l2.ID, got2.Links[0].ID)
+
+	// Deleting the task cascades to remaining links.
+	require.NoError(t, st.DeleteTask(ctx, tk.ID))
+	_, err = st.GetLink(ctx, l2.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
 // TestMigrationsRunOnceAcrossReopens verifies that PRAGMA user_version
 // gates migration application: after a first open the version is at
 // the latest entry in schemaMigrations, and a second open against the
@@ -216,7 +256,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v1, 3, "first open should advance to >=3")
+	require.GreaterOrEqual(t, v1, 4, "first open should advance to >=4")
 
 	require.NoError(t, st1.Close())
 
@@ -283,7 +323,7 @@ func TestMigrationUpgradesCreatedRowsToStart(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 3, v, "migration should have advanced user_version to 3")
+	require.GreaterOrEqual(t, v, 3, "migration should have run at least through 0003")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")

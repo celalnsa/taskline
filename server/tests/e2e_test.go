@@ -322,6 +322,68 @@ func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
 	require.Equal(t, parked.ID, rs.Tasks[0].ID)
 }
 
+func TestTaskLinkLifecycleAtAPI(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "links"}, &project{})
+	var tk task
+	jsonReq(t, "POST", base+"/api/v1/projects/links/tasks",
+		map[string]any{"title": "with links", "type": "feature", "auto_start": true}, &tk)
+
+	// Add a link.
+	var link struct {
+		ID     string `json:"id"`
+		TaskID string `json:"task_id"`
+		URL    string `json:"url"`
+		Label  string `json:"label"`
+	}
+	st := jsonReq(t, "POST", base+"/api/v1/tasks/"+tk.ID+"/links",
+		map[string]any{"url": "https://example.com/pr/42", "label": "PR #42"}, &link)
+	require.Equal(t, http.StatusCreated, st)
+	require.NotEmpty(t, link.ID)
+	require.Equal(t, "https://example.com/pr/42", link.URL)
+
+	// Missing URL → 400.
+	st = jsonReq(t, "POST", base+"/api/v1/tasks/"+tk.ID+"/links",
+		map[string]any{"label": "no url"}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
+	// javascript: URI must be rejected at the API boundary — it would
+	// otherwise round-trip through the web's <a href=…> as a clickable
+	// XSS sink.
+	st = jsonReq(t, "POST", base+"/api/v1/tasks/"+tk.ID+"/links",
+		map[string]any{"url": "javascript:alert(1)"}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
+	// Link on a missing task → 404. (FK in the store, not a pre-check.)
+	st = jsonReq(t, "POST", base+"/api/v1/tasks/no-such-task/links",
+		map[string]any{"url": "https://x.test"}, nil)
+	require.Equal(t, http.StatusNotFound, st)
+
+	// GET task surfaces the link inline.
+	resp, err := http.Get(base + "/api/v1/tasks/" + tk.ID)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Contains(t, string(raw), "https://example.com/pr/42")
+	require.Contains(t, string(raw), "PR #42")
+
+	// Delete the link.
+	st = jsonReq(t, "DELETE", base+"/api/v1/links/"+link.ID, nil, nil)
+	require.Equal(t, http.StatusOK, st)
+
+	// Re-fetch — links list should be empty.
+	resp2, err := http.Get(base + "/api/v1/tasks/" + tk.ID)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	raw2, _ := io.ReadAll(resp2.Body)
+	require.NotContains(t, string(raw2), "https://example.com/pr/42")
+
+	// Double-delete → 404.
+	st = jsonReq(t, "DELETE", base+"/api/v1/links/"+link.ID, nil, nil)
+	require.Equal(t, http.StatusNotFound, st)
+}
+
 // Sanity: status code for unknown project.
 func TestUnknownProjectIs404(t *testing.T) {
 	base, stop := startServer(t)

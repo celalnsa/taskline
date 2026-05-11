@@ -130,3 +130,39 @@ func TestCreateTaskAutoStartTrueLandsInStart(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.StateStart, tk.State)
 }
+
+// AddLink must reject anything that isn't http(s). The web renders these
+// in <a href=…> and a `javascript:` (or `data:`, `file:`, …) URI would
+// otherwise be a stored-XSS sink.
+func TestAddLinkRejectsUnsafeSchemes(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+	p, _ := s.CreateProject(ctx, "p", "")
+	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
+
+	for _, bad := range []string{
+		"javascript:alert(1)",
+		"data:text/html,<script>alert(1)</script>",
+		"file:///etc/passwd",
+		"vbscript:msgbox",
+		"chrome://settings",
+		"",
+	} {
+		_, err := s.AddLink(ctx, tk.ID, bad, "")
+		require.Error(t, err, "bad url should be rejected: %q", bad)
+	}
+
+	// Missing host (e.g. "http:" or "https:///") is also rejected.
+	_, err := s.AddLink(ctx, tk.ID, "https:///path", "")
+	require.Error(t, err)
+
+	// And anything http(s) with a real host is accepted.
+	link, err := s.AddLink(ctx, tk.ID, "https://example.com/plan", "Plan")
+	require.NoError(t, err)
+	require.Equal(t, "https://example.com/plan", link.URL)
+	require.Equal(t, "Plan", link.Label)
+
+	// Missing task surfaces as ErrNotFound from the store FK check.
+	_, err = s.AddLink(ctx, "no-such-task", "https://x.test", "")
+	require.ErrorIs(t, err, store.ErrNotFound)
+}

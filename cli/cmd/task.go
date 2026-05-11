@@ -25,6 +25,8 @@ func init() {
 		taskDeleteCmd,
 		taskDependCmd,
 		taskUploadCmd,
+		taskLinkCmd,
+		taskUnlinkCmd,
 	)
 
 	// Common --project flag (shared semantics across subcommands).
@@ -54,6 +56,10 @@ func init() {
 
 	taskUploadCmd.Flags().String("file", "", "local file path to upload (required)")
 	_ = taskUploadCmd.MarkFlagRequired("file")
+
+	taskLinkCmd.Flags().String("url", "", "URL to attach (required)")
+	taskLinkCmd.Flags().String("label", "", "optional display label for the link")
+	_ = taskLinkCmd.MarkFlagRequired("url")
 }
 
 var taskCmd = &cobra.Command{
@@ -233,6 +239,35 @@ var taskUploadCmd = &cobra.Command{
 			return err
 		}
 		return output.JSON(os.Stdout, img)
+	},
+}
+
+var taskLinkCmd = &cobra.Command{
+	Use:   "link <task-id>",
+	Short: "Attach a URL (plan doc, PR, design note…) to a task",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		label, _ := cmd.Flags().GetString("label")
+		c := newClient()
+		link, err := c.AddLink(args[0], client.AddLinkInput{URL: url, Label: label})
+		if err != nil {
+			return err
+		}
+		return output.JSON(os.Stdout, link)
+	},
+}
+
+var taskUnlinkCmd = &cobra.Command{
+	Use:   "unlink <link-id>",
+	Short: "Remove a previously-attached link by its id",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClient()
+		if err := c.DeleteLink(args[0]); err != nil {
+			return err
+		}
+		return output.JSON(os.Stdout, map[string]any{"deleted": true, "id": args[0]})
 	},
 }
 

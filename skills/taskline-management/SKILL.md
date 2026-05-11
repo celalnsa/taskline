@@ -142,10 +142,35 @@ taskline task depend <id> --on <other-id>
 
 # Image attachment (any binary)
 taskline task upload <id> --file ./screenshot.png
+
+# Link (plan doc, PR, design note — any URL the task should remember)
+taskline task link <task-id> --url https://example.com/pr/42 --label "PR #42"
+
+# Remove a link by its id (links are returned inline on `task get`)
+taskline task unlink <link-id>
 ```
 
 Delete returns `{"deleted": true, "id": ...}`; depend returns
 `{"task_id": ..., "depends_on": [...]}`. Pipe to `jq` freely.
+
+### Linking artifacts to a task
+
+As you walk a task through the playbook you'll generate things
+that belong with it — a plan doc, a brainstorm note, the PR URL,
+the merged commit, a Slack thread. Attach them with
+`taskline task link <task-id> --url … --label …` instead of leaving
+them buried in chat history.
+
+Recommended moments to call it:
+
+- **design**: a written plan / design doc URL ("Plan").
+- **dev → review**: the PR URL just after `gh pr create` ("PR #N").
+- **review → done**: the merged-commit URL or anything a future
+  reader would want to reach for ("merge", "post-mortem").
+
+Links surface inline on `task get` and in the web detail view.
+There is no limit on how many links a task can hold; favour
+adding too many over too few — they're cheap to remove later.
 
 ## Stage playbook — "work the queue"
 
@@ -223,9 +248,13 @@ installed.
   2. Fix anything the review surfaces; re-run tests after each fix.
   3. `git push -u origin <branch>`.
   4. `gh pr create` with title, summary, and a test plan.
-  5. **Wait for CI** if configured. If it fails, fix the root cause
+  5. Attach the PR URL to the task:
+     `taskline task link <task-id> --url <pr-url> --label "PR #N"`
+     so anyone reading the task later can jump straight to the
+     review.
+  6. **Wait for CI** if configured. If it fails, fix the root cause
      locally, re-run tests, push.
-  6. **Wait for at least one review** — human or bot
+  7. **Wait for at least one review** — human or bot
      (`gemini-code-assist`, etc.). Don't merge before any review has
      posted; the whole point of opening a PR is the second pair of
      eyes. Poll with:
@@ -235,7 +264,7 @@ installed.
      ```
 
      Re-check periodically until `reviews` is non-empty.
-  7. Read **every** comment surface — one endpoint isn't enough:
+  8. Read **every** comment surface — one endpoint isn't enough:
 
      ```bash
      gh api repos/<owner>/<repo>/pulls/<n>/reviews     # bot summaries

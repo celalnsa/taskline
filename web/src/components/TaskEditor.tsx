@@ -9,6 +9,8 @@ import {
 } from "../lib/api";
 import {
   useAddDependency,
+  useAddLink,
+  useDeleteLink,
   useDeleteTask,
   useUpdateTask,
 } from "../hooks/queries";
@@ -116,6 +118,8 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
 
         <DepSection task={task} allTasks={allTasks} />
 
+        <LinkSection project={project} task={task} />
+
         <div className="border-t pt-3 space-y-2">
           <div className="flex items-end gap-2">
             <select
@@ -193,6 +197,87 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
         </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LinkSection({ project, task }: { project: Project; task: Task }) {
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const add = useAddLink(project.id);
+  const del = useDeleteLink(project.id);
+
+  const links = task.links ?? [];
+
+  const submit = async () => {
+    if (!url.trim() || add.isPending) return;
+    try {
+      await add.mutateAsync({ taskId: task.id, url: url.trim(), label: label.trim() });
+      setUrl("");
+      setLabel("");
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <div className="border-t pt-3 space-y-2">
+      <p className="text-xs font-medium text-slate-500">Links</p>
+      {links.length > 0 && (
+        <ul className="space-y-1">
+          {links.map((l) => (
+            <li key={l.id} className="text-xs flex items-center gap-2">
+              <a
+                href={l.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-700 hover:underline truncate flex-1"
+                title={l.url}
+              >
+                {l.label || l.url}
+              </a>
+              <button
+                type="button"
+                className="text-[10px] text-slate-400 hover:text-red-600"
+                onClick={async () => {
+                  try {
+                    await del.mutateAsync(l.id);
+                  } catch (err) {
+                    setError((err as Error).message);
+                  }
+                }}
+              >
+                remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-stretch gap-2">
+        <input
+          type="url"
+          className="flex-1 min-w-0 text-xs border rounded px-2 py-1"
+          placeholder="https://…"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <input
+          className="w-32 text-xs border rounded px-2 py-1"
+          placeholder="label (optional)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <button
+          className="text-xs px-3 py-1 rounded bg-slate-700 text-white disabled:opacity-50"
+          disabled={!url.trim() || add.isPending}
+          onClick={submit}
+        >
+          {add.isPending ? "Adding…" : "Add"}
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
