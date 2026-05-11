@@ -1,5 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import type { Task } from "../lib/api";
+import { formatRelativeTime } from "../lib/time";
 
 interface Props {
   task: Task;
@@ -65,12 +66,20 @@ export function TaskCard({ task, isBlocked, onClick }: Props) {
           <p className="text-sm font-medium leading-snug">{task.title}</p>
         </div>
       </div>
-      <button
-        onClick={onClick}
-        className="mt-2 text-[10px] text-slate-500 hover:text-slate-900 underline"
-      >
-        edit
-      </button>
+      <div className="mt-2 flex items-center justify-between">
+        <button
+          onClick={onClick}
+          className="text-[10px] text-slate-500 hover:text-slate-900 underline"
+        >
+          edit
+        </button>
+        <span
+          className="text-[10px] tabular-nums text-slate-400"
+          title={new Date(task.updated_at).toLocaleString()}
+        >
+          {formatRelativeTime(task.updated_at)}
+        </span>
+      </div>
     </div>
   );
 }
