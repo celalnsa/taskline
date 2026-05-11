@@ -59,7 +59,10 @@ export function TaskCard({ task, isBlocked, onClick, overlay = false }: Props) {
       }
     >
       <div
-        className="flex items-start gap-2 cursor-grab active:cursor-grabbing"
+        className={
+          "flex items-start gap-2" +
+          (overlay ? "" : " cursor-grab active:cursor-grabbing")
+        }
         {...(overlay ? {} : attributes)}
         {...(overlay ? {} : listeners)}
       >
