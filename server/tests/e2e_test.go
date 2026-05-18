@@ -278,6 +278,11 @@ func TestStateTransitionAtAPI(t *testing.T) {
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
 		map[string]any{"state": "test"}, nil)
 	require.Equal(t, http.StatusBadRequest, st)
+
+	// Retired state name — design was renamed to spec.
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"state": "design"}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
 }
 
 func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
@@ -310,7 +315,8 @@ func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
 	require.Equal(t, hot.ID, rs.Tasks[0].ID)
 
 	// Promoting `parked` into a runnable state unblocks it too.
-	jsonReq(t, "PATCH", base+"/api/v1/tasks/"+parked.ID, map[string]any{"state": "design"}, &parked)
+	jsonReq(t, "PATCH", base+"/api/v1/tasks/"+parked.ID, map[string]any{"state": "spec"}, &parked)
+	require.Equal(t, "spec", parked.State)
 	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/runnable", nil, &rs)
 	require.Len(t, rs.Tasks, 2)
 

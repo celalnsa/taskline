@@ -26,7 +26,7 @@ const (
 	// runnable. ListRunnableTasks skips it.
 	StatePending TaskState = "pending"
 	StateStart   TaskState = "start"
-	StateDesign  TaskState = "design"
+	StateSpec    TaskState = "spec"
 	StateDev     TaskState = "dev"
 	StateReview  TaskState = "review"
 	StateDone    TaskState = "done"
@@ -40,7 +40,7 @@ const (
 var stateOrder = map[TaskState]int{
 	StatePending: -1,
 	StateStart:   0,
-	StateDesign:  1,
+	StateSpec:    1,
 	StateDev:     2,
 	StateReview:  3,
 	StateDone:    4,
@@ -91,7 +91,7 @@ type Task struct {
 	UpdatedAt   int64     `json:"updated_at"`
 }
 
-// Link is a URL attached to a task — typically a plan doc, PR, design
+// Link is a URL attached to a task — typically a spec doc, PR, technical
 // note, or other artifact the agent wants to keep alongside the task.
 type Link struct {
 	ID        string `json:"id"`

@@ -70,7 +70,7 @@ once and passed through to the handler (for `ImagesDir`).
 projects(id, name UNIQUE, description, created_at, updated_at)
 tasks   (id, project_id → projects.id, title, description,
          type ∈ {feature,bug},
-         state ∈ {pending,start,design,dev,review,done}, priority,
+         state ∈ {pending,start,spec,dev,review,done}, priority,
          created_at, updated_at)
 task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              PRIMARY KEY(task_id, depends_on_task_id),
@@ -96,7 +96,7 @@ directory). Keep them identical.
 ## State machine
 
 ```
-pending ⇄ start ──▶ design ──▶ dev ──▶ review ──▶ done
+pending ⇄ start ──▶ spec ──▶ dev ──▶ review ──▶ done
               ▲         ▲         ▲        ▲
               └─────────┴─────────┴────────┘
               any move between known states is allowed

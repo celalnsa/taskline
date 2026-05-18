@@ -36,7 +36,7 @@ DAG, a priority field, and a JSON-first CLI.
 
 The CLI defaults to JSON output when stdout isn't a TTY. Exit codes are
 stable. Diagnostics go to stderr. The server's contract is small enough
-to memorize: five states, two task types, one priority integer, one
+to memorize: six states, two task types, one priority integer, one
 edge type. A human-friendly UI exists, but it's a *visualization* layer
 on top of the agent contract — never the source of truth.
 
@@ -55,11 +55,11 @@ that exist in one view but not another. A single SQL query can answer
 
 ### 3. Reversible state
 
-`pending → start → design → dev → review → done`. The expected motion
+`pending → start → spec → dev → review → done`. The expected motion
 is forward from `start`, but the state machine permits any move between
 known states. A review that surfaces a defect should drop the task
-back to `dev`; work that turns out to need redesign should drop back
-to `design`. Forcing the agent to delete-and-recreate in those cases
+back to `dev`; work that turns out to need product clarification should
+drop back to `spec`. Forcing the agent to delete-and-recreate in those cases
 destroys history (description, dependencies, attachments) that is
 exactly the context a future agent needs.
 
@@ -119,12 +119,13 @@ the agent side and translate to a number.
 
 ## Why these specific six states
 
-`pending → start → design → dev → review → done` is opinionated. Other
+`pending → start → spec → dev → review → done` is opinionated. Other
 shapes were considered:
 
 - **Three states** (`todo / doing / done`): too coarse. Agents working
-  in parallel need to know whether something is in design (still
-  malleable) or in dev (already being implemented).
+  in parallel need to know whether something is in spec (product
+  requirements, UX, scope, and acceptance criteria are still malleable)
+  or in dev (technical design, implementation, and tests are underway).
 - **A separate `test` stage** (the original shape): redundant with
   `dev`. Tests live in the same commit as the implementation; a task
   isn't "in test" while waiting for someone else to write them.
@@ -132,7 +133,7 @@ shapes were considered:
   contract without losing real signal.
 - **Custom per-project workflows**: tempting, but the agent contract
   becomes per-project, and `task next` stops being a single thing. The
-  five states cover ~all of "knowledge work that ships software"; if
+  six states cover ~all of "knowledge work that ships software"; if
   you need something else, this isn't your tool.
 - **A separate "blocked" state**: redundant with the dep DAG. A task
   with an unfinished dep is *already* not returned by `task next`;

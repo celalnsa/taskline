@@ -59,8 +59,8 @@ for ln in fm_block.splitlines():
         sys.exit(f"FAIL: frontmatter line missing colon: {ln!r}")
 
 required = [
-    "### created → design",
-    "### design → dev",
+    "### start → spec",
+    "### spec → dev",
     "### dev → review",
     "### review → done",
     "## Fast path",
@@ -82,7 +82,7 @@ chmod +x scripts/test-skill.sh
 - [ ] **Step 2: Run the test, confirm it fails**
 
 Run: `./scripts/test-skill.sh`
-Expected: exit 1 with `FAIL: missing sections: ### created → design, ### design → dev, ### dev → review, ### review → done, ## Fast path`
+Expected: exit 1 with `FAIL: missing sections: ### start → spec, ### spec → dev, ### dev → review, ### review → done, ## Fast path`
 
 (SKILL.md doesn't have those headers yet — that's the point.)
 
@@ -145,7 +145,7 @@ Each stage has the same shape: **Trigger** (what just happened) →
 with a Superpowers skill name in parentheses for harnesses that have
 them — drop the parenthetical if the skill isn't installed.
 
-### created → design
+### start → spec
 
 - **Trigger:** the agent has just claimed the task.
 - **Actions:**
@@ -153,37 +153,39 @@ them — drop the parenthetical if the skill isn't installed.
   2. `git checkout -b feature/<short-slug>` (slug derived from the
      task title — keep it short, kebab-case).
   3. Confirm the working tree is clean.
-- **Advance:** `taskline task update <id> --state design`
+- **Advance:** `taskline task update <id> --state spec`
 - **Skip when:** the change qualifies as fast-path (see below).
 
-### design → dev
+### spec → dev
 
 - **Trigger:** branch exists, task title + description are loaded.
 - **Actions:**
-  1. Brainstorm the approach — explore intent, list 2-3 options, pick
-     one. Auto-mode (no human checkpoint).
-     Capability: brainstorming (e.g. `superpowers:brainstorming` if
-     available).
-  2. Plan the work — break the chosen approach into ordered steps and
-     identify the test strategy.
-     Capability: plan writing (e.g. `superpowers:writing-plans` if
-     available).
-  3. Capture the decision in a short note (commit body or one-paragraph
-     spec) so the dev phase has a contract.
+  1. Clarify the product contract: user need, scope, non-goals, UX or
+     interaction behavior, and acceptance criteria.
+  2. Capture that contract in the task description or a linked spec note
+     so the dev phase has a product target.
 - **Advance:** `taskline task update <id> --state dev`
 - **Skip when:** the change is mechanical (rename, formatting,
   single-line config) — go straight to dev.
 
 ### dev → review
 
-- **Trigger:** design note in hand.
+- **Trigger:** product spec / acceptance criteria in hand.
 - **Actions** (test-first):
-  1. Write or extend failing tests for the new behavior.
-  2. Implement until the tests pass.
-  3. Run the full project test suite for whatever you touched
+  1. Brainstorm the technical approach — list 2-3 implementation options,
+     pick one, and name the tradeoff. Auto-mode (no human checkpoint).
+     Capability: brainstorming (e.g. `superpowers:brainstorming` if
+     available).
+  2. Plan the technical work — architecture boundary, ordered steps, and
+     test strategy.
+     Capability: plan writing (e.g. `superpowers:writing-plans` if
+     available).
+  3. Write or extend failing tests for the new behavior.
+  4. Implement until the tests pass.
+  5. Run the full project test suite for whatever you touched
      (e.g. `( cd server && go test ./... )`, `( cd cli && go test ./... )`,
      `( cd web && pnpm build )`). Lint/format as the project requires.
-  4. Stage and commit. Conventional, minimal commit messages.
+  6. Stage and commit. Conventional, minimal commit messages.
 - **Advance:** `taskline task update <id> --state review`
 - **Skip when:** never. Tests are the gate, not the ceremony.
 
@@ -232,7 +234,7 @@ constant. The loop collapses to:
 created → dev → done
 ```
 
-No branch, no design note, no PR. Commit directly on main with a
+No branch, no spec note, no PR. Commit directly on main with a
 one-line message. The state machine still records what happened.
 ````
 
@@ -253,7 +255,7 @@ git commit -m "docs(skill): replace thin agent loop with stage playbook"
 ## Self-review
 
 - **Spec coverage:** every section of the spec maps to a section in
-  the new SKILL content (created/design/dev/review/done + fast path).
+  the new SKILL content (start/spec/dev/review/done + fast path).
 - **Placeholder scan:** none. Each section has concrete commands and
   text. No "TBD" / "TODO".
 - **Type / name consistency:** `superpowers:brainstorming` and

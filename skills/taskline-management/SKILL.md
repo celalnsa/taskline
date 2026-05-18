@@ -4,7 +4,7 @@ description: |
   Use whenever the user wants to track agent work as structured tasks
   inside a project — capturing a feature or bug, sequencing dependent
   work, picking the next thing to pull, advancing a task through the
-  pending → start → design → dev → review → done lifecycle, recording
+  pending → start → spec → dev → review → done lifecycle, recording
   progress, or asking "what's left?". Trigger phrases include "create
   a task", "add a feature", "what should I work on next", "block this
   task on …", "mark X as in review / done", "show me the open bugs",
@@ -13,14 +13,14 @@ description: |
   phrases like "let's plan this", "queue this up", "track this",
   "what's runnable now" all qualify. Skip for one-off todo notes with
   no state, dependencies, or follow-up — just answer those directly.
-version: 0.4.0
+version: 0.5.0
 ---
 
 # taskline — task management for AI agents
 
 The `taskline` CLI is your only interface to taskline. It tracks
 projects and the tasks (features / bugs) inside them, enforces a
-six-state lifecycle (`pending → start → design → dev → review → done`),
+six-state lifecycle (`pending → start → spec → dev → review → done`),
 models inter-task dependencies as a DAG, and answers "what's runnable
 now?".
 
@@ -76,7 +76,7 @@ focused on a single project.
 | `title`       | required, short                                                            |
 | `description` | optional, longer prose                                                     |
 | `type`        | `feature` (default) or `bug`                                               |
-| `state`       | `pending`, `start`, `design`, `dev`, `review`, `done`                      |
+| `state`       | `pending`, `start`, `spec`, `dev`, `review`, `done`                        |
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments                                                |
@@ -143,7 +143,7 @@ taskline task depend <id> --on <other-id>
 # Image attachment (any binary)
 taskline task upload <id> --file ./screenshot.png
 
-# Link (plan doc, PR, design note — any URL the task should remember)
+# Link (spec doc, PR, technical note — any URL the task should remember)
 taskline task link <task-id> --url https://example.com/pr/42 --label "PR #42"
 
 # Remove a link by its id (links are returned inline on `task get`)
@@ -156,14 +156,15 @@ Delete returns `{"deleted": true, "id": ...}`; depend returns
 ### Linking artifacts to a task
 
 As you walk a task through the playbook you'll generate things
-that belong with it — a plan doc, a brainstorm note, the PR URL,
+that belong with it — a spec doc, a technical-plan note, the PR URL,
 the merged commit, a Slack thread. Attach them with
 `taskline task link <task-id> --url … --label …` instead of leaving
 them buried in chat history.
 
 Recommended moments to call it:
 
-- **design**: a written plan / design doc URL ("Plan").
+- **spec**: a written product spec / interaction note URL ("Spec").
+- **dev**: a technical approach note if the work needs one ("Tech Plan").
 - **dev → review**: the PR URL just after `gh pr create` ("PR #N").
 - **review → done**: the merged-commit URL or anything a future
   reader would want to reach for ("merge", "post-mortem").
@@ -197,7 +198,7 @@ referenced by what they do, with a Superpowers skill name in
 parentheses if your harness has them; drop the parenthetical if not
 installed.
 
-### start → design
+### start → spec
 
 - **Trigger:** you just picked the task off the queue.
 - **Actions:**
@@ -205,37 +206,39 @@ installed.
   2. `git checkout -b feature/<short-kebab-slug>` (slug from the title;
      keep it under ~30 chars).
   3. Confirm `git status` is clean.
-- **Advance:** `taskline task update <id> --state design`
+- **Advance:** `taskline task update <id> --state spec`
 - **Skip when:** the change qualifies as fast-path (see below) — go
   straight to dev.
 
-### design → dev
+### spec → dev
 
 - **Trigger:** branch exists, title + description loaded.
 - **Actions:**
-  1. Brainstorm the approach — list 2-3 options, pick one. No human
-     checkpoint. (capability: brainstorming —
-     `superpowers:brainstorming`)
-  2. Plan the work — break the chosen approach into ordered steps and
-     name the test strategy. (capability: plan writing —
-     `superpowers:writing-plans`)
-  3. Capture the decision in a one-paragraph note (later commit body
-     or scratch buffer) so dev has a contract.
+  1. Clarify the product contract: user need, scope, non-goals, UX or
+     interaction behavior, and acceptance criteria.
+  2. Capture that contract in the task description or a linked spec note
+     so dev has a product target.
 - **Advance:** `taskline task update <id> --state dev`
 - **Skip when:** the change is mechanical (rename, formatting,
   one-line config) — go straight to dev.
 
 ### dev → review
 
-- **Trigger:** design note in hand.
+- **Trigger:** product spec / acceptance criteria in hand.
 - **Actions** (test-first):
-  1. Write or extend failing tests for the new behavior.
-  2. Implement until tests pass.
-  3. Run the full project test suite for whatever you touched.
+  1. Brainstorm the technical approach — list 2-3 implementation options,
+     pick one, and name the tradeoff. No human checkpoint. (capability:
+     brainstorming — `superpowers:brainstorming`)
+  2. Plan the technical work — architecture boundary, ordered steps, and
+     test strategy. (capability: plan writing —
+     `superpowers:writing-plans`)
+  3. Write or extend failing tests for the new behavior.
+  4. Implement until tests pass.
+  5. Run the full project test suite for whatever you touched.
      For this repo: `( cd server && go test ./... )`,
      `( cd cli && go test ./... )`, `( cd web && pnpm build )`.
      Lint / format as the project requires.
-  4. Stage and commit. Conventional, minimal messages.
+  6. Stage and commit. Conventional, minimal messages.
 - **Advance:** `taskline task update <id> --state review`
 - **Skip when:** never. Tests are the gate.
 
@@ -304,15 +307,11 @@ Examples: typo in a comment, raising a log level, bumping a constant.
 The loop collapses to:
 
 ```
-created → dev → done
+	start → dev → done
 ```
 
-No branch, no design note, no PR. Commit directly on main with a
+No branch, no spec note, no PR. Commit directly on main with a
 one-line message. The state machine still records what happened.
-
-```
-start → dev → done
-```
 
 ## Gotchas
 
@@ -322,8 +321,9 @@ start → dev → done
   `upload`) operate on the task id directly and reject the flag with
   "unknown flag".
 - **`invalid next state "..."`** — you used a name that isn't in
-  `pending/start/design/dev/review/done`. The state `created` was
-  renamed to `start` and `test` was retired; don't reintroduce either.
+  `pending/start/spec/dev/review/done`. The state `created` was
+  renamed to `start`, `design` was renamed to `spec`, and `test` was
+  retired; don't reintroduce any of them.
 - **`dependency would create a cycle`** — the edge would loop back.
   Restructure the graph or pick a different anchor.
 - **`project name "X" already exists`** — name collision. Reuse the
@@ -333,7 +333,7 @@ start → dev → done
 - **`task next` returned `null`** — nothing runnable. Either the
   project is empty, every non-done task is blocked, or everything
   left is parked in `pending`. Run
-  `taskline task list --project <p> --state pending,start,design,dev,review`
+  `taskline task list --project <p> --state pending,start,spec,dev,review`
   to see what's stuck and why; bump pending tasks into `start` when
   they're ready to run.
 - **The user said "remind me to X"** — that's a one-off note, not a

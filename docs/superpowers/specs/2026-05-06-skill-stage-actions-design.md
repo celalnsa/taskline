@@ -1,6 +1,6 @@
 # Skill stage-action playbook
 
-Design spec for taskline task `5604172a-eedf-4cc9-9aff-d2345ea091d7`
+Spec for taskline task `5604172a-eedf-4cc9-9aff-d2345ea091d7`
 (*"优化skills文档对各阶段动作的引导"*).
 
 ## Goal
@@ -20,42 +20,44 @@ actions an agent should take in each state.
 
 ## The five stages
 
-### created → design
+### start → spec
 
 - **Trigger**: agent has just claimed the task (`task next`).
 - **Actions**:
   1. Create a feature branch off `main`:
      `git checkout main && git pull && git checkout -b feature/<short-slug>`
   2. Confirm the working tree is clean.
-- **Advance**: `taskline task update <id> --state design`
+- **Advance**: `taskline task update <id> --state spec`
 - **Skip when**: trivial single-file fix with no behavior change — see
   *Fast path*.
 
-### design → dev
+### spec → dev
 
 - **Trigger**: branch exists, task title + description are loaded.
 - **Actions**:
-  1. Brainstorming pass — auto-mode (no human checkpoints).
-     Capability: explore intent, list 2-3 approaches, pick one.
-     If available: `superpowers:brainstorming`.
-  2. Plan pass — break the chosen approach into ordered steps and
-     identify the test strategy. If available:
-     `superpowers:writing-plans`.
-  3. Capture the chosen approach in a short note (commit message body
-     or a one-paragraph spec) so the dev phase has a contract.
+  1. Clarify the product contract: user need, scope, non-goals, UX or
+     interaction behavior, and acceptance criteria.
+  2. Capture that contract in a short spec note so the dev phase has a
+     product target.
 - **Advance**: `taskline task update <id> --state dev`
 - **Skip when**: change is mechanical (rename, formatting, single-line
   config) — go straight to dev.
 
 ### dev → review
 
-- **Trigger**: design note in hand.
+- **Trigger**: product spec / acceptance criteria in hand.
 - **Actions** (test-first):
-  1. Write or extend failing tests for the new behavior.
-  2. Implement the code until tests pass.
-  3. Run the full project test suite (`go test ./...` per module,
+  1. Brainstorming pass — auto-mode (no human checkpoints).
+     Capability: list 2-3 technical approaches, pick one, name tradeoff.
+     If available: `superpowers:brainstorming`.
+  2. Plan pass — break the chosen approach into ordered steps and
+     identify the architecture boundary + test strategy. If available:
+     `superpowers:writing-plans`.
+  3. Write or extend failing tests for the new behavior.
+  4. Implement the code until tests pass.
+  5. Run the full project test suite (`go test ./...` per module,
      `pnpm build` for the web). Lint/format as the project requires.
-  4. Stage and commit. Conventional, minimal commit messages.
+  6. Stage and commit. Conventional, minimal commit messages.
 - **Advance**: `taskline task update <id> --state review`
 - **Skip when**: never. Tests are the gate, not the ceremony.
 
@@ -100,10 +102,10 @@ Examples: typo fix in a comment, raising a log level, bumping a
 constant. For fast-path tasks the loop collapses to:
 
 ```
-created → dev → done
+start → dev → done
 ```
 
-No branch, no design note, no PR. Commit directly on main with a
+No branch, no spec note, no PR. Commit directly on main with a
 one-line message. The state machine still records what happened.
 
 ## Why these specific shapes
@@ -126,7 +128,7 @@ one-line message. The state machine still records what happened.
 ## Self-review notes
 
 - No TBDs, no placeholders.
-- "Skip when" clauses for created and design are consistent with the
+- "Skip when" clauses for start and spec are consistent with the
   fast-path section (single-file, no behavior change).
 - Skill name format `<capability> (e.g. <skill> if available)` is
   uniform.

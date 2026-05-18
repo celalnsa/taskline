@@ -48,7 +48,7 @@ func init() {
 	taskUpdateCmd.Flags().String("title", "", "new title")
 	taskUpdateCmd.Flags().String("description", "", "new description")
 	taskUpdateCmd.Flags().String("type", "", "new type: feature|bug")
-	taskUpdateCmd.Flags().String("state", "", "new state: pending|start|design|dev|review|done")
+	taskUpdateCmd.Flags().String("state", "", "new state: pending|start|spec|dev|review|done")
 	taskUpdateCmd.Flags().Int("priority", 0, "new priority")
 
 	taskDependCmd.Flags().String("on", "", "id of the task this one depends on (required)")
@@ -244,7 +244,7 @@ var taskUploadCmd = &cobra.Command{
 
 var taskLinkCmd = &cobra.Command{
 	Use:   "link <task-id>",
-	Short: "Attach a URL (plan doc, PR, design note…) to a task",
+	Short: "Attach a URL (spec doc, PR, technical note…) to a task",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		url, _ := cmd.Flags().GetString("url")

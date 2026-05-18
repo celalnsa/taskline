@@ -29,8 +29,8 @@ import glob, re, sys
 # (so heading hashes and exact wording are part of the contract).
 required_sections = {
     "skills/taskline-management/SKILL.md": [
-        "### created → design",
-        "### design → dev",
+        "### start → spec",
+        "### spec → dev",
         "### dev → review",
         "### review → done",
         "## Fast path",

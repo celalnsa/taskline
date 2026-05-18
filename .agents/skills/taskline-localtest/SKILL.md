@@ -149,7 +149,7 @@ exactly this.
 ## Relationship to other skills
 
 - `taskline-management` — the agent-facing skill that drives the CLI
-  through `created → design → dev → review → done`. **This** skill
+  through `start → spec → dev → review → done`. **This** skill
   (`taskline-localtest`) is the concrete checklist for the
   **dev → review** transition specifically when developing taskline
   itself.

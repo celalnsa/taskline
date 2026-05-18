@@ -78,7 +78,7 @@ func TestTaskCreateAndState(t *testing.T) {
 
 func TestStateTransitionRules(t *testing.T) {
 	// Forward jumps are allowed.
-	require.NoError(t, model.StateStart.CanTransitionTo(model.StateDesign))
+	require.NoError(t, model.StateStart.CanTransitionTo(model.StateSpec))
 	require.NoError(t, model.StateStart.CanTransitionTo(model.StateDone))
 	// Backward moves are allowed too — the workflow no longer enforces direction.
 	require.NoError(t, model.StateReview.CanTransitionTo(model.StateDev))
@@ -92,6 +92,8 @@ func TestStateTransitionRules(t *testing.T) {
 	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("test")))
 	// 'created' was renamed to 'start' — passing it should now be rejected.
 	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("created")))
+	// 'design' was renamed to 'spec' — passing it should now be rejected.
+	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("design")))
 }
 
 func TestUpdateTaskAndDelete(t *testing.T) {
@@ -256,7 +258,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v1, 4, "first open should advance to >=4")
+	require.GreaterOrEqual(t, v1, 5, "first open should advance to >=5")
 
 	require.NoError(t, st1.Close())
 
@@ -269,13 +271,13 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 	require.Equal(t, v1, v2, "re-opening must not change user_version")
 }
 
-// TestMigrationUpgradesCreatedRowsToStart catches the failure mode
+// TestMigrationUpgradesCreatedAndDesignRows catches the failure mode
 // where the 0003 migration would explode on any DB that actually has
 // rows in state='created' — the old CHECK constraint forbids 'start',
 // so a pre-UPDATE rename would fail. We seed the legacy schema with
-// real 'created' rows (and a task_deps edge) before opening the store
-// to drive the migration through.
-func TestMigrationUpgradesCreatedRowsToStart(t *testing.T) {
+// real 'created' and 'design' rows (and a task_deps edge) before opening
+// the store to drive the full migration chain through.
+func TestMigrationUpgradesCreatedAndDesignRows(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "taskline.db")
@@ -307,41 +309,50 @@ func TestMigrationUpgradesCreatedRowsToStart(t *testing.T) {
 		    CHECK(task_id <> depends_on_task_id));
 		INSERT INTO projects(id,name,description,created_at,updated_at)
 		    VALUES ('p1','demo','',0,0);
-		INSERT INTO tasks(id,project_id,title,type,state,priority,created_at,updated_at)
-		    VALUES ('a','p1','first','feature','created',1,0,0),
-		           ('b','p1','second','feature','dev',2,0,0);
-		INSERT INTO task_deps(task_id, depends_on_task_id, created_at)
-		    VALUES ('b','a',0);
+			INSERT INTO tasks(id,project_id,title,type,state,priority,created_at,updated_at)
+			    VALUES ('a','p1','first','feature','created',1,0,0),
+			           ('b','p1','second','feature','design',2,0,0),
+			           ('c','p1','third','feature','dev',3,0,0);
+			INSERT INTO task_deps(task_id, depends_on_task_id, created_at)
+			    VALUES ('c','a',0);
 	`)
 	require.NoError(t, err)
 	require.NoError(t, raw.Close())
 
-	// Open via Store — this runs the migrations in order, ending at 0003.
+	// Open via Store — this runs the migrations in order, ending at the
+	// latest schema version.
 	st, err := store.New(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = st.Close() })
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v, 3, "migration should have run at least through 0003")
+	require.GreaterOrEqual(t, v, 5, "migration should have run at least through 0005")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")
 	require.NoError(t, err)
 	require.Equal(t, model.StateStart, ta.State)
 
-	// The 'dev' row is untouched.
+	// The legacy 'design' row was renamed to 'spec' during the 0005 swap.
 	tb, err := st.GetTask(ctx, "b")
 	require.NoError(t, err)
-	require.Equal(t, model.StateDev, tb.State)
+	require.Equal(t, model.StateSpec, tb.State)
+
+	// The 'dev' row is untouched.
+	tc, err := st.GetTask(ctx, "c")
+	require.NoError(t, err)
+	require.Equal(t, model.StateDev, tc.State)
 
 	// task_deps FK + cascade-delete still work after the table swap.
 	require.NoError(t, st.DeleteTask(ctx, "a"))
 	rs, err := st.ListTasks(ctx, store.TaskFilter{ProjectID: "p1"})
 	require.NoError(t, err)
-	require.Len(t, rs, 1)
-	require.Equal(t, "b", rs[0].ID)
-	require.Empty(t, rs[0].DependsOn, "task_deps row should have cascaded")
+	require.Len(t, rs, 2)
+	for _, task := range rs {
+		require.NotEqual(t, "a", task.ID)
+		require.Empty(t, task.DependsOn, "task_deps row should have cascaded")
+	}
 }
 
 // readUserVersion opens a side-channel SQL handle to inspect the

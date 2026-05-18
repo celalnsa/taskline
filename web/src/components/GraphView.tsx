@@ -21,7 +21,7 @@ import { useTasks, useUpdateTask } from "../hooks/queries";
 const STATE_COLORS: Record<TaskState, string> = {
   pending: "#e2e8f0",
   start: "#cbd5e1",
-  design: "#a5b4fc",
+  spec: "#a5b4fc",
   dev: "#86efac",
   review: "#fdba74",
   done: "#9ca3af",

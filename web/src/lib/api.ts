@@ -4,7 +4,7 @@
 export type TaskState =
   | "pending"
   | "start"
-  | "design"
+  | "spec"
   | "dev"
   | "review"
   | "done";
@@ -12,7 +12,7 @@ export type TaskState =
 export const STATES: TaskState[] = [
   "pending",
   "start",
-  "design",
+  "spec",
   "dev",
   "review",
   "done",
@@ -21,7 +21,7 @@ export const STATES: TaskState[] = [
 export const STATE_LABELS: Record<TaskState, string> = {
   pending: "Pending",
   start: "Start",
-  design: "Design",
+  spec: "Spec",
   dev: "Dev",
   review: "Review",
   done: "Done",
