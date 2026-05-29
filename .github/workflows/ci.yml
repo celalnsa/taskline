@@ -21,6 +21,10 @@ jobs:
           cache-dependency-path: |
             server/go.sum
             cli/go.sum
+      - name: Prepare embedded web dist
+        run: |
+          mkdir -p server/web/dist
+          printf '<!doctype html><html><body></body></html>' > server/web/dist/index.html
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
@@ -42,6 +46,10 @@ jobs:
           cache-dependency-path: |
             server/go.sum
             cli/go.sum
+      - name: Prepare embedded web dist
+        run: |
+          mkdir -p server/web/dist
+          printf '<!doctype html><html><body></body></html>' > server/web/dist/index.html
       - name: Run Go tests
         working-directory: ${{ matrix.module }}
         run: go test ./... -count=1
