@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import MDEditor from "@uiw/react-md-editor/nohighlight";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
+import "./MarkdownDescriptionDialog.css";
 import { ArrowLeft } from "lucide-react";
 
 interface Props {
@@ -44,29 +45,18 @@ export function MarkdownDescriptionDialog({ value, onChange, onClose }: Props) {
           </button>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-          <section className="min-h-0 flex flex-col border-b border-slate-200 md:border-b-0 md:border-r">
-            <MDEditor
-              value={value}
-              onChange={(next) => onChange(next ?? "")}
-              preview="edit"
-              height="100%"
-              visibleDragbar={false}
-              textareaProps={{
-                "aria-label": "Markdown description",
-                autoFocus: true,
-              }}
-            />
-          </section>
-
-          <section className="min-h-0 flex flex-col bg-slate-50">
-            <div className="border-b border-slate-200 px-4 py-2 text-xs font-medium text-slate-500">
-              Preview
-            </div>
-            <div className="wmde-markdown-var flex-1 overflow-auto bg-white p-5">
-              <MDEditor.Markdown source={value || ""} />
-            </div>
-          </section>
+        <div className="taskline-markdown-dialog min-h-0 flex-1">
+          <MDEditor
+            value={value}
+            onChange={(next) => onChange(next ?? "")}
+            preview="edit"
+            height="100%"
+            visibleDragbar={false}
+            textareaProps={{
+              "aria-label": "Markdown description",
+              autoFocus: true,
+            }}
+          />
         </div>
       </div>
     </div>
