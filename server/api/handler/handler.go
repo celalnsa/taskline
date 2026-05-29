@@ -60,6 +60,7 @@ func (h *Handler) Register(s *server.Hertz) {
 	v1.PATCH("/tasks/:id", h.updateTask)
 	v1.DELETE("/tasks/:id", h.deleteTask)
 	v1.POST("/tasks/:id/deps", h.addDependency)
+	v1.DELETE("/tasks/:id/deps/:dependsOn", h.deleteDependency)
 	v1.POST("/tasks/:id/images", h.uploadImage)
 	v1.POST("/tasks/:id/links", h.addLink)
 	v1.DELETE("/links/:id", h.deleteLink)
@@ -304,6 +305,20 @@ func (h *Handler) addDependency(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	writeJSON(c, http.StatusCreated, map[string]any{"task_id": id, "depends_on": req.DependsOn})
+}
+
+func (h *Handler) deleteDependency(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	dependsOn := c.Param("dependsOn")
+	if err := h.svc.DeleteDependency(ctx, id, dependsOn); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	writeJSON(c, http.StatusOK, map[string]any{
+		"deleted":    true,
+		"task_id":    id,
+		"depends_on": dependsOn,
+	})
 }
 
 type addLinkReq struct {

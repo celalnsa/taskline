@@ -137,6 +137,17 @@ func (s *Service) AddDependency(ctx context.Context, taskID, dependsOnID string)
 	return s.st.AddDependency(ctx, taskID, dependsOnID)
 }
 
+// DeleteDependency removes a single dependency edge from taskID.
+func (s *Service) DeleteDependency(ctx context.Context, taskID, dependsOnID string) error {
+	if _, err := s.st.GetTask(ctx, taskID); err != nil {
+		return fmt.Errorf("task %s: %w", taskID, err)
+	}
+	if _, err := s.st.GetTask(ctx, dependsOnID); err != nil {
+		return fmt.Errorf("dependency %s: %w", dependsOnID, err)
+	}
+	return s.st.DeleteDependency(ctx, taskID, dependsOnID)
+}
+
 // AddImage attaches a stored image to a task.
 func (s *Service) AddImage(ctx context.Context, img *model.Image) error {
 	return s.st.AddImage(ctx, img)

@@ -201,6 +201,15 @@ func (c *Client) AddDependency(taskID, dependsOnID string) error {
 	return c.do("POST", path, addDepReq{DependsOn: dependsOnID}, nil)
 }
 
+func (c *Client) DeleteDependency(taskID, dependsOnID string) error {
+	path := fmt.Sprintf(
+		"/api/v1/tasks/%s/deps/%s",
+		url.PathEscape(taskID),
+		url.PathEscape(dependsOnID),
+	)
+	return c.do("DELETE", path, nil, nil)
+}
+
 type AddLinkInput struct {
 	URL   string `json:"url"`
 	Label string `json:"label"`

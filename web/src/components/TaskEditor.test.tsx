@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Project, Task, TaskImage } from "../lib/api";
+import type { Project, Task, TaskImage, TaskLink } from "../lib/api";
 import { TaskEditor } from "./TaskEditor";
 
 const project: Project = {
@@ -28,7 +28,11 @@ const task: Task = {
   images: [],
 };
 
-function renderEditor(onClose = vi.fn(), editorTask: Task = task) {
+function renderEditor(
+  onClose = vi.fn(),
+  editorTask: Task = task,
+  allTasks: Task[] = [editorTask]
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -38,7 +42,7 @@ function renderEditor(onClose = vi.fn(), editorTask: Task = task) {
       <TaskEditor
         project={project}
         task={editorTask}
-        allTasks={[editorTask]}
+        allTasks={allTasks}
         onClose={onClose}
       />
     </QueryClientProvider>
@@ -179,5 +183,143 @@ describe("TaskEditor image attachments", () => {
 
     expect(await screen.findByText("Selected file is not an image.")).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("TaskEditor links and dependencies", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const activeDep: Task = {
+    ...task,
+    id: "task-2",
+    title: "Active dependency",
+    state: "start",
+  };
+  const doneDep: Task = {
+    ...task,
+    id: "task-3",
+    title: "Done dependency",
+    state: "done",
+  };
+
+  it("keeps images, links, and dependencies in the requested order", () => {
+    const editorTask: Task = {
+      ...task,
+      depends_on: [activeDep.id],
+      links: [
+        {
+          id: "link-1",
+          task_id: task.id,
+          url: "https://example.com/spec",
+          label: "Spec",
+          created_at: 1780051741142,
+        },
+      ],
+    };
+
+    renderEditor(vi.fn(), editorTask, [editorTask, activeDep]);
+
+    const text = document.body.textContent ?? "";
+    expect(text.indexOf("Images")).toBeLessThan(text.indexOf("Links"));
+    expect(text.indexOf("Links")).toBeLessThan(text.indexOf("Depends"));
+  });
+
+  it("adds a dependency immediately when selecting a non-done candidate", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ task_id: task.id, depends_on: activeDep.id }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(vi.fn(), task, [task, activeDep, doneDep]);
+
+    const select = screen.getByLabelText(/add dependency/i);
+
+    expect(screen.queryByRole("option", { name: /done dependency/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /block on/i })).toBeNull();
+
+    await user.selectOptions(select, activeDep.id);
+
+    expect(await screen.findByText("Active dependency")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task-1/deps",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ depends_on: activeDep.id }),
+      })
+    );
+  });
+
+  it("removes a dependency immediately from the list", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ deleted: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(
+      vi.fn(),
+      { ...task, depends_on: [activeDep.id] },
+      [{ ...task, depends_on: [activeDep.id] }, activeDep]
+    );
+
+    await user.click(screen.getByRole("button", { name: /remove dependency active dependency/i }));
+
+    await waitFor(() => expect(screen.queryByText("Active dependency")).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task-1/deps/task-2",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("updates links immediately after adding and removing", async () => {
+    const user = userEvent.setup();
+    const existing: TaskLink = {
+      id: "link-1",
+      task_id: task.id,
+      url: "https://example.com/old",
+      label: "Old link",
+      created_at: 1780051741142,
+    };
+    const created: TaskLink = {
+      id: "link-2",
+      task_id: task.id,
+      url: "https://example.com/new",
+      label: "New link",
+      created_at: 1780051741143,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ deleted: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(created), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(vi.fn(), { ...task, links: [existing] });
+
+    await user.click(screen.getByRole("button", { name: /remove link old link/i }));
+
+    await waitFor(() => expect(screen.queryByText("Old link")).toBeNull());
+
+    await user.type(screen.getByPlaceholderText("https://…"), created.url);
+    await user.type(screen.getByPlaceholderText("label (optional)"), created.label);
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+    expect(await screen.findByText("New link")).toBeTruthy();
   });
 });

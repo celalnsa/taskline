@@ -139,6 +139,7 @@ taskline task delete <id>                    # cascades deps + images
 
 # Dependencies
 taskline task depend <id> --on <other-id>
+taskline task undepend <id> --on <other-id>
 
 # Image attachment (any binary)
 taskline task upload <id> --file ./screenshot.png

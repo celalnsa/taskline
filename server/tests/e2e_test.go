@@ -233,6 +233,43 @@ func TestImageUploadEndToEnd(t *testing.T) {
 		"task json should include attached image filename: %s", string(rawTask))
 }
 
+func TestDeleteDependencyEndToEnd(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+
+	jsonReq(t, "POST", base+"/api/v1/projects",
+		map[string]any{"name": "deps"}, &project{})
+	var a, b task
+	st := jsonReq(t, "POST", base+"/api/v1/projects/deps/tasks",
+		map[string]any{"title": "a", "type": "feature", "auto_start": true}, &a)
+	require.Equal(t, http.StatusCreated, st)
+	st = jsonReq(t, "POST", base+"/api/v1/projects/deps/tasks",
+		map[string]any{"title": "b", "type": "feature", "auto_start": true}, &b)
+	require.Equal(t, http.StatusCreated, st)
+
+	st = jsonReq(t, "POST", base+"/api/v1/tasks/"+b.ID+"/deps",
+		map[string]any{"depends_on": a.ID}, nil)
+	require.Equal(t, http.StatusCreated, st)
+
+	var withDep task
+	st = jsonReq(t, "GET", base+"/api/v1/tasks/"+b.ID, nil, &withDep)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, []string{a.ID}, withDep.DependsOn)
+
+	st = jsonReq(t, "DELETE", base+"/api/v1/tasks/"+b.ID+"/deps/"+a.ID, nil, nil)
+	require.Equal(t, http.StatusOK, st)
+
+	var withoutDep task
+	st = jsonReq(t, "GET", base+"/api/v1/tasks/"+b.ID, nil, &withoutDep)
+	require.Equal(t, http.StatusOK, st)
+	require.Empty(t, withoutDep.DependsOn)
+
+	var runnable taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/deps/tasks/runnable", nil, &runnable)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, runnable.Tasks, 2)
+}
+
 func TestCycleProtectionViaHTTP(t *testing.T) {
 	base, stop := startServer(t)
 	defer stop()

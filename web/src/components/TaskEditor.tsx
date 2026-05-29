@@ -1,17 +1,19 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { FileCode2, ImagePlus } from "lucide-react";
+import { FileCode2, ImagePlus, X } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
   type Project,
   type Task,
   type TaskImage,
+  type TaskLink,
   type TaskState,
   type TaskType,
 } from "../lib/api";
 import {
   useAddDependency,
   useAddLink,
+  useDeleteDependency,
   useDeleteLink,
   useDeleteTask,
   useUpdateTask,
@@ -37,14 +39,12 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
   const [type, setType] = useState<TaskType>(task.type);
   const [state, setState] = useState<TaskState>(task.state);
   const [priority, setPriority] = useState(task.priority);
-  const [depTarget, setDepTarget] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [markdownOpen, setMarkdownOpen] = useState(false);
   const markdownButtonRef = useRef<HTMLButtonElement>(null);
 
   const update = useUpdateTask(project.id);
   const del = useDeleteTask(project.id);
-  const addDep = useAddDependency(project.id);
 
   const closeMarkdownEditor = () => {
     setMarkdownOpen(false);
@@ -63,12 +63,6 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [markdownOpen, onClose]);
-
-  // Filter dep candidates: any other task in the same project that this
-  // task isn't already blocked on.
-  const depCandidates = allTasks.filter(
-    (t) => t.id !== task.id && !task.depends_on?.includes(t.id)
-  );
 
   return (
     <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center">
@@ -155,42 +149,11 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
           </label>
         </div>
 
-        <DepSection task={task} allTasks={allTasks} />
-
         <ImageSection project={project} task={task} />
 
         <LinkSection project={project} task={task} />
 
-        <div className="border-t pt-3 space-y-2">
-          <div className="flex items-end gap-2">
-            <select
-              className="flex-1 text-xs border rounded px-2 py-1"
-              value={depTarget}
-              onChange={(e) => setDepTarget(e.target.value)}
-            >
-              <option value="">add dependency…</option>
-              {depCandidates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title} ({t.state})
-                </option>
-              ))}
-            </select>
-            <button
-              className="text-xs px-3 py-1 rounded bg-slate-700 text-white disabled:opacity-50"
-              disabled={!depTarget || addDep.isPending}
-              onClick={async () => {
-                try {
-                  await addDep.mutateAsync({ taskId: task.id, dependsOn: depTarget });
-                  setDepTarget("");
-                } catch (err) {
-                  setError((err as Error).message);
-                }
-              }}
-            >
-              Block on
-            </button>
-          </div>
-        </div>
+        <DependsSection project={project} task={task} allTasks={allTasks} />
 
         {error && <p className="text-xs text-red-600">{error}</p>}
 
@@ -351,18 +314,24 @@ function formatNumber(value: number): string {
 }
 
 function LinkSection({ project, task }: { project: Project; task: Task }) {
+  const [links, setLinks] = useState<TaskLink[]>(task.links ?? []);
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const add = useAddLink(project.id);
   const del = useDeleteLink(project.id);
 
-  const links = task.links ?? [];
+  useEffect(() => {
+    setLinks(task.links ?? []);
+  }, [task.id, task.links]);
 
   const submit = async () => {
     if (!url.trim() || add.isPending) return;
     try {
-      await add.mutateAsync({ taskId: task.id, url: url.trim(), label: label.trim() });
+      const link = await add.mutateAsync({ taskId: task.id, url: url.trim(), label: label.trim() });
+      setLinks((current) =>
+        current.some((item) => item.id === link.id) ? current : [...current, link]
+      );
       setUrl("");
       setLabel("");
       setError(null);
@@ -377,28 +346,30 @@ function LinkSection({ project, task }: { project: Project; task: Task }) {
       {links.length > 0 && (
         <ul className="space-y-1">
           {links.map((l) => (
-            <li key={l.id} className="text-xs flex items-center gap-2">
+            <li key={l.id} className="text-xs flex items-center gap-2 group">
               <a
                 href={l.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sky-700 hover:underline truncate flex-1"
+                className="text-sky-700 hover:underline truncate flex-1 min-w-0"
                 title={l.url}
               >
                 {l.label || l.url}
               </a>
               <button
                 type="button"
-                className="text-[10px] text-slate-400 hover:text-red-600"
+                aria-label={`Remove link ${l.label || l.url}`}
+                className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
                 onClick={async () => {
                   try {
                     await del.mutateAsync(l.id);
+                    setLinks((current) => current.filter((item) => item.id !== l.id));
                   } catch (err) {
                     setError((err as Error).message);
                   }
                 }}
               >
-                remove
+                <X size={12} aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -431,39 +402,115 @@ function LinkSection({ project, task }: { project: Project; task: Task }) {
   );
 }
 
-function DepSection({ task, allTasks }: { task: Task; allTasks: Task[] }) {
-  if (!task.depends_on?.length) return null;
+function DependsSection({
+  project,
+  task,
+  allTasks,
+}: {
+  project: Project;
+  task: Task;
+  allTasks: Task[];
+}) {
+  const [dependencyIds, setDependencyIds] = useState<string[]>(task.depends_on ?? []);
+  const [candidate, setCandidate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const add = useAddDependency(project.id);
+  const del = useDeleteDependency(project.id);
+
+  useEffect(() => {
+    setDependencyIds(task.depends_on ?? []);
+  }, [task.id, task.depends_on]);
+
   const byId = new Map(allTasks.map((t) => [t.id, t]));
+  const candidates = allTasks.filter(
+    (t) => t.id !== task.id && t.state !== "done" && !dependencyIds.includes(t.id)
+  );
+
+  const addDependency = async (dependsOn: string) => {
+    if (!dependsOn || add.isPending) return;
+    setCandidate(dependsOn);
+    try {
+      await add.mutateAsync({ taskId: task.id, dependsOn });
+      setDependencyIds((current) =>
+        current.includes(dependsOn) ? current : [...current, dependsOn]
+      );
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCandidate("");
+    }
+  };
+
+  const removeDependency = async (dependsOn: string) => {
+    if (del.isPending) return;
+    try {
+      await del.mutateAsync({ taskId: task.id, dependsOn });
+      setDependencyIds((current) => current.filter((id) => id !== dependsOn));
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   return (
-    <div className="border-t pt-3 space-y-1">
-      <p className="text-xs font-medium text-slate-500">Blocks until done:</p>
-      <ul className="space-y-1">
-        {task.depends_on.map((id) => {
-          const dep = byId.get(id);
-          return (
-            <li key={id} className="text-xs flex items-center gap-2">
-              <code className="text-slate-400">{id.slice(0, 8)}</code>
-              {dep ? (
-                <>
-                  <span className="font-medium">{dep.title}</span>
-                  <span
-                    className={
-                      "px-1 rounded text-[10px] " +
-                      (dep.state === "done"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-800")
-                    }
-                  >
-                    {dep.state}
-                  </span>
-                </>
-              ) : (
-                <span className="text-slate-400 italic">(deleted)</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+    <div className="border-t pt-3 space-y-2">
+      <p className="text-xs font-medium text-slate-500">Depends</p>
+      {dependencyIds.length > 0 ? (
+        <ul className="space-y-1">
+          {dependencyIds.map((id) => {
+            const dep = byId.get(id);
+            const label = dep?.title ?? id.slice(0, 8);
+            return (
+              <li key={id} className="text-xs flex items-center gap-2 group">
+                <code className="text-slate-400">{id.slice(0, 8)}</code>
+                {dep ? (
+                  <>
+                    <span className="font-medium min-w-0 truncate flex-1">{dep.title}</span>
+                    <span
+                      className={
+                        "px-1 rounded text-[10px] shrink-0 " +
+                        (dep.state === "done"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-800")
+                      }
+                    >
+                      {dep.state}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-400 italic flex-1">(deleted)</span>
+                )}
+                <button
+                  type="button"
+                  aria-label={`Remove dependency ${label}`}
+                  className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                  onClick={() => removeDependency(id)}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-xs text-slate-400">No dependencies.</p>
+      )}
+      <select
+        aria-label="Add dependency"
+        className="w-full text-xs border rounded px-2 py-1"
+        value={candidate}
+        disabled={add.isPending}
+        onChange={(e) => addDependency(e.target.value)}
+      >
+        <option value="">add dependency...</option>
+        {candidates.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.title} ({t.state})
+          </option>
+        ))}
+      </select>
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }

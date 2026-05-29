@@ -178,6 +178,16 @@ export async function addDependency(
   );
 }
 
+export async function deleteDependency(
+  taskId: string,
+  dependsOn: string
+): Promise<void> {
+  await request<unknown>(
+    "DELETE",
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/deps/${encodeURIComponent(dependsOn)}`
+  );
+}
+
 export async function addLink(
   taskId: string,
   url: string,
