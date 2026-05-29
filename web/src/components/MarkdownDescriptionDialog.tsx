@@ -49,7 +49,6 @@ export function MarkdownDescriptionDialog({ value, onChange, onClose }: Props) {
           <MDEditor
             value={value}
             onChange={(next) => onChange(next ?? "")}
-            preview="edit"
             height="100%"
             visibleDragbar={false}
             textareaProps={{
