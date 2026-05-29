@@ -14,3 +14,9 @@ linters:
         - (io.ReadCloser).Close
         - (io.WriteCloser).Close
         - (*os.File).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*database/sql.DB).Close
+        - (*text/tabwriter.Writer).Flush
+        - (*github.com/cloudwego/hertz/pkg/app.RequestContext).Write
+        - (*github.com/cloudwego/hertz/pkg/app.RequestContext).WriteString

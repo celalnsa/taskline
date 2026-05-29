@@ -65,7 +65,7 @@ func renderProjectTable(w io.Writer, ps []client.Project) {
 	for _, p := range ps {
 		fmt.Fprintf(tw, "%s\t%s\t%s\n", p.Name, shortID(p.ID), trimRune(p.Description, 60))
 	}
-	_ = tw.Flush()
+	tw.Flush()
 }
 
 func shortID(id string) string {

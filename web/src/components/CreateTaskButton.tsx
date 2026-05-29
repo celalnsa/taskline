@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Project, TaskType } from "../lib/api";
 import { useCreateTask } from "../hooks/queries";
 
@@ -26,6 +26,11 @@ export function CreateTaskButton({ project }: { project: Project }) {
       }
     );
   }, [autoStart, create, description, priority, title, type]);
+  const submitRef = useRef(submit);
+
+  useEffect(() => {
+    submitRef.current = submit;
+  }, [submit]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,12 +47,12 @@ export function CreateTaskButton({ project }: { project: Project }) {
       }
       if (cmd && e.key === "Enter") {
         e.preventDefault();
-        submit();
+        submitRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, submit]);
+  }, [open]);
 
   return (
     <>

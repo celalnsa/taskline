@@ -362,7 +362,7 @@ func readUserVersion(path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = db.Close() }()
+	defer db.Close()
 	var v int
 	err = db.QueryRowContext(context.Background(), "PRAGMA user_version").Scan(&v)
 	return v, err

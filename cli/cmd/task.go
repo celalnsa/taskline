@@ -307,5 +307,5 @@ func renderTaskTable(w io.Writer, ts []client.Task) {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n",
 			shortID(t.ID), t.State, t.Type, t.Priority, trimRune(t.Title, 50), deps)
 	}
-	_ = tw.Flush()
+	tw.Flush()
 }

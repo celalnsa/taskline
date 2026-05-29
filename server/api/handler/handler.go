@@ -106,7 +106,7 @@ func (h *Handler) serveUI(_ context.Context, c *app.RequestContext) {
 		}
 		c.SetStatusCode(http.StatusOK)
 		c.Response.Header.Set("Content-Type", ct)
-		_, _ = c.Write(data)
+		c.Write(data)
 		return
 	}
 	// SPA fallback — every unknown path returns index.html so deep links
@@ -114,7 +114,7 @@ func (h *Handler) serveUI(_ context.Context, c *app.RequestContext) {
 	if data, err := fs.ReadFile(h.uiFS, "index.html"); err == nil {
 		c.SetStatusCode(http.StatusOK)
 		c.Response.Header.Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = c.Write(data)
+		c.Write(data)
 		return
 	}
 	c.SetStatusCode(http.StatusNotFound)
@@ -396,10 +396,10 @@ func writeJSON(c *app.RequestContext, status int, body any) {
 	enc, err := json.Marshal(body)
 	if err != nil {
 		c.SetStatusCode(http.StatusInternalServerError)
-		_, _ = c.WriteString(`{"error":"json marshal failed"}`)
+		c.WriteString(`{"error":"json marshal failed"}`)
 		return
 	}
-	_, _ = c.Write(enc)
+	c.Write(enc)
 }
 
 func writeError(c *app.RequestContext, status int, err error) {

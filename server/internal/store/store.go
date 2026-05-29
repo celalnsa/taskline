@@ -122,7 +122,7 @@ func applyOneMigration(ctx context.Context, db *sql.DB, m migration) error {
 	if err != nil {
 		return fmt.Errorf("begin tx for v%d: %w", m.version, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 		return fmt.Errorf("apply migration v%d: %w", m.version, err)
 	}
@@ -189,7 +189,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]*model.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var out []*model.Project
 	for rows.Next() {
 		p, err := scanProject(rows)
@@ -288,7 +288,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var out []*model.Task
 	for rows.Next() {
 		t, err := scanTask(rows)
@@ -333,7 +333,7 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*mod
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	var out []*model.Task
 	for rows.Next() {
 		t, err := scanTask(rows)
@@ -613,7 +613,7 @@ func (s *Store) attachDeps(ctx context.Context, t *model.Task) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	for rows.Next() {
 		var d string
 		if err := rows.Scan(&d); err != nil {
@@ -631,7 +631,7 @@ func (s *Store) attachLinks(ctx context.Context, t *model.Task) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	for rows.Next() {
 		var l model.Link
 		if err := rows.Scan(&l.ID, &l.TaskID, &l.URL, &l.Label, &l.CreatedAt); err != nil {
@@ -649,7 +649,7 @@ func (s *Store) attachImages(ctx context.Context, t *model.Task) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 	for rows.Next() {
 		var img model.Image
 		if err := rows.Scan(&img.ID, &img.TaskID, &img.Filename, &img.MimeType, &img.SizeBytes, &img.StoragePath, &img.UploadedAt); err != nil {
