@@ -85,18 +85,20 @@ async function request<T>(
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try {
-      const j = (await res.json()) as { error?: string };
-      if (j?.error) msg = j.error;
-    } catch {
-      // body wasn't JSON; keep statusText
-    }
-    throw new ApiError(res.status, msg);
-  }
+  if (!res.ok) throw await readApiError(res);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+async function readApiError(res: Response): Promise<ApiError> {
+  let msg = res.statusText;
+  try {
+    const j = (await res.json()) as { error?: string };
+    if (j?.error) msg = j.error;
+  } catch {
+    // body wasn't JSON; keep statusText
+  }
+  return new ApiError(res.status, msg);
 }
 
 // ─── Projects ──────────────────────────────────────────────────────────
@@ -149,6 +151,20 @@ export async function updateTask(
 
 export async function deleteTask(id: string): Promise<void> {
   await request<unknown>("DELETE", `/api/v1/tasks/${encodeURIComponent(id)}`);
+}
+
+export async function uploadTaskImage(
+  taskId: string,
+  file: File
+): Promise<TaskImage> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/images`,
+    { method: "POST", body }
+  );
+  if (!res.ok) throw await readApiError(res);
+  return (await res.json()) as TaskImage;
 }
 
 export async function addDependency(

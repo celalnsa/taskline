@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { FileCode2 } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { FileCode2, ImagePlus } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
   type Project,
   type Task,
+  type TaskImage,
   type TaskState,
   type TaskType,
 } from "../lib/api";
@@ -14,6 +15,7 @@ import {
   useDeleteLink,
   useDeleteTask,
   useUpdateTask,
+  useUploadImage,
 } from "../hooks/queries";
 
 const MarkdownDescriptionDialog = lazy(() =>
@@ -155,6 +157,8 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
 
         <DepSection task={task} allTasks={allTasks} />
 
+        <ImageSection project={project} task={task} />
+
         <LinkSection project={project} task={task} />
 
         <div className="border-t pt-3 space-y-2">
@@ -251,6 +255,99 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
       )}
     </div>
   );
+}
+
+function ImageSection({ project, task }: { project: Project; task: Task }) {
+  const [images, setImages] = useState<TaskImage[]>(task.images ?? []);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const upload = useUploadImage(project.id);
+
+  useEffect(() => {
+    setImages(task.images ?? []);
+  }, [task.id, task.images]);
+
+  const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    if (!file || upload.isPending) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Selected file is not an image.");
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+    try {
+      const image = await upload.mutateAsync({ taskId: task.id, file });
+      setImages((current) =>
+        current.some((item) => item.id === image.id) ? current : [...current, image]
+      );
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="border-t pt-3 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-slate-500">Images</p>
+        <label
+          className={
+            "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 " +
+            (upload.isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer")
+          }
+        >
+          <ImagePlus size={14} aria-hidden="true" />
+          <span>{upload.isPending ? "Uploading..." : "Upload image"}</span>
+          <input
+            ref={inputRef}
+            aria-label="Image attachment"
+            className="sr-only"
+            type="file"
+            accept="image/*"
+            disabled={upload.isPending}
+            onChange={onFileChange}
+          />
+        </label>
+      </div>
+      {images.length > 0 ? (
+        <ul className="space-y-1">
+          {images.map((image) => (
+            <li
+              key={image.id}
+              className="text-xs flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1"
+            >
+              <span className="font-medium text-slate-700 truncate flex-1 min-w-0">
+                {image.filename}
+              </span>
+              <span className="text-slate-400 shrink-0">
+                {image.mime_type || "unknown"}
+              </span>
+              <span className="text-slate-500 tabular-nums shrink-0">
+                {formatFileSize(image.size_bytes)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-slate-400">No images attached.</p>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  const kib = bytes / 1024;
+  if (kib < 1024) return `${formatNumber(kib)} KB`;
+  return `${formatNumber(kib / 1024)} MB`;
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
 }
 
 function LinkSection({ project, task }: { project: Project; task: Task }) {

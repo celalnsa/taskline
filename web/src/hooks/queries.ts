@@ -48,6 +48,15 @@ export function useDeleteTask(projectIdOrName: string) {
   });
 }
 
+export function useUploadImage(projectIdOrName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, file }: { taskId: string; file: File }) =>
+      api.uploadTaskImage(taskId, file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectIdOrName] }),
+  });
+}
+
 export function useAddDependency(projectIdOrName: string) {
   const qc = useQueryClient();
   return useMutation({
