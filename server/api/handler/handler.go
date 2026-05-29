@@ -385,8 +385,7 @@ func (h *Handler) getImage(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, err)
 		return
 	}
-	data, err := os.ReadFile(img.StoragePath)
-	if err != nil {
+	if _, err := os.Stat(img.StoragePath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeServiceError(c, fmt.Errorf("%w: image file missing", store.ErrNotFound))
 			return
@@ -406,7 +405,7 @@ func (h *Handler) getImage(ctx context.Context, c *app.RequestContext) {
 	c.Response.Header.Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
 		"filename": img.Filename,
 	}))
-	c.Write(data)
+	c.File(img.StoragePath)
 }
 
 func (h *Handler) deleteImage(ctx context.Context, c *app.RequestContext) {

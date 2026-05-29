@@ -456,6 +456,9 @@ function ImageSection({
           aria-modal="true"
           aria-label="Image preview"
           className="fixed inset-0 z-50 bg-black/60 p-5 flex items-center justify-center"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setPreviewImage(null);
+          }}
         >
           <div className="max-w-[min(960px,92vw)] max-h-[90vh] rounded bg-white shadow-xl flex flex-col overflow-hidden">
             <div className="h-10 px-3 border-b flex items-center gap-3">

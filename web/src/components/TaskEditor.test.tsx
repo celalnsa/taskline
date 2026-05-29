@@ -178,6 +178,29 @@ describe("TaskEditor image attachments", () => {
     );
   });
 
+  it("closes the image preview when clicking the backdrop", async () => {
+    const user = userEvent.setup();
+    const existing: TaskImage = {
+      id: "image-1",
+      task_id: task.id,
+      filename: "before.png",
+      mime_type: "image/png",
+      size_bytes: 1536,
+      uploaded_at: 1780051741142,
+    };
+
+    renderEditor(vi.fn(), { ...task, images: [existing] });
+
+    await user.click(screen.getByRole("button", { name: /view image before.png/i }));
+    const dialog = await screen.findByRole("dialog", { name: /image preview/i });
+
+    await user.click(dialog);
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /image preview/i })).toBeNull()
+    );
+  });
+
   it("deletes an existing image attachment from the list", async () => {
     const user = userEvent.setup();
     const existing: TaskImage = {
