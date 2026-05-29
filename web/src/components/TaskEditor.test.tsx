@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Project, Task } from "../lib/api";
+import type { Project, Task, TaskImage } from "../lib/api";
 import { TaskEditor } from "./TaskEditor";
 
 const project: Project = {
@@ -28,14 +28,19 @@ const task: Task = {
   images: [],
 };
 
-function renderEditor(onClose = vi.fn()) {
+function renderEditor(onClose = vi.fn(), editorTask: Task = task) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   render(
     <QueryClientProvider client={client}>
-      <TaskEditor project={project} task={task} allTasks={[task]} onClose={onClose} />
+      <TaskEditor
+        project={project}
+        task={editorTask}
+        allTasks={[editorTask]}
+        onClose={onClose}
+      />
     </QueryClientProvider>
   );
 
@@ -43,7 +48,10 @@ function renderEditor(onClose = vi.fn()) {
 }
 
 describe("TaskEditor markdown description editing", () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   it("opens a markdown editor from the description field", async () => {
     const user = userEvent.setup();
@@ -101,5 +109,61 @@ describe("TaskEditor markdown description editing", () => {
     fireEvent.keyDown(window, { key: "Escape" });
 
     await waitFor(() => expect(document.activeElement).toBe(openButton));
+  });
+});
+
+describe("TaskEditor image attachments", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows existing image attachments", () => {
+    const existing: TaskImage = {
+      id: "image-1",
+      task_id: task.id,
+      filename: "before.png",
+      mime_type: "image/png",
+      size_bytes: 1536,
+      uploaded_at: 1780051741142,
+    };
+
+    renderEditor(vi.fn(), { ...task, images: [existing] });
+
+    expect(screen.getByText("before.png")).toBeTruthy();
+    expect(screen.getByText("image/png")).toBeTruthy();
+    expect(screen.getByText("1.5 KB")).toBeTruthy();
+  });
+
+  it("uploads a selected image and appends it to the attachment list", async () => {
+    const user = userEvent.setup();
+    const uploaded: TaskImage = {
+      id: "image-2",
+      task_id: task.id,
+      filename: "after.png",
+      mime_type: "image/png",
+      size_bytes: 8,
+      uploaded_at: 1780051741143,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(uploaded), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor();
+
+    const input = screen.getByLabelText(/image attachment/i);
+    const file = new File(["newimage"], "after.png", { type: "image/png" });
+    await user.upload(input, file);
+
+    expect(await screen.findByText("after.png")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task-1/images",
+      expect.objectContaining({ method: "POST", body: expect.any(FormData) })
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.body as FormData).get("file")).toBe(file);
   });
 });
