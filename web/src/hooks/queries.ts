@@ -57,6 +57,14 @@ export function useUploadImage(projectIdOrName: string) {
   });
 }
 
+export function useDeleteImage(projectIdOrName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (imageId: string) => api.deleteTaskImage(imageId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectIdOrName] }),
+  });
+}
+
 export function useAddDependency(projectIdOrName: string) {
   const qc = useQueryClient();
   return useMutation({

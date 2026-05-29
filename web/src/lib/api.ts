@@ -167,6 +167,14 @@ export async function uploadTaskImage(
   return (await res.json()) as TaskImage;
 }
 
+export function taskImageURL(imageId: string): string {
+  return `/api/v1/images/${encodeURIComponent(imageId)}`;
+}
+
+export async function deleteTaskImage(imageId: string): Promise<void> {
+  await request<unknown>("DELETE", taskImageURL(imageId));
+}
+
 export async function addDependency(
   taskId: string,
   dependsOn: string

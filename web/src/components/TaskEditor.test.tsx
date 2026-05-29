@@ -153,6 +153,59 @@ describe("TaskEditor image attachments", () => {
     expect(screen.getByText("1.5 KB")).toBeTruthy();
   });
 
+  it("opens an existing image attachment in a preview dialog", async () => {
+    const user = userEvent.setup();
+    const existing: TaskImage = {
+      id: "image-1",
+      task_id: task.id,
+      filename: "before.png",
+      mime_type: "image/png",
+      size_bytes: 1536,
+      uploaded_at: 1780051741142,
+    };
+
+    renderEditor(vi.fn(), { ...task, images: [existing] });
+
+    await user.click(screen.getByRole("button", { name: /view image before.png/i }));
+
+    expect(await screen.findByRole("dialog", { name: /image preview/i })).toBeTruthy();
+    const preview = screen.getByRole("img", { name: /before.png/i }) as HTMLImageElement;
+    expect(preview.getAttribute("src")).toBe("/api/v1/images/image-1");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /image preview/i })).toBeNull()
+    );
+  });
+
+  it("deletes an existing image attachment from the list", async () => {
+    const user = userEvent.setup();
+    const existing: TaskImage = {
+      id: "image-1",
+      task_id: task.id,
+      filename: "before.png",
+      mime_type: "image/png",
+      size_bytes: 1536,
+      uploaded_at: 1780051741142,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ deleted: true, id: existing.id }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(vi.fn(), { ...task, images: [existing] });
+
+    await user.click(screen.getByRole("button", { name: /delete image before.png/i }));
+
+    await waitFor(() => expect(screen.queryByText("before.png")).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/images/image-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
   it("uploads a selected image and appends it to the attachment list", async () => {
     const user = userEvent.setup();
     const uploaded: TaskImage = {
@@ -177,6 +230,43 @@ describe("TaskEditor image attachments", () => {
     await user.upload(input, file);
 
     expect(await screen.findByText("after.png")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task-1/images",
+      expect.objectContaining({ method: "POST", body: expect.any(FormData) })
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.body as FormData).get("file")).toBe(file);
+  });
+
+  it("uploads pasted image files in edit mode", async () => {
+    const uploaded: TaskImage = {
+      id: "image-3",
+      task_id: task.id,
+      filename: "pasted.png",
+      mime_type: "image/png",
+      size_bytes: 6,
+      uploaded_at: 1780051741144,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(uploaded), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor();
+
+    const file = new File(["pasted"], "pasted.png", { type: "image/png" });
+    const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [file],
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+      },
+    });
+    window.dispatchEvent(event);
+
+    expect(await screen.findByText("pasted.png")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/tasks/task-1/images",
       expect.objectContaining({ method: "POST", body: expect.any(FormData) })

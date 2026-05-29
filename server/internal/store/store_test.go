@@ -244,6 +244,45 @@ func TestLinkCRUD(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
+func TestImageCRUD(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, _ := st.CreateProject(ctx, "p", "")
+	tk, _ := st.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, model.StateStart)
+
+	img := &model.Image{
+		TaskID:      tk.ID,
+		Filename:    "diagram.png",
+		MimeType:    "image/png",
+		SizeBytes:   42,
+		StoragePath: filepath.Join(t.TempDir(), "diagram.png"),
+	}
+	require.NoError(t, st.AddImage(ctx, img))
+	require.NotEmpty(t, img.ID)
+	require.NotZero(t, img.UploadedAt)
+
+	got, err := st.GetImage(ctx, img.ID)
+	require.NoError(t, err)
+	require.Equal(t, img.ID, got.ID)
+	require.Equal(t, img.TaskID, got.TaskID)
+	require.Equal(t, img.StoragePath, got.StoragePath)
+
+	withImage, err := st.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Len(t, withImage.Images, 1)
+	require.Equal(t, img.ID, withImage.Images[0].ID)
+
+	deleted, err := st.DeleteImage(ctx, img.ID)
+	require.NoError(t, err)
+	require.Equal(t, img.ID, deleted.ID)
+	_, err = st.DeleteImage(ctx, img.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	withoutImage, err := st.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Empty(t, withoutImage.Images)
+}
+
 // TestMigrationsRunOnceAcrossReopens verifies that PRAGMA user_version
 // gates migration application: after a first open the version is at
 // the latest entry in schemaMigrations, and a second open against the

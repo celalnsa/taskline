@@ -579,6 +579,31 @@ func (s *Store) AddImage(ctx context.Context, img *model.Image) error {
 	return nil
 }
 
+// GetImage returns a stored image attachment by id.
+func (s *Store) GetImage(ctx context.Context, id string) (*model.Image, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id,task_id,filename,mime_type,size_bytes,storage_path,uploaded_at
+		   FROM task_images WHERE id = ?`, id)
+	return scanImage(row)
+}
+
+// DeleteImage removes a single image by id and returns the removed row.
+func (s *Store) DeleteImage(ctx context.Context, id string) (*model.Image, error) {
+	img, err := s.GetImage(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.db.ExecContext(ctx, `DELETE FROM task_images WHERE id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	return img, nil
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────
 
 type rowScanner interface {
@@ -605,6 +630,17 @@ func scanTask(r rowScanner) (*model.Task, error) {
 		return nil, err
 	}
 	return &t, nil
+}
+
+func scanImage(r rowScanner) (*model.Image, error) {
+	var img model.Image
+	if err := r.Scan(&img.ID, &img.TaskID, &img.Filename, &img.MimeType, &img.SizeBytes, &img.StoragePath, &img.UploadedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &img, nil
 }
 
 func (s *Store) attachDeps(ctx context.Context, t *model.Task) error {
@@ -651,11 +687,11 @@ func (s *Store) attachImages(ctx context.Context, t *model.Task) error {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var img model.Image
-		if err := rows.Scan(&img.ID, &img.TaskID, &img.Filename, &img.MimeType, &img.SizeBytes, &img.StoragePath, &img.UploadedAt); err != nil {
+		img, err := scanImage(rows)
+		if err != nil {
 			return err
 		}
-		t.Images = append(t.Images, img)
+		t.Images = append(t.Images, *img)
 	}
 	return rows.Err()
 }

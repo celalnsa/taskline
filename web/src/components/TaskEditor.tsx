@@ -1,8 +1,17 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { FileCode2, ImagePlus, X } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
+import { FileCode2, ImagePlus, Trash2, X } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
+  taskImageURL,
   type Project,
   type Task,
   type TaskImage,
@@ -15,6 +24,7 @@ import {
   useAddLink,
   useCreateTask,
   useDeleteDependency,
+  useDeleteImage,
   useDeleteLink,
   useUpdateTask,
   useUploadImage,
@@ -291,13 +301,43 @@ function ImageSection({
   disabled?: boolean;
 }) {
   const [images, setImages] = useState<TaskImage[]>(task.images ?? []);
+  const [previewImage, setPreviewImage] = useState<TaskImage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadImage(project.id);
+  const del = useDeleteImage(project.id);
 
   useEffect(() => {
     setImages(task.images ?? []);
   }, [task.id, task.images]);
+
+  useEffect(() => {
+    if (!previewImage) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setPreviewImage(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [previewImage]);
+
+  const appendImage = useCallback((image: TaskImage) => {
+    setImages((current) =>
+      current.some((item) => item.id === image.id) ? current : [...current, image]
+    );
+  }, []);
+
+  const uploadFile = useCallback(
+    async (file: File) => {
+      if (upload.isPending || disabled) return;
+      const image = await upload.mutateAsync({ taskId: task.id, file });
+      appendImage(image);
+      setError(null);
+    },
+    [appendImage, disabled, task.id, upload]
+  );
 
   const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -308,15 +348,43 @@ function ImageSection({
       return;
     }
     try {
-      const image = await upload.mutateAsync({ taskId: task.id, file });
-      setImages((current) =>
-        current.some((item) => item.id === image.id) ? current : [...current, image]
-      );
-      setError(null);
+      await uploadFile(file);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const uploadPastedImages = useCallback(
+    async (files: File[]) => {
+      for (const file of files) {
+        await uploadFile(file);
+      }
+    },
+    [uploadFile]
+  );
+
+  useEffect(() => {
+    if (disabled) return;
+    const onPaste = (event: ClipboardEvent) => {
+      const files = imageFilesFromClipboard(event.clipboardData);
+      if (files.length === 0) return;
+      event.preventDefault();
+      void uploadPastedImages(files).catch((err) => setError((err as Error).message));
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [disabled, uploadPastedImages]);
+
+  const removeImage = async (image: TaskImage) => {
+    try {
+      await del.mutateAsync(image.id);
+      setImages((current) => current.filter((item) => item.id !== image.id));
+      if (previewImage?.id === image.id) setPreviewImage(null);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
     }
   };
 
@@ -348,17 +416,33 @@ function ImageSection({
           {images.map((image) => (
             <li
               key={image.id}
-              className="text-xs flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1"
+              className="text-xs flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1 group"
             >
-              <span className="font-medium text-slate-700 truncate flex-1 min-w-0">
-                {image.filename}
-              </span>
-              <span className="text-slate-400 shrink-0">
-                {image.mime_type || "unknown"}
-              </span>
-              <span className="text-slate-500 tabular-nums shrink-0">
-                {formatFileSize(image.size_bytes)}
-              </span>
+              <button
+                type="button"
+                aria-label={`View image ${image.filename}`}
+                className="flex flex-1 min-w-0 items-center gap-2 text-left"
+                onClick={() => setPreviewImage(image)}
+              >
+                <span className="font-medium text-slate-700 truncate flex-1 min-w-0">
+                  {image.filename}
+                </span>
+                <span className="text-slate-400 shrink-0">
+                  {image.mime_type || "unknown"}
+                </span>
+                <span className="text-slate-500 tabular-nums shrink-0">
+                  {formatFileSize(image.size_bytes)}
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete image ${image.filename}`}
+                className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center disabled:opacity-50"
+                disabled={del.isPending}
+                onClick={() => void removeImage(image)}
+              >
+                <Trash2 size={12} aria-hidden="true" />
+              </button>
             </li>
           ))}
         </ul>
@@ -366,8 +450,52 @@ function ImageSection({
         <p className="text-xs text-slate-400">No images attached.</p>
       )}
       {error && <p className="text-xs text-red-600">{error}</p>}
+      {previewImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+          className="fixed inset-0 z-50 bg-black/60 p-5 flex items-center justify-center"
+        >
+          <div className="max-w-[min(960px,92vw)] max-h-[90vh] rounded bg-white shadow-xl flex flex-col overflow-hidden">
+            <div className="h-10 px-3 border-b flex items-center gap-3">
+              <p className="text-sm font-medium text-slate-700 truncate flex-1 min-w-0">
+                {previewImage.filename}
+              </p>
+              <button
+                type="button"
+                aria-label="Close image preview"
+                className="h-7 w-7 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 flex items-center justify-center"
+                onClick={() => setPreviewImage(null)}
+              >
+                <X size={15} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="bg-slate-950 p-2 flex items-center justify-center">
+              <img
+                alt={previewImage.filename}
+                src={taskImageURL(previewImage.id)}
+                className="max-w-[88vw] max-h-[78vh] object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function imageFilesFromClipboard(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const files = Array.from(data.files ?? []).filter((file) =>
+    file.type.startsWith("image/")
+  );
+  if (files.length > 0) return files;
+
+  return Array.from(data.items ?? [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => !!file);
 }
 
 function formatFileSize(bytes: number): string {

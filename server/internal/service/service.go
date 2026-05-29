@@ -147,6 +147,16 @@ func (s *Service) AddImage(ctx context.Context, img *model.Image) error {
 	return s.st.AddImage(ctx, img)
 }
 
+// GetImage fetches an image attachment by id.
+func (s *Service) GetImage(ctx context.Context, id string) (*model.Image, error) {
+	return s.st.GetImage(ctx, id)
+}
+
+// DeleteImage removes an image attachment by id.
+func (s *Service) DeleteImage(ctx context.Context, id string) (*model.Image, error) {
+	return s.st.DeleteImage(ctx, id)
+}
+
 // AddLink attaches a URL to a task. rawURL is required and must use the
 // http or https scheme — the web renders these via <a href=…> and a
 // `javascript:` (or `data:`, `file:`, …) URI would otherwise be an XSS

@@ -102,6 +102,16 @@ type task struct {
 	ID, ProjectID, Title, Description, Type, State string
 	Priority                                       int
 	DependsOn                                      []string `json:"depends_on,omitempty"`
+	Images                                         []image  `json:"images,omitempty"`
+}
+
+type image struct {
+	ID         string `json:"id"`
+	TaskID     string `json:"task_id"`
+	Filename   string `json:"filename"`
+	MimeType   string `json:"mime_type"`
+	SizeBytes  int64  `json:"size_bytes"`
+	UploadedAt int64  `json:"uploaded_at"`
 }
 
 type taskListResp struct {
@@ -220,17 +230,42 @@ func TestImageUploadEndToEnd(t *testing.T) {
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	raw, _ := io.ReadAll(resp.Body)
 	require.True(t, strings.Contains(string(raw), "hello.txt"))
+	var uploaded image
+	require.NoError(t, json.Unmarshal(raw, &uploaded), "decode uploaded image: %s", string(raw))
+	require.NotEmpty(t, uploaded.ID)
 
 	// Re-fetch the task — image should be attached.
 	var got task
 	jsonReq(t, "GET", base+"/api/v1/tasks/"+tk.ID, nil, &got)
-	// Note: task struct ignores images, but verify via raw GET shape.
-	resp2, err := http.Get(base + "/api/v1/tasks/" + tk.ID)
+	require.Len(t, got.Images, 1)
+	require.Equal(t, uploaded.ID, got.Images[0].ID)
+	require.Equal(t, "hello.txt", got.Images[0].Filename)
+
+	// Download the image content for preview.
+	resp2, err := http.Get(base + "/api/v1/images/" + uploaded.ID)
 	require.NoError(t, err)
 	defer resp2.Body.Close()
-	rawTask, _ := io.ReadAll(resp2.Body)
-	require.True(t, strings.Contains(string(rawTask), "hello.txt"),
-		"task json should include attached image filename: %s", string(rawTask))
+	require.Equal(t, http.StatusOK, resp2.StatusCode)
+	rawImage, _ := io.ReadAll(resp2.Body)
+	require.Equal(t, []byte("hello world"), rawImage)
+	require.Contains(t, resp2.Header.Get("Content-Disposition"), "hello.txt")
+
+	// Delete removes the record and makes the content unavailable.
+	delReq, err := http.NewRequest("DELETE", base+"/api/v1/images/"+uploaded.ID, nil)
+	require.NoError(t, err)
+	delResp, err := http.DefaultClient.Do(delReq)
+	require.NoError(t, err)
+	defer delResp.Body.Close()
+	require.Equal(t, http.StatusOK, delResp.StatusCode)
+
+	resp3, err := http.Get(base + "/api/v1/images/" + uploaded.ID)
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp3.StatusCode)
+
+	var afterDelete task
+	jsonReq(t, "GET", base+"/api/v1/tasks/"+tk.ID, nil, &afterDelete)
+	require.Empty(t, afterDelete.Images)
 }
 
 func TestDeleteDependencyEndToEnd(t *testing.T) {

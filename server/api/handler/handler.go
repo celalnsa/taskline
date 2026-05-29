@@ -63,6 +63,8 @@ func (h *Handler) Register(s *server.Hertz) {
 	v1.DELETE("/tasks/:id/deps/:dependsOn", h.deleteDependency)
 	v1.POST("/tasks/:id/images", h.uploadImage)
 	v1.POST("/tasks/:id/links", h.addLink)
+	v1.GET("/images/:id", h.getImage)
+	v1.DELETE("/images/:id", h.deleteImage)
 	v1.DELETE("/links/:id", h.deleteLink)
 
 	// Mount the bundled UI last so /api/* and /healthz keep their handlers.
@@ -374,6 +376,50 @@ func (h *Handler) uploadImage(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	writeJSON(c, http.StatusCreated, saved)
+}
+
+func (h *Handler) getImage(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	img, err := h.svc.GetImage(ctx, id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	data, err := os.ReadFile(img.StoragePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeServiceError(c, fmt.Errorf("%w: image file missing", store.ErrNotFound))
+			return
+		}
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	contentType := img.MimeType
+	if contentType == "" {
+		contentType = mime.TypeByExtension(filepath.Ext(img.Filename))
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	c.SetStatusCode(http.StatusOK)
+	c.Response.Header.Set("Content-Type", contentType)
+	c.Response.Header.Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+		"filename": img.Filename,
+	}))
+	c.Write(data)
+}
+
+func (h *Handler) deleteImage(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	img, err := h.svc.DeleteImage(ctx, id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if img.StoragePath != "" {
+		_ = os.Remove(img.StoragePath)
+	}
+	writeJSON(c, http.StatusOK, map[string]any{"deleted": true, "id": id})
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────

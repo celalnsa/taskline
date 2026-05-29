@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { uploadTaskImage, type TaskImage } from "./api";
+import { deleteTaskImage, taskImageURL, uploadTaskImage, type TaskImage } from "./api";
 
 describe("uploadTaskImage", () => {
   afterEach(() => {
@@ -34,5 +34,27 @@ describe("uploadTaskImage", () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.headers).toBeUndefined();
     expect((init.body as FormData).get("file")).toBe(file);
+  });
+});
+
+describe("task image content helpers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("builds an encoded URL for image previews", () => {
+    expect(taskImageURL("image/one")).toBe("/api/v1/images/image%2Fone");
+  });
+
+  it("deletes an image by id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deleteTaskImage("image/one");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/images/image%2Fone",
+      expect.objectContaining({ method: "DELETE" })
+    );
   });
 });
