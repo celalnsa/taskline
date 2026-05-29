@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { FileCode2 } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
@@ -15,6 +16,12 @@ import {
   useUpdateTask,
 } from "../hooks/queries";
 
+const MarkdownDescriptionDialog = lazy(() =>
+  import("./MarkdownDescriptionDialog").then((module) => ({
+    default: module.MarkdownDescriptionDialog,
+  }))
+);
+
 interface Props {
   project: Project;
   task: Task;
@@ -30,18 +37,30 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
   const [priority, setPriority] = useState(task.priority);
   const [depTarget, setDepTarget] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [markdownOpen, setMarkdownOpen] = useState(false);
+  const markdownButtonRef = useRef<HTMLButtonElement>(null);
 
   const update = useUpdateTask(project.id);
   const del = useDeleteTask(project.id);
   const addDep = useAddDependency(project.id);
 
+  const closeMarkdownEditor = () => {
+    setMarkdownOpen(false);
+    window.setTimeout(() => markdownButtonRef.current?.focus(), 0);
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (markdownOpen) {
+        closeMarkdownEditor();
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [markdownOpen, onClose]);
 
   // Filter dep candidates: any other task in the same project that this
   // task isn't already blocked on.
@@ -70,12 +89,30 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <textarea
-          className="w-full text-sm border rounded px-2 py-1.5 resize-y min-h-[6rem]"
-          rows={4}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <label htmlFor="task-description" className="text-xs text-slate-500">
+              Description
+            </label>
+            <button
+              ref={markdownButtonRef}
+              type="button"
+              aria-label="Open markdown editor"
+              className="h-7 w-7 rounded border border-slate-200 bg-white/75 text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-900 flex items-center justify-center"
+              onClick={() => setMarkdownOpen(true)}
+            >
+              <FileCode2 size={15} aria-hidden="true" />
+            </button>
+          </div>
+          <textarea
+            id="task-description"
+            aria-label="Description"
+            className="w-full text-sm border rounded px-2 py-1.5 resize-y min-h-[6rem]"
+            rows={4}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
         <div className="grid grid-cols-3 gap-2">
           <label className="text-xs space-y-1">
             <span className="text-slate-500">Type</span>
@@ -197,6 +234,21 @@ export function TaskEditor({ project, task, allTasks, onClose }: Props) {
         </div>
         </div>
       </div>
+      {markdownOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 bg-black/40 p-5 flex items-center justify-center text-sm text-white">
+              Loading editor…
+            </div>
+          }
+        >
+          <MarkdownDescriptionDialog
+            value={description}
+            onChange={setDescription}
+            onClose={closeMarkdownEditor}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
