@@ -24,6 +24,7 @@ func init() {
 		taskUpdateCmd,
 		taskDeleteCmd,
 		taskDependCmd,
+		taskUndependCmd,
 		taskUploadCmd,
 		taskLinkCmd,
 		taskUnlinkCmd,
@@ -53,6 +54,8 @@ func init() {
 
 	taskDependCmd.Flags().String("on", "", "id of the task this one depends on (required)")
 	_ = taskDependCmd.MarkFlagRequired("on")
+	taskUndependCmd.Flags().String("on", "", "id of the dependency to remove (required)")
+	_ = taskUndependCmd.MarkFlagRequired("on")
 
 	taskUploadCmd.Flags().String("file", "", "local file path to upload (required)")
 	_ = taskUploadCmd.MarkFlagRequired("file")
@@ -224,6 +227,24 @@ var taskDependCmd = &cobra.Command{
 			return err
 		}
 		return output.JSON(os.Stdout, map[string]any{"task_id": args[0], "depends_on": dep})
+	},
+}
+
+var taskUndependCmd = &cobra.Command{
+	Use:   "undepend <id>",
+	Short: "Remove one dependency edge from <id> (--on <other-id>)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dep, _ := cmd.Flags().GetString("on")
+		c := newClient()
+		if err := c.DeleteDependency(args[0], dep); err != nil {
+			return err
+		}
+		return output.JSON(os.Stdout, map[string]any{
+			"deleted":    true,
+			"task_id":    args[0],
+			"depends_on": dep,
+		})
 	},
 }
 

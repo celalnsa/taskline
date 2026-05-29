@@ -66,6 +66,15 @@ export function useAddDependency(projectIdOrName: string) {
   });
 }
 
+export function useDeleteDependency(projectIdOrName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, dependsOn }: { taskId: string; dependsOn: string }) =>
+      api.deleteDependency(taskId, dependsOn),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectIdOrName] }),
+  });
+}
+
 export function useAddLink(projectIdOrName: string) {
   const qc = useQueryClient();
   return useMutation({

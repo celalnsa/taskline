@@ -407,7 +407,10 @@ func (s *Store) DeleteTask(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return ErrNotFound
 	}
@@ -442,6 +445,25 @@ func (s *Store) AddDependency(ctx context.Context, taskID, dependsOnID string) e
 			return fmt.Errorf("%w: one of the tasks does not exist", ErrNotFound)
 		}
 		return err
+	}
+	return nil
+}
+
+// DeleteDependency removes a dependency edge.
+func (s *Store) DeleteDependency(ctx context.Context, taskID, dependsOnID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM task_deps WHERE task_id = ? AND depends_on_task_id = ?`,
+		taskID, dependsOnID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
