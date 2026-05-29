@@ -200,4 +200,16 @@ describe("GraphView", () => {
       dependsOn: "a",
     });
   });
+
+  it("ignores duplicate dependency connections", async () => {
+    const user = userEvent.setup();
+    const { addDependencyMutate } = renderGraph([
+      task({ id: "a", title: "A" }),
+      task({ id: "c", title: "C", depends_on: ["a"] }),
+    ]);
+
+    await user.click(screen.getByTestId("connect-a-c"));
+
+    expect(addDependencyMutate).not.toHaveBeenCalled();
+  });
 });

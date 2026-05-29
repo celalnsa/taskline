@@ -57,12 +57,14 @@ export function GraphView({ project }: Props) {
     (connection: Connection) => {
       if (!connection.source || !connection.target) return;
       if (connection.source === connection.target) return;
+      const targetTask = tasks.find((task) => task.id === connection.target);
+      if (targetTask?.depends_on?.includes(connection.source)) return;
       addDependency.mutate({
         taskId: connection.target,
         dependsOn: connection.source,
       });
     },
-    [addDependency]
+    [addDependency, tasks]
   );
 
   const { nodes, edges } = useMemo(() => {
@@ -160,11 +162,9 @@ function TaskNode({
   const { task, onAdvance, selected, dimmed } = data;
   return (
     <div
-      className={
-        "rounded-md shadow-sm border border-slate-300 bg-white px-3 py-2 w-[200px] text-xs transition " +
-        (selected ? "ring-2 ring-sky-400 shadow-md " : "") +
-        (dimmed ? "opacity-30" : "opacity-100")
-      }
+      className={`rounded-md shadow-sm border border-slate-300 bg-white px-3 py-2 w-[200px] text-xs transition ${
+        selected ? "ring-2 ring-sky-400 shadow-md" : ""
+      } ${dimmed ? "opacity-30" : "opacity-100"}`}
       style={{ borderTopColor: STATE_COLORS[task.state], borderTopWidth: 4 }}
     >
       <Handle type="target" position={Position.Left} />
