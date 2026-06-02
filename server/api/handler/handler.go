@@ -280,6 +280,7 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, err)
 		return
 	}
+	h.attachTaskImageURLs(t)
 	writeJSON(c, http.StatusOK, t)
 }
 

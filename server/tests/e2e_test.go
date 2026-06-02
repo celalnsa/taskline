@@ -256,6 +256,11 @@ func TestImageUploadEndToEnd(t *testing.T) {
 	require.Len(t, next.Task.Images, 1)
 	require.Equal(t, uploaded.URL, next.Task.Images[0].URL)
 
+	var updated task
+	jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID, map[string]any{"priority": 3}, &updated)
+	require.Len(t, updated.Images, 1)
+	require.Equal(t, uploaded.URL, updated.Images[0].URL)
+
 	// Download the image content for preview.
 	resp2, err := http.Get(base + uploaded.URL)
 	require.NoError(t, err)
