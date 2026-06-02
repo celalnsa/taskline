@@ -69,6 +69,7 @@ type Image struct {
 	Filename   string `json:"filename"`
 	MimeType   string `json:"mime_type"`
 	SizeBytes  int64  `json:"size_bytes"`
+	URL        string `json:"url,omitempty"`
 	UploadedAt int64  `json:"uploaded_at"`
 }
 

@@ -79,7 +79,7 @@ focused on a single project.
 | `state`       | `pending`, `start`, `spec`, `dev`, `review`, `done`                        |
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
-| `images`      | optional binary attachments                                                |
+| `images`      | optional binary attachments; each image includes a `url` for retrieval     |
 
 **State machine.** Any state may transition to any other named state.
 Forward jumps (`start` → `done`) and drop-backs (`review` → `dev`
@@ -184,9 +184,10 @@ going through the backlog":
    top-level fields) on success, or the literal `null` when nothing is
    runnable. If you see `null`, report there's nothing runnable and
    stop.
-3. Read `title`, `description`, and any `images` (the response includes
-   local paths the user can open — surface them in your reply if
-   they're material to the task).
+3. Read `title`, `description`, and any `images` (each image includes
+   a `url` under `/api/v1/images/<image-id>` that can be opened from the
+   configured taskline server — surface it in your reply if it's
+   material to the task).
 4. Walk the task through the stages below in order. Each stage has the
    same shape: **Trigger** (what just happened) → **Actions** (do
    these now) → **Advance** (literal CLI command to move state) →

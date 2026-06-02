@@ -58,6 +58,7 @@ export interface TaskImage {
   filename: string;
   mime_type: string;
   size_bytes: number;
+  url?: string;
   uploaded_at: number;
 }
 

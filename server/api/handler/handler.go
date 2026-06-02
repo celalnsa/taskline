@@ -10,6 +10,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -200,6 +201,7 @@ func (h *Handler) listTasks(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, err)
 		return
 	}
+	h.attachTaskImageURLs(ts...)
 	writeJSON(c, http.StatusOK, map[string]any{"tasks": ts})
 }
 
@@ -210,6 +212,7 @@ func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) 
 		writeServiceError(c, err)
 		return
 	}
+	h.attachTaskImageURLs(ts...)
 	writeJSON(c, http.StatusOK, map[string]any{"tasks": ts})
 }
 
@@ -224,6 +227,7 @@ func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 		writeJSON(c, http.StatusOK, map[string]any{"task": nil})
 		return
 	}
+	h.attachTaskImageURLs(t)
 	writeJSON(c, http.StatusOK, map[string]any{"task": t})
 }
 
@@ -234,6 +238,7 @@ func (h *Handler) getTask(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, err)
 		return
 	}
+	h.attachTaskImageURLs(t)
 	writeJSON(c, http.StatusOK, t)
 }
 
@@ -275,6 +280,7 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, err)
 		return
 	}
+	h.attachTaskImageURLs(t)
 	writeJSON(c, http.StatusOK, t)
 }
 
@@ -375,6 +381,7 @@ func (h *Handler) uploadImage(ctx context.Context, c *app.RequestContext) {
 		writeServiceError(c, err)
 		return
 	}
+	h.attachImageURL(saved)
 	writeJSON(c, http.StatusCreated, saved)
 }
 
@@ -425,6 +432,24 @@ func (h *Handler) deleteImage(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) health(_ context.Context, c *app.RequestContext) {
 	writeJSON(c, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *Handler) attachTaskImageURLs(tasks ...*model.Task) {
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		for i := range task.Images {
+			h.attachImageURL(&task.Images[i])
+		}
+	}
+}
+
+func (h *Handler) attachImageURL(img *model.Image) {
+	if img == nil || img.ID == "" {
+		return
+	}
+	img.URL = "/api/v1/images/" + url.PathEscape(img.ID)
 }
 
 func decodeJSON(c *app.RequestContext, dst any) error {

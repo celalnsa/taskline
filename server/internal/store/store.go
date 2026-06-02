@@ -349,6 +349,12 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*mod
 		if err := s.attachDeps(ctx, t); err != nil {
 			return nil, err
 		}
+		if err := s.attachImages(ctx, t); err != nil {
+			return nil, err
+		}
+		if err := s.attachLinks(ctx, t); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

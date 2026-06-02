@@ -111,6 +111,7 @@ type image struct {
 	Filename   string `json:"filename"`
 	MimeType   string `json:"mime_type"`
 	SizeBytes  int64  `json:"size_bytes"`
+	URL        string `json:"url"`
 	UploadedAt int64  `json:"uploaded_at"`
 }
 
@@ -206,7 +207,7 @@ func TestImageUploadEndToEnd(t *testing.T) {
 		map[string]any{"name": "imgproj"}, &p)
 	var tk task
 	jsonReq(t, "POST", base+"/api/v1/projects/imgproj/tasks",
-		map[string]any{"title": "with image", "type": "feature"}, &tk)
+		map[string]any{"title": "with image", "type": "feature", "auto_start": true}, &tk)
 
 	tmp := t.TempDir()
 	fp := filepath.Join(tmp, "hello.txt")
@@ -233,6 +234,7 @@ func TestImageUploadEndToEnd(t *testing.T) {
 	var uploaded image
 	require.NoError(t, json.Unmarshal(raw, &uploaded), "decode uploaded image: %s", string(raw))
 	require.NotEmpty(t, uploaded.ID)
+	require.Equal(t, "/api/v1/images/"+uploaded.ID, uploaded.URL)
 
 	// Re-fetch the task — image should be attached.
 	var got task
@@ -240,9 +242,27 @@ func TestImageUploadEndToEnd(t *testing.T) {
 	require.Len(t, got.Images, 1)
 	require.Equal(t, uploaded.ID, got.Images[0].ID)
 	require.Equal(t, "hello.txt", got.Images[0].Filename)
+	require.Equal(t, uploaded.URL, got.Images[0].URL)
+
+	var listed taskListResp
+	jsonReq(t, "GET", base+"/api/v1/projects/imgproj/tasks", nil, &listed)
+	require.Len(t, listed.Tasks, 1)
+	require.Len(t, listed.Tasks[0].Images, 1)
+	require.Equal(t, uploaded.URL, listed.Tasks[0].Images[0].URL)
+
+	var next nextResp
+	jsonReq(t, "GET", base+"/api/v1/projects/imgproj/tasks/next", nil, &next)
+	require.NotNil(t, next.Task)
+	require.Len(t, next.Task.Images, 1)
+	require.Equal(t, uploaded.URL, next.Task.Images[0].URL)
+
+	var updated task
+	jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID, map[string]any{"priority": 3}, &updated)
+	require.Len(t, updated.Images, 1)
+	require.Equal(t, uploaded.URL, updated.Images[0].URL)
 
 	// Download the image content for preview.
-	resp2, err := http.Get(base + "/api/v1/images/" + uploaded.ID)
+	resp2, err := http.Get(base + uploaded.URL)
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
