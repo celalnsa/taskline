@@ -11,9 +11,12 @@ description: |
   "park this for later", and any project / kanban / backlog management
   ask. Use even when the user doesn't say "task" or "taskline" —
   phrases like "let's plan this", "queue this up", "track this",
-  "what's runnable now" all qualify. Skip for one-off todo notes with
-  no state, dependencies, or follow-up — just answer those directly.
-version: 0.5.0
+  "what's runnable now" all qualify. If the user explicitly invokes
+  this skill with no other instructions, treat it as "work the current
+  project queue" and proactively drain runnable tasks to completion.
+  Skip for one-off todo notes with no state, dependencies, or follow-up
+  — just answer those directly.
+version: 0.6.0
 ---
 
 # taskline — task management for AI agents
@@ -50,6 +53,18 @@ ordering, dependencies, more than one item, "what's next?". Examples:
 - "Mark `<id>` review / done"
 - "Show me the open bugs / what's still in dev"
 - "Wipe the done tasks from `<project>`"
+- "Use taskline-management" / "按照 taskline-management skill 执行"
+
+If the user explicitly names or invokes `taskline-management` and gives
+no additional instruction, treat that as "work the current project's
+runnable queue": resolve the project from `--project`, `$TASKLINE_PROJECT`,
+or the current repository name when it is unambiguous. If the project
+cannot be resolved, ask only for the project name. Once a project is
+known, export `TASKLINE_PROJECT` for the session or pass `--project`
+on every project-scoped command, then keep pulling
+`taskline task next --format json` after each completed task until it
+returns the literal `null`. Do not stop after one task or one PR unless
+the runnable queue is exhausted or a real blocker prevents progress.
 
 Skip taskline when the user just wants a one-line note, a scratch
 todo, or an answer that doesn't survive past this turn — reply
@@ -177,7 +192,8 @@ adding too many over too few — they're cheap to remove later.
 ## Stage playbook — "work the queue"
 
 When the user says "work the queue" / "do the next task" / "keep
-going through the backlog":
+going through the backlog", or explicitly invokes this skill without
+more instructions:
 
 1. Run `taskline task next --project <p> --format json`.
 2. The CLI emits the bare task object (`id`, `title`, `state`, … as
@@ -216,13 +232,40 @@ installed.
 
 - **Trigger:** branch exists, title + description loaded.
 - **Actions:**
-  1. Clarify the product contract: user need, scope, non-goals, UX or
-     interaction behavior, and acceptance criteria.
+  1. Clarify the product contract from the task description, project
+     docs, and code context: user need, scope, non-goals, UX or
+     interaction behavior, and acceptance criteria. Do not ask the user
+     for routine design approval; ask only when missing information
+     makes safe implementation impossible.
   2. Capture that contract in the task description or a linked spec note
      so dev has a product target.
 - **Advance:** `taskline task update <id> --state dev`
 - **Skip when:** the change is mechanical (rename, formatting,
   one-line config) — go straight to dev.
+
+### Architecture review without user checkpoints
+
+For routine product/technical choices, do not pause for user approval.
+High-quality autonomy still needs a second pass: after you identify
+2-3 viable approaches, choose the simplest one that fits the product
+goal, then run an architecture review before implementation.
+
+Prefer a separate architect-style subagent when your harness supports
+subagents. Give it the task title, description, proposed options,
+recommended option, and relevant repo constraints; ask it to check for
+over-engineering, unclear boundaries, hidden coupling, performance
+risks, testability gaps, and violations of the project's philosophy. If
+subagents are not available, perform the same review yourself as an
+explicit second pass. The final choice should be simple, declarative,
+readable, performant enough for the expected workload, and aligned with
+existing module boundaries.
+
+Ask the user only when the product intent is genuinely unknowable from
+the task, the decision has external/business consequences, credentials
+or destructive permissions are missing, or the safe implementation
+cannot proceed without information that is not in the repo or taskline
+task. In all other cases, record the chosen approach and reason in the
+task description or implementation notes, then continue.
 
 ### dev → review
 
@@ -231,16 +274,19 @@ installed.
   1. Brainstorm the technical approach — list 2-3 implementation options,
      pick one, and name the tradeoff. No human checkpoint. (capability:
      brainstorming — `superpowers:brainstorming`)
-  2. Plan the technical work — architecture boundary, ordered steps, and
+  2. Run the architecture review described above, revise the choice if
+     it finds a concrete issue, and keep the final plan simple,
+     declarative, readable, and aligned with the project goals.
+  3. Plan the technical work — architecture boundary, ordered steps, and
      test strategy. (capability: plan writing —
      `superpowers:writing-plans`)
-  3. Write or extend failing tests for the new behavior.
-  4. Implement until tests pass.
-  5. Run the full project test suite for whatever you touched.
+  4. Write or extend failing tests for the new behavior.
+  5. Implement until tests pass.
+  6. Run the full project test suite for whatever you touched.
      For this repo: `( cd server && go test ./... )`,
      `( cd cli && go test ./... )`, `( cd web && pnpm build )`.
      Lint / format as the project requires.
-  6. Stage and commit. Conventional, minimal messages.
+  7. Stage and commit. Conventional, minimal messages.
 - **Advance:** `taskline task update <id> --state review`
 - **Skip when:** never. Tests are the gate.
 
@@ -336,7 +382,8 @@ one-line message. The state machine still records what happened.
   project is empty, every non-done task is blocked, or everything
   left is parked in `pending`. Run
   `taskline task list --project <p> --state pending,start,spec,dev,review`
-  to see what's stuck and why; bump pending tasks into `start` when
-  they're ready to run.
+  to see what's stuck and why. Do not automatically move `pending`
+  tasks into `start`; promote them only when the task description,
+  dependencies, or the user makes clear that they are ready to run.
 - **The user said "remind me to X"** — that's a one-off note, not a
   task. Reply directly; don't create a taskline entry.
