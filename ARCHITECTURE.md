@@ -77,6 +77,7 @@ task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              CHECK(task_id ≠ depends_on_task_id))
 task_images (id, task_id → tasks.id, filename, mime_type,
              size_bytes, storage_path, uploaded_at)
+task_links  (id, task_id → tasks.id, url, label, created_at)
 ```
 
 All FKs `ON DELETE CASCADE`. Cascade is what makes
@@ -86,6 +87,8 @@ Indexes:
 - `idx_tasks_project_state(project_id, state)` — list-by-state filter
 - `idx_tasks_priority(project_id, priority DESC)` — runnable ordering
 - `idx_task_deps_dep(depends_on_task_id)` — reverse-dep traversal
+- `idx_task_images_task(task_id)` — task detail attachment lookup
+- `idx_task_links_task(task_id)` — task detail link lookup
 
 Schema lives twice: once at `server/migrations/0001_init.sql` (for tools
 that read the migration history) and once at
@@ -153,9 +156,9 @@ network blips.
    binary. A `.gitkeep` placeholder lets `go:embed` succeed on a fresh
    checkout where `pnpm build` hasn't run yet, and `FS()` detects the
    placeholder-only case and falls through.
-2. **External `./dev-web/`** — if a directory by that name exists next
-   to the running binary, it's served from disk. Useful for iterating on
-   the UI without rebuilding the server.
+2. **External `./dev-web/`** — if a directory by that name exists in the
+   server working directory, it's served from disk. Useful for iterating
+   on the UI without rebuilding the server.
 
 When both miss, the server runs API-only and `serveUI` returns 404.
 
@@ -188,6 +191,10 @@ auto-`MkdirAll` on first boot:
 - `TASKLINE_LISTEN` — listen addr (default `:8787`)
 - `TASKLINE_IMAGES_DIR` — image storage root (default `./data/images`)
 
+The checked-in `.env.example` intentionally points local runtime state at
+ignored `./.cache/data/...`; the defaults above are what the server uses
+when no `.env` value is present.
+
 CLI config:
 
 - `TASKLINE_SERVER` — base URL (default `http://127.0.0.1:8787`)
@@ -215,3 +222,6 @@ connection initializer.
   fallback. This is the regression net for handler ↔ service wiring.
 - **CLI**: lives in the CLI module; uses an `httptest.Server` to fake
   the backend.
+- **Web**: Vitest component tests, ESLint, and `pnpm build`.
+- **Skills**: `scripts/test-skill.sh` checks public and internal
+  `SKILL.md` frontmatter plus load-bearing section headings.

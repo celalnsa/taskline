@@ -8,17 +8,18 @@
 #   4. If the configured port is held by a LISTEN-ing process, kills *only*
 #      that process (TERM, then KILL after a short wait). Other processes
 #      with the same binary name are left alone.
-#   5. Launches ./dist/taskline-server with nohup, redirects stdout+stderr
-#      to .log/server.log, writes the PID to .log/server.pid.
+#   5. Launches ./dist/taskline-server detached from this shell, redirects
+#      stdout+stderr to .log/server.log, writes the PID to .log/server.pid.
 #
 # Knobs:
 #   PORT             — port to bind / check (default 8787). Exported to the
 #                      server as TASKLINE_LISTEN=":$PORT" if TASKLINE_LISTEN
 #                      is not already set, so port-in-use detection and the
 #                      actual listen socket stay in sync.
-#   TASKLINE_LISTEN  — full listen addr (e.g. "127.0.0.1:8787"); if set,
-#                      takes precedence over PORT for the server, and PORT
-#                      is parsed from it for the kill check.
+#   TASKLINE_LISTEN  — full listen addr (e.g. ":8787" or
+#                      "0.0.0.0:8787"); if set, takes precedence over PORT
+#                      for the server, and PORT is parsed from it for the
+#                      kill check. The default binds all interfaces.
 #   SKIP_BUILD       — if set to a non-empty value, skip ./scripts/build.sh
 #                      and require ./dist/taskline-server to already exist.
 #                      Useful for fast iteration when only restarting after
@@ -101,25 +102,49 @@ fi
 # Truncate log on each start so it doesn't grow unbounded across restarts.
 : > "$LOG_FILE"
 
-# Launch detached.
-#
-# We deliberately use plain `nohup … &` (NOT `setsid nohup … &`). When you
-# run `setsid cmd &` from a non-interactive shell, setsid forks a grandchild
-# and exits almost immediately — so `$!` would capture setsid's short-lived
-# PID, not the daemon's, and the PID file would point at a dead process.
-# `nohup` plus `disown` already makes the server survive this shell exiting.
-nohup ./dist/taskline-server >"$LOG_FILE" 2>&1 < /dev/null &
-SERVER_PID=$!
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "[start-local] python3 is required to launch a detached server" >&2
+    exit 2
+fi
 
-# Disown so this shell exiting doesn't kill the server.
-disown "$SERVER_PID" 2>/dev/null || true
+# Launch detached from this shell's process group. `nohup ... & disown` works
+# in an interactive terminal, but some agent/CI command runners clean up the
+# whole process group after the parent shell exits. Python's start_new_session
+# gives the server its own session while still returning the actual child PID.
+SERVER_PID="$(
+    python3 - "$LOG_FILE" <<'PY'
+import subprocess
+import sys
 
-# Quick liveness check: if the server died immediately (e.g. port still
-# bound, bad config), `kill -0` will fail and we surface the log tail
-# instead of writing a stale PID file.
-sleep 0.3
-if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "[start-local] server (pid $SERVER_PID) exited immediately — see $LOG_FILE:" >&2
+log = open(sys.argv[1], "ab", buffering=0)
+proc = subprocess.Popen(
+    ["./dist/taskline-server"],
+    stdin=subprocess.DEVNULL,
+    stdout=log,
+    stderr=subprocess.STDOUT,
+    start_new_session=True,
+)
+print(proc.pid)
+PY
+)"
+
+HEALTH_URL="http://127.0.0.1:${PORT}/healthz"
+READY=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+        READY=1
+        break
+    fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "[start-local] server (pid $SERVER_PID) exited before becoming healthy — see $LOG_FILE:" >&2
+        tail -n 20 "$LOG_FILE" >&2 || true
+        exit 1
+    fi
+    sleep 0.25
+done
+
+if [[ -z "$READY" ]]; then
+    echo "[start-local] server (pid $SERVER_PID) did not become healthy at $HEALTH_URL — see $LOG_FILE:" >&2
     tail -n 20 "$LOG_FILE" >&2 || true
     exit 1
 fi
