@@ -18,7 +18,12 @@ see `PRODUCT.md`.
   `server/web/dist/` so the server picks it up.
 - `skills/taskline-management/SKILL.md` — agent-facing skill that drives
   the CLI. Source of truth for "how an agent should use taskline".
+- `.agents/skills/taskline-localtest/SKILL.md` — repo-internal skill for
+  verifying changes against a rebuilt, running taskline binary.
 - `scripts/build.sh` — one-shot release build (web → server → CLI).
+- `scripts/install-local.sh` — user-local CLI install plus public skill
+  symlink refresh.
+- `scripts/test-skill.sh` — smoke tests for public and internal skill docs.
 
 ## Build, run, test
 
@@ -35,6 +40,8 @@ see `PRODUCT.md`.
 # Tests
 ( cd server && go test ./... )    # unit + e2e (boots a real server)
 ( cd cli    && go test ./... )
+( cd web    && pnpm lint && pnpm test && pnpm build )
+./scripts/test-skill.sh
 ```
 
 `scripts/start-local.sh` builds the binaries and (re)starts the server in
@@ -42,6 +49,12 @@ the background, logging to `.log/server.log` and writing the PID to
 `.log/server.pid`. It frees the configured port (default `8787`,
 override with `PORT` or `TASKLINE_LISTEN`) by killing only the LISTEN
 holder before relaunching.
+
+`scripts/install-local.sh` builds the CLI into `~/.local/bin/taskline`,
+links public skills from `skills/` into `~/.agents/skills/` and
+`~/.claude/skills/`, and removes old global symlinks that used to point
+at this checkout. Project-internal skills stay under `.agents/skills/`
+and are not installed globally.
 
 ## Module boundaries (don't break these)
 
@@ -94,9 +107,10 @@ holder before relaunching.
 - `( cd server && go test ./... )` — unit + `tests/e2e_test.go` boots a
   real server on a random port.
 - `( cd cli && go test ./... )` — covers the CLI surface.
-- For UI changes, `pnpm build` (TypeScript strict + vite). Manual
-  smoke-test in the browser if the change touches the kanban DnD or the
-  React Flow graph.
+- `./scripts/test-skill.sh` when skill docs or install behavior changes.
+- For UI changes, `( cd web && pnpm lint && pnpm test && pnpm build )`.
+  Manual smoke-test in the browser if the change touches the kanban DnD
+  or the React Flow graph.
 
 ## Don't
 

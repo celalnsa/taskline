@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -235,7 +236,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 	return t, nil
 }
 
-// GetTask returns a single task with its dependencies and images attached.
+// GetTask returns a single task with its dependencies, images, and links attached.
 func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id,project_id,title,description,type,state,priority,created_at,updated_at
@@ -263,7 +264,7 @@ type TaskFilter struct {
 }
 
 // ListTasks returns tasks for a project, optionally filtered by state.
-// Sorted by priority DESC then created_at ASC. Each task has deps + images attached.
+// Sorted by priority DESC then created_at ASC. Each task has deps, images, and links attached.
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, error) {
 	if f.ProjectID == "" {
 		return nil, errors.New("ListTasks: ProjectID required")
@@ -512,7 +513,7 @@ func (s *Store) dependsOn(ctx context.Context, start, target string) (bool, erro
 	return false, nil
 }
 
-// ─── Images ─────────────────────────────────────────────────────────────
+// ─── Links ──────────────────────────────────────────────────────────────
 
 // AddLink attaches a URL to a task. id and created_at are generated if zero.
 // Returns ErrNotFound if the task does not exist.
@@ -707,7 +708,7 @@ func isUniqueErr(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return contains(msg, "UNIQUE constraint failed") || contains(msg, "constraint failed: UNIQUE")
+	return strings.Contains(msg, "UNIQUE constraint failed") || strings.Contains(msg, "constraint failed: UNIQUE")
 }
 
 func isFKErr(err error) bool {
@@ -715,17 +716,5 @@ func isFKErr(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return contains(msg, "FOREIGN KEY constraint failed") || contains(msg, "constraint failed: FOREIGN KEY")
-}
-
-func contains(s, sub string) bool {
-	if len(sub) == 0 {
-		return true
-	}
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(msg, "FOREIGN KEY constraint failed") || strings.Contains(msg, "constraint failed: FOREIGN KEY")
 }

@@ -28,7 +28,8 @@ taskline/
 │   ├── src/{components,hooks,lib}/
 │   ├── package.json vite.config.ts
 ├── skills/taskline-management/SKILL.md   # for AI agents
-├── scripts/{build,start-local}.sh
+├── .agents/skills/taskline-localtest/SKILL.md # repo-internal agent test guide
+├── scripts/{build,start-local,install-local,test-skill}.sh
 ├── dist/                   # build output: taskline-server, taskline
 ├── .env.example            # server runtime config
 └── README.md
@@ -44,7 +45,7 @@ so deployment is one file.
 # One-shot build of everything (web → server bundle → both binaries)
 ./scripts/build.sh
 
-# Boot the server (SQLite at ./data/taskline.db, port :8787 by default)
+# Boot the server (after copying .env.example, data lives under ./.cache/data)
 cp .env.example .env       # only needed first time
 ./dist/taskline-server
 
@@ -96,14 +97,27 @@ When you want a release-style build:
 ./scripts/build.sh   # produces dist/taskline-server + dist/taskline
 ```
 
+## Local user install
+
+```bash
+./scripts/install-local.sh
+```
+
+This builds the CLI into `~/.local/bin/taskline`, links public skills
+from `skills/` into `~/.agents/skills/` and `~/.claude/skills/`, and
+keeps project-internal skills under `.agents/skills/` local to this
+checkout.
+
 ## Server config
 
-`.env` (read from CWD; process env wins):
+`.env` (read from CWD; process env wins). Built-in defaults use
+`./data/...` when no `.env` exists; the checked-in `.env.example`
+keeps local runtime files under ignored `./.cache/data/...`:
 
 ```dotenv
-TASKLINE_DB=./data/taskline.db
+TASKLINE_DB=./.cache/data/taskline.db
 TASKLINE_LISTEN=:8787
-TASKLINE_IMAGES_DIR=./data/images
+TASKLINE_IMAGES_DIR=./.cache/data/images
 ```
 
 ## CLI environment
@@ -118,6 +132,8 @@ export TASKLINE_PROJECT=demo                   # default --project for task subc
 ```bash
 ( cd server && go test ./... )    # unit + e2e (boots real server)
 ( cd cli    && go test ./... )    # CLI module
+( cd web    && pnpm lint && pnpm test && pnpm build )
+./scripts/test-skill.sh           # public + internal skill smoke tests
 ```
 
 ## Stack

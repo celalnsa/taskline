@@ -82,15 +82,13 @@ easy to fall into in this repo:
 The mechanical sequence:
 
 ```bash
-./scripts/build.sh          # rebuilds web bundle + server + CLI
-pgrep -fl taskline-server   # find the running PID
-kill <PID>                  # SIGTERM is enough; -9 only if it sticks
-sleep 2
-nohup ./dist/taskline-server > /tmp/taskline-server.log 2>&1 &
-disown
-sleep 2
+./scripts/start-local.sh    # rebuilds web bundle + server + CLI, restarts :8787
 curl -s http://127.0.0.1:8787/healthz   # expect {"ok":true}
 ```
+
+`scripts/start-local.sh` defaults to `TASKLINE_LISTEN=:8787`, which binds
+all interfaces for LAN/NetBird access. Override with `PORT=...` or
+`TASKLINE_LISTEN=0.0.0.0:<port>` when you need a different socket.
 
 Verify the new binary is the one actually listening:
 
@@ -114,10 +112,11 @@ through the actual production code path on the running server.
   call against `:8787` covering at least the modified endpoint.
 - **Migration**: read `PRAGMA user_version` against the live DB and
   confirm it matches the expected post-migration version. Use the
-  configured DB path so the example is right regardless of how the
-  developer set up `.env`:
+  configured DB path; if `TASKLINE_DB` was only set in `.env`, export it
+  for the shell first:
 
   ```bash
+  set -a; [ -f .env ] && . ./.env; set +a
   sqlite3 "${TASKLINE_DB:-./data/taskline.db}" "PRAGMA user_version;"
   ```
 
