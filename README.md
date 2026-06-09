@@ -56,6 +56,7 @@ cp .env.example .env       # only needed first time
 export TASKLINE_PROJECT=demo
 ./dist/taskline project create --name demo --description "first one"
 ./dist/taskline task create --title "first task" --type feature --priority 1
+./dist/taskline task doc create <task-id> --title Spec --file ./spec.md
 ./dist/taskline task list
 ./dist/taskline task next
 ```
@@ -70,6 +71,8 @@ Two views, switchable from the toolbar:
   `pending` is a parking lot — tasks there are not runnable, and the
   "+ New task" modal exposes an *Auto-start* toggle (on by default) to
   decide whether a new task lands in `start` or `pending`.
+  Task details include Images, Docs, Links, and Depends sections; Docs
+  are Markdown files that can be opened and edited from the task editor.
 - **Dependency graph** — every task is a node; edges follow `depends_on`.
   Change state from the dropdown on each node.
 
@@ -118,6 +121,7 @@ keeps local runtime files under ignored `./.cache/data/...`:
 TASKLINE_DB=./.cache/data/taskline.db
 TASKLINE_LISTEN=:8787
 TASKLINE_IMAGES_DIR=./.cache/data/images
+TASKLINE_DOCS_DIR=./.cache/data/docs
 ```
 
 ## CLI environment

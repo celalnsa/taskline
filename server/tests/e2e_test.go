@@ -31,7 +31,9 @@ func startServer(t *testing.T) (string, func()) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "taskline.db")
 	imagesDir := filepath.Join(tmp, "images")
+	docsDir := filepath.Join(tmp, "docs")
 	require.NoError(t, os.MkdirAll(imagesDir, 0o700))
+	require.NoError(t, os.MkdirAll(docsDir, 0o700))
 
 	st, err := store.New(dbPath)
 	require.NoError(t, err)
@@ -42,7 +44,7 @@ func startServer(t *testing.T) (string, func()) {
 	addr := ln.Addr().String()
 	require.NoError(t, ln.Close())
 
-	cfg := &config.Config{DBPath: dbPath, ListenAddr: addr, ImagesDir: imagesDir}
+	cfg := &config.Config{DBPath: dbPath, ListenAddr: addr, ImagesDir: imagesDir, DocsDir: docsDir}
 	h := handler.New(svc, cfg)
 
 	hz := server.New(server.WithHostPorts(addr))
@@ -103,6 +105,7 @@ type task struct {
 	Priority                                       int
 	DependsOn                                      []string `json:"depends_on,omitempty"`
 	Images                                         []image  `json:"images,omitempty"`
+	Docs                                           []doc    `json:"docs,omitempty"`
 }
 
 type image struct {
@@ -113,6 +116,16 @@ type image struct {
 	SizeBytes  int64  `json:"size_bytes"`
 	URL        string `json:"url"`
 	UploadedAt int64  `json:"uploaded_at"`
+}
+
+type doc struct {
+	ID        string `json:"id"`
+	TaskID    string `json:"task_id"`
+	Title     string `json:"title"`
+	URL       string `json:"url"`
+	Content   string `json:"content,omitempty"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 type taskListResp struct {
@@ -487,6 +500,92 @@ func TestTaskLinkLifecycleAtAPI(t *testing.T) {
 	// Double-delete → 404.
 	st = jsonReq(t, "DELETE", base+"/api/v1/links/"+link.ID, nil, nil)
 	require.Equal(t, http.StatusNotFound, st)
+}
+
+func TestTaskDocLifecycleAtAPI(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "docs"}, &project{})
+	var tk task
+	jsonReq(t, "POST", base+"/api/v1/projects/docs/tasks",
+		map[string]any{"title": "with docs", "type": "feature", "auto_start": true}, &tk)
+
+	var created doc
+	st := jsonReq(t, "POST", base+"/api/v1/tasks/"+tk.ID+"/docs",
+		map[string]any{"title": "Spec", "content": "# Product design"}, &created)
+	require.Equal(t, http.StatusCreated, st)
+	require.NotEmpty(t, created.ID)
+	require.Equal(t, tk.ID, created.TaskID)
+	require.Equal(t, "Spec", created.Title)
+	require.Equal(t, "# Product design", created.Content)
+	require.Equal(t, "/api/v1/docs/"+created.ID+"/content", created.URL)
+
+	st = jsonReq(t, "POST", base+"/api/v1/tasks/"+tk.ID+"/docs",
+		map[string]any{"content": "missing title"}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
+	st = jsonReq(t, "POST", base+"/api/v1/tasks/no-such/docs",
+		map[string]any{"title": "Missing task", "content": "x"}, nil)
+	require.Equal(t, http.StatusNotFound, st)
+
+	var gotTask task
+	st = jsonReq(t, "GET", base+"/api/v1/tasks/"+tk.ID, nil, &gotTask)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, gotTask.Docs, 1)
+	require.Equal(t, created.ID, gotTask.Docs[0].ID)
+	require.Equal(t, created.URL, gotTask.Docs[0].URL)
+	require.Empty(t, gotTask.Docs[0].Content)
+
+	var listed taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/docs/tasks", nil, &listed)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, listed.Tasks, 1)
+	require.Len(t, listed.Tasks[0].Docs, 1)
+	require.Equal(t, created.URL, listed.Tasks[0].Docs[0].URL)
+
+	var next nextResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/docs/tasks/next", nil, &next)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, next.Task)
+	require.Len(t, next.Task.Docs, 1)
+
+	var fetched doc
+	st = jsonReq(t, "GET", base+"/api/v1/docs/"+created.ID, nil, &fetched)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, created.ID, fetched.ID)
+	require.Equal(t, "# Product design", fetched.Content)
+
+	rawResp, err := http.Get(base + created.URL)
+	require.NoError(t, err)
+	defer rawResp.Body.Close()
+	require.Equal(t, http.StatusOK, rawResp.StatusCode)
+	require.Contains(t, rawResp.Header.Get("Content-Type"), "text/markdown")
+	rawContent, _ := io.ReadAll(rawResp.Body)
+	require.Equal(t, "# Product design", string(rawContent))
+
+	var updated doc
+	st = jsonReq(t, "PATCH", base+"/api/v1/docs/"+created.ID,
+		map[string]any{"title": "Updated Spec", "content": "# Updated"}, &updated)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, "Updated Spec", updated.Title)
+	require.Equal(t, "# Updated", updated.Content)
+
+	rawResp2, err := http.Get(base + updated.URL)
+	require.NoError(t, err)
+	defer rawResp2.Body.Close()
+	updatedRaw, _ := io.ReadAll(rawResp2.Body)
+	require.Equal(t, "# Updated", string(updatedRaw))
+
+	st = jsonReq(t, "DELETE", base+"/api/v1/docs/"+created.ID, nil, nil)
+	require.Equal(t, http.StatusOK, st)
+
+	st = jsonReq(t, "GET", base+"/api/v1/docs/"+created.ID, nil, nil)
+	require.Equal(t, http.StatusNotFound, st)
+
+	var afterDelete task
+	st = jsonReq(t, "GET", base+"/api/v1/tasks/"+tk.ID, nil, &afterDelete)
+	require.Equal(t, http.StatusOK, st)
+	require.Empty(t, afterDelete.Docs)
 }
 
 // Sanity: status code for unknown project.

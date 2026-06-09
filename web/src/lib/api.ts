@@ -50,6 +50,7 @@ export interface Task {
   priority: number;
   depends_on?: string[];
   images?: TaskImage[];
+  docs?: TaskDoc[];
   links?: TaskLink[];
   created_at: number;
   updated_at: number;
@@ -63,6 +64,16 @@ export interface TaskImage {
   size_bytes: number;
   url?: string;
   uploaded_at: number;
+}
+
+export interface TaskDoc {
+  id: string;
+  task_id: string;
+  title: string;
+  url?: string;
+  content?: string;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface TaskLink {
@@ -177,6 +188,40 @@ export function taskImageURL(imageId: string): string {
 
 export async function deleteTaskImage(imageId: string): Promise<void> {
   await request<unknown>("DELETE", taskImageURL(imageId));
+}
+
+export async function createTaskDoc(
+  taskId: string,
+  input: { title: string; content: string }
+): Promise<TaskDoc> {
+  return request<TaskDoc>(
+    "POST",
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/docs`,
+    input
+  );
+}
+
+export async function getTaskDoc(docId: string): Promise<TaskDoc> {
+  return request<TaskDoc>("GET", `/api/v1/docs/${encodeURIComponent(docId)}`);
+}
+
+export async function updateTaskDoc(
+  docId: string,
+  patch: { title?: string; content?: string }
+): Promise<TaskDoc> {
+  return request<TaskDoc>(
+    "PATCH",
+    `/api/v1/docs/${encodeURIComponent(docId)}`,
+    patch
+  );
+}
+
+export function taskDocContentURL(docId: string): string {
+  return `/api/v1/docs/${encodeURIComponent(docId)}/content`;
+}
+
+export async function deleteTaskDoc(docId: string): Promise<void> {
+  await request<unknown>("DELETE", `/api/v1/docs/${encodeURIComponent(docId)}`);
 }
 
 export async function addDependency(

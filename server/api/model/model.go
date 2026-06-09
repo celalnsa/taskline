@@ -88,6 +88,7 @@ type Task struct {
 	Priority    int       `json:"priority"`
 	DependsOn   []string  `json:"depends_on,omitempty"`
 	Images      []Image   `json:"images,omitempty"`
+	Docs        []Doc     `json:"docs,omitempty"`
 	Links       []Link    `json:"links,omitempty"`
 	CreatedAt   int64     `json:"created_at"`
 	UpdatedAt   int64     `json:"updated_at"`
@@ -101,6 +102,20 @@ type Link struct {
 	URL       string `json:"url"`
 	Label     string `json:"label"`
 	CreatedAt int64  `json:"created_at"`
+}
+
+// Doc is a Markdown document attached to a task. Task list/detail responses
+// include metadata and URL; the content field is populated only by doc-specific
+// endpoints.
+type Doc struct {
+	ID          string `json:"id"`
+	TaskID      string `json:"task_id"`
+	Title       string `json:"title"`
+	URL         string `json:"url,omitempty"`
+	Content     string `json:"content,omitempty"`
+	StoragePath string `json:"-"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
 }
 
 // Image is a binary attachment uploaded against a task.

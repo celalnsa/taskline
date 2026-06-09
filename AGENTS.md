@@ -93,6 +93,10 @@ and are not installed globally.
   don't `fmt.Println` JSON yourself.
 - **Time.** Server-side timestamps are `time.Now().UnixMilli()` (int64).
   Don't introduce a different time format.
+- **Task docs.** Markdown task docs live on disk under `TASKLINE_DOCS_DIR`
+  and are referenced by `task_docs.storage_path`. Keep file IO in the
+  handler/config boundary; the store should only persist metadata and
+  attach doc rows to task reads.
 
 ## Frontend ↔ backend contract
 
@@ -131,7 +135,7 @@ and are not installed globally.
 | ----------------------------- | ---------------------------------------------------- |
 | New REST endpoint             | `server/api/handler/handler.go` + service method     |
 | New persisted field           | migration in `server/migrations/` + matching schema in `server/internal/store/schema/` + `model.Task`/`Project` |
-| New persisted resource        | as above, plus an `attach<Foo>` helper in `store.go` so `GetTask`/`ListTasks` surface it inline (see `task_links`) |
+| New persisted resource        | as above, plus an `attach<Foo>` helper in `store.go` so `GetTask`/`ListTasks` surface it inline (see `task_links` / `task_docs`) |
 | New CLI subcommand            | new file under `cli/cmd/`, register in `init()`      |
 | New web view                  | `web/src/components/` (page-level lives in `App.tsx`)|
 | Change the agent contract     | `skills/taskline-management/SKILL.md` first, then code |

@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 	Short: "taskline CLI — agent-friendly task / kanban management",
 	Long: `Command-line client for taskline-server.
 
-Manage projects, tasks, dependencies, and image attachments. Designed to be
+Manage projects, tasks, dependencies, docs, and image attachments. Designed to be
 driven primarily by AI agents — output defaults to JSON when not attached to
 a TTY, exit codes are stable, stderr is reserved for diagnostics.
 
@@ -39,7 +39,8 @@ Examples:
   taskline task list --project demo --state start,dev,test
   taskline task next --project demo
   taskline task update <id> --state review
-  taskline task depend <id> --on <other-id>`,
+  taskline task depend <id> --on <other-id>
+  taskline task doc create <id> --title Spec --file ./spec.md`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

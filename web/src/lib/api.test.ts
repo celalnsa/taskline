@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createTaskDoc,
+  deleteTaskDoc,
   deleteTaskImage,
+  getTaskDoc,
   STATE_LABELS,
   STATES,
+  taskDocContentURL,
   taskImageURL,
+  updateTaskDoc,
   uploadTaskImage,
+  type TaskDoc,
   type TaskImage,
 } from "./api";
 
@@ -78,5 +84,80 @@ describe("task image content helpers", () => {
       "/api/v1/images/image%2Fone",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+describe("task docs helpers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("creates a markdown doc with JSON content", async () => {
+    const created: TaskDoc = {
+      id: "doc-1",
+      task_id: "task/one",
+      title: "Spec",
+      url: "/api/v1/docs/doc-1/content",
+      content: "# Spec",
+      created_at: 1780051741142,
+      updated_at: 1780051741142,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(created), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createTaskDoc("task/one", { title: "Spec", content: "# Spec" });
+
+    expect(result).toEqual(created);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task%2Fone/docs",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "Spec", content: "# Spec" }),
+      })
+    );
+  });
+
+  it("gets, updates, deletes, and builds raw content URLs for docs", async () => {
+    const doc: TaskDoc = {
+      id: "doc/one",
+      task_id: "task-1",
+      title: "Test report",
+      url: "/api/v1/docs/doc%2Fone/content",
+      content: "# Tests",
+      created_at: 1780051741142,
+      updated_at: 1780051741143,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(doc), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...doc, title: "Updated" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(taskDocContentURL("doc/one")).toBe("/api/v1/docs/doc%2Fone/content");
+    expect(await getTaskDoc("doc/one")).toEqual(doc);
+    await updateTaskDoc("doc/one", { title: "Updated", content: "# Tests" });
+    await deleteTaskDoc("doc/one");
+
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ["/api/v1/docs/doc%2Fone", "GET"],
+      ["/api/v1/docs/doc%2Fone", "PATCH"],
+      ["/api/v1/docs/doc%2Fone", "DELETE"],
+    ]);
   });
 });

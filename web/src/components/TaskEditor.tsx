@@ -10,13 +10,14 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from "react";
-import { FileCode2, ImagePlus, Trash2, X } from "lucide-react";
+import { FileCode2, FileText, ImagePlus, Plus, Trash2, X } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
   taskImageURL,
   type Project,
   type Task,
+  type TaskDoc,
   type TaskImage,
   type TaskLink,
   type TaskState,
@@ -26,9 +27,13 @@ import {
   useAddDependency,
   useAddLink,
   useCreateTask,
+  useCreateDoc,
   useDeleteDependency,
+  useDeleteDoc,
   useDeleteImage,
   useDeleteLink,
+  useGetDoc,
+  useUpdateDoc,
   useUpdateTask,
   useUploadImage,
 } from "../hooks/queries";
@@ -36,6 +41,12 @@ import {
 const MarkdownDescriptionDialog = lazy(() =>
   import("./MarkdownDescriptionDialog").then((module) => ({
     default: module.MarkdownDescriptionDialog,
+  }))
+);
+
+const MarkdownDocumentDialog = lazy(() =>
+  import("./MarkdownDocumentDialog").then((module) => ({
+    default: module.MarkdownDocumentDialog,
   }))
 );
 
@@ -61,6 +72,7 @@ function createEmptyTask(projectId: string): Task {
     depends_on: [],
     links: [],
     images: [],
+    docs: [],
   };
 }
 
@@ -332,6 +344,8 @@ export function TaskEditor({
             setPendingImages={isCreate ? setPendingImages : undefined}
           />
 
+          <DocSection project={project} task={currentTask} disabled={isCreate || !currentTask.id} />
+
           <LinkSection
             project={project}
             task={currentTask}
@@ -394,6 +408,13 @@ export function TaskEditor({
     </div>
   );
 }
+
+type DocDialogState = {
+  mode: "create" | "edit";
+  id?: string;
+  title: string;
+  content: string;
+};
 
 function ImageSection({
   project,
@@ -714,6 +735,163 @@ function ImageSection({
             />
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function DocSection({
+  project,
+  task,
+  disabled = false,
+}: {
+  project: Project;
+  task: Task;
+  disabled?: boolean;
+}) {
+  const [docs, setDocs] = useState<TaskDoc[]>(task.docs ?? []);
+  const [dialog, setDialog] = useState<DocDialogState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const createDoc = useCreateDoc(project.id);
+  const getDoc = useGetDoc();
+  const updateDoc = useUpdateDoc(project.id);
+  const deleteDoc = useDeleteDoc(project.id);
+  const isSaving = createDoc.isPending || updateDoc.isPending;
+
+  useEffect(() => {
+    setDocs(task.docs ?? []);
+  }, [task.id, task.docs]);
+
+  const openDoc = async (doc: TaskDoc) => {
+    if (disabled) return;
+    try {
+      const fetched = await getDoc.mutateAsync(doc.id);
+      setDialog({
+        mode: "edit",
+        id: fetched.id,
+        title: fetched.title,
+        content: fetched.content ?? "",
+      });
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const saveDialog = async () => {
+    if (!dialog || isSaving) return;
+    const title = dialog.title.trim();
+    if (!title) return;
+    try {
+      if (dialog.mode === "create") {
+        const created = await createDoc.mutateAsync({
+          taskId: task.id,
+          title,
+          content: dialog.content,
+        });
+        setDocs((current) =>
+          current.some((item) => item.id === created.id) ? current : [...current, created]
+        );
+      } else if (dialog.id) {
+        const updated = await updateDoc.mutateAsync({
+          docId: dialog.id,
+          patch: { title, content: dialog.content },
+        });
+        setDocs((current) =>
+          current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+        );
+      }
+      setDialog(null);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const removeDoc = async (doc: TaskDoc) => {
+    try {
+      await deleteDoc.mutateAsync(doc.id);
+      setDocs((current) => current.filter((item) => item.id !== doc.id));
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <div className="border-t pt-3 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-slate-500">Docs</p>
+        {!disabled && (
+          <button
+            type="button"
+            aria-label="Add doc"
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            disabled={createDoc.isPending}
+            onClick={() => setDialog({ mode: "create", title: "", content: "" })}
+          >
+            <Plus size={14} aria-hidden="true" />
+            <span>Add doc</span>
+          </button>
+        )}
+      </div>
+      {disabled ? (
+        <p className="text-xs text-slate-400">Create the task before adding docs.</p>
+      ) : docs.length > 0 ? (
+        <ul className="space-y-1">
+          {docs.map((doc) => (
+            <li
+              key={doc.id}
+              className="text-xs flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1 group"
+            >
+              <button
+                type="button"
+                aria-label={`Open doc ${doc.title}`}
+                className="flex flex-1 min-w-0 items-center gap-2 text-left"
+                onClick={() => void openDoc(doc)}
+              >
+                <FileText size={14} aria-hidden="true" className="text-slate-400 shrink-0" />
+                <span className="font-medium text-slate-700 truncate flex-1 min-w-0">
+                  {doc.title}
+                </span>
+                <span className="text-slate-400 shrink-0">Markdown</span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete doc ${doc.title}`}
+                className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center disabled:opacity-50"
+                disabled={deleteDoc.isPending}
+                onClick={() => void removeDoc(doc)}
+              >
+                <Trash2 size={12} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-slate-400">No docs attached.</p>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {dialog && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 bg-black/40 p-5 flex items-center justify-center text-sm text-white">
+              Loading editor...
+            </div>
+          }
+        >
+          <MarkdownDocumentDialog
+            title={dialog.title}
+            content={dialog.content}
+            isSaving={isSaving}
+            onTitleChange={(title) => setDialog((current) => current && { ...current, title })}
+            onContentChange={(content) =>
+              setDialog((current) => current && { ...current, content })
+            }
+            onClose={() => setDialog(null)}
+            onSave={saveDialog}
+          />
+        </Suspense>
       )}
     </div>
   );

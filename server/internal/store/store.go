@@ -34,6 +34,9 @@ var schemaDesignToSpec string
 //go:embed schema/0006_add_test_state.sql
 var schemaAddTestState string
 
+//go:embed schema/0007_task_docs.sql
+var schemaTaskDocs string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -52,6 +55,7 @@ var schemaMigrations = []migration{
 	{version: 4, sql: schemaTaskLinks},
 	{version: 5, sql: schemaDesignToSpec},
 	{version: 6, sql: schemaAddTestState},
+	{version: 7, sql: schemaTaskDocs},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -240,7 +244,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 	return t, nil
 }
 
-// GetTask returns a single task with its dependencies, images, and links attached.
+// GetTask returns a single task with its dependencies and attachments.
 func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id,project_id,title,description,type,state,priority,created_at,updated_at
@@ -253,6 +257,9 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 		return nil, err
 	}
 	if err := s.attachImages(ctx, t); err != nil {
+		return nil, err
+	}
+	if err := s.attachDocs(ctx, t); err != nil {
 		return nil, err
 	}
 	if err := s.attachLinks(ctx, t); err != nil {
@@ -268,7 +275,7 @@ type TaskFilter struct {
 }
 
 // ListTasks returns tasks for a project, optionally filtered by state.
-// Sorted by priority DESC then created_at ASC. Each task has deps, images, and links attached.
+// Sorted by priority DESC then created_at ASC. Each task has deps and attachments.
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, error) {
 	if f.ProjectID == "" {
 		return nil, errors.New("ListTasks: ProjectID required")
@@ -310,6 +317,9 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 			return nil, err
 		}
 		if err := s.attachImages(ctx, t); err != nil {
+			return nil, err
+		}
+		if err := s.attachDocs(ctx, t); err != nil {
 			return nil, err
 		}
 		if err := s.attachLinks(ctx, t); err != nil {
@@ -355,6 +365,9 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*mod
 			return nil, err
 		}
 		if err := s.attachImages(ctx, t); err != nil {
+			return nil, err
+		}
+		if err := s.attachDocs(ctx, t); err != nil {
 			return nil, err
 		}
 		if err := s.attachLinks(ctx, t); err != nil {
@@ -412,7 +425,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	return cur, nil
 }
 
-// DeleteTask removes a task (cascades to deps and images via FK).
+// DeleteTask removes a task (cascades to deps and attachment rows via FK).
 func (s *Store) DeleteTask(ctx context.Context, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = ?`, id)
 	if err != nil {
@@ -568,6 +581,84 @@ func (s *Store) DeleteLink(ctx context.Context, id string) error {
 	return nil
 }
 
+// ─── Docs ───────────────────────────────────────────────────────────────
+
+// DocUpdate carries optional document metadata updates. File content lives on
+// disk and is written by the handler; the store only bumps the metadata clock.
+type DocUpdate struct {
+	Title *string
+}
+
+// AddDoc records a stored markdown document for a task.
+func (s *Store) AddDoc(ctx context.Context, doc *model.Doc) error {
+	if doc.ID == "" {
+		doc.ID = newID()
+	}
+	if doc.CreatedAt == 0 {
+		doc.CreatedAt = now()
+	}
+	if doc.UpdatedAt == 0 {
+		doc.UpdatedAt = doc.CreatedAt
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO task_docs(id,task_id,title,storage_path,created_at,updated_at)
+		      VALUES(?,?,?,?,?,?)`,
+		doc.ID, doc.TaskID, doc.Title, doc.StoragePath, doc.CreatedAt, doc.UpdatedAt,
+	)
+	if err != nil {
+		if isFKErr(err) {
+			return fmt.Errorf("%w: task %s does not exist", ErrNotFound, doc.TaskID)
+		}
+		return err
+	}
+	return nil
+}
+
+// GetDoc returns a stored document by id.
+func (s *Store) GetDoc(ctx context.Context, id string) (*model.Doc, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id,task_id,title,storage_path,created_at,updated_at
+		   FROM task_docs WHERE id = ?`, id)
+	return scanDoc(row)
+}
+
+// UpdateDoc updates document metadata and bumps updated_at.
+func (s *Store) UpdateDoc(ctx context.Context, id string, u DocUpdate) (*model.Doc, error) {
+	cur, err := s.GetDoc(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if u.Title != nil {
+		cur.Title = *u.Title
+	}
+	cur.UpdatedAt = now()
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE task_docs SET title=?, updated_at=? WHERE id=?`,
+		cur.Title, cur.UpdatedAt, cur.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return cur, nil
+}
+
+// DeleteDoc removes a single document row and returns the removed metadata.
+func (s *Store) DeleteDoc(ctx context.Context, id string) (*model.Doc, error) {
+	doc, err := s.GetDoc(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.db.ExecContext(ctx, `DELETE FROM task_docs WHERE id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	return doc, nil
+}
+
 // AddImage records a stored image attachment for a task.
 func (s *Store) AddImage(ctx context.Context, img *model.Image) error {
 	if img.ID == "" {
@@ -654,6 +745,17 @@ func scanImage(r rowScanner) (*model.Image, error) {
 	return &img, nil
 }
 
+func scanDoc(r rowScanner) (*model.Doc, error) {
+	var doc model.Doc
+	if err := r.Scan(&doc.ID, &doc.TaskID, &doc.Title, &doc.StoragePath, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
 func (s *Store) attachDeps(ctx context.Context, t *model.Task) error {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT depends_on_task_id FROM task_deps WHERE task_id = ? ORDER BY created_at ASC`, t.ID)
@@ -685,6 +787,24 @@ func (s *Store) attachLinks(ctx context.Context, t *model.Task) error {
 			return err
 		}
 		t.Links = append(t.Links, l)
+	}
+	return rows.Err()
+}
+
+func (s *Store) attachDocs(ctx context.Context, t *model.Task) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,task_id,title,storage_path,created_at,updated_at
+		   FROM task_docs WHERE task_id = ? ORDER BY created_at ASC`, t.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		doc, err := scanDoc(rows)
+		if err != nil {
+			return err
+		}
+		t.Docs = append(t.Docs, *doc)
 	}
 	return rows.Err()
 }

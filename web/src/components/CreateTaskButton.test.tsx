@@ -71,6 +71,7 @@ describe("CreateTaskButton", () => {
     expect(screen.getByRole("heading", { name: /new task in taskline/i })).toBeTruthy();
     expect(screen.getByLabelText("Description")).toBeTruthy();
     expect(screen.getByText("Images")).toBeTruthy();
+    expect(screen.getByText("Docs")).toBeTruthy();
     expect(screen.getByText("Links")).toBeTruthy();
     expect(screen.getByText("Depends")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^delete$/i })).toBeNull();

@@ -26,8 +26,15 @@ func init() {
 		taskDependCmd,
 		taskUndependCmd,
 		taskUploadCmd,
+		taskDocCmd,
 		taskLinkCmd,
 		taskUnlinkCmd,
+	)
+	taskDocCmd.AddCommand(
+		taskDocCreateCmd,
+		taskDocGetCmd,
+		taskDocUpdateCmd,
+		taskDocDeleteCmd,
 	)
 
 	// Common --project flag (shared semantics across subcommands).
@@ -59,6 +66,14 @@ func init() {
 
 	taskUploadCmd.Flags().String("file", "", "local file path to upload (required)")
 	_ = taskUploadCmd.MarkFlagRequired("file")
+
+	taskDocCreateCmd.Flags().String("title", "", "document title (required)")
+	taskDocCreateCmd.Flags().String("file", "", "markdown file path to upload (required)")
+	_ = taskDocCreateCmd.MarkFlagRequired("title")
+	_ = taskDocCreateCmd.MarkFlagRequired("file")
+
+	taskDocUpdateCmd.Flags().String("title", "", "new document title")
+	taskDocUpdateCmd.Flags().String("file", "", "markdown file path with replacement content")
 
 	taskLinkCmd.Flags().String("url", "", "URL to attach (required)")
 	taskLinkCmd.Flags().String("label", "", "optional display label for the link")
@@ -263,6 +278,98 @@ var taskUploadCmd = &cobra.Command{
 	},
 }
 
+var taskDocCmd = &cobra.Command{
+	Use:   "doc",
+	Short: "Manage markdown docs attached to tasks",
+}
+
+var taskDocCreateCmd = &cobra.Command{
+	Use:   "create <task-id>",
+	Short: "Attach a markdown document to a task",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		title, _ := cmd.Flags().GetString("title")
+		filePath, _ := cmd.Flags().GetString("file")
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+		c := newClient()
+		doc, err := c.CreateDoc(args[0], client.CreateDocInput{
+			Title:   title,
+			Content: string(content),
+		})
+		if err != nil {
+			return err
+		}
+		return output.Render(os.Stdout, output.Resolve(formatFlag), doc, func(w io.Writer) {
+			renderDocTable(w, []client.Doc{*doc})
+		})
+	},
+}
+
+var taskDocGetCmd = &cobra.Command{
+	Use:   "get <doc-id>",
+	Short: "Fetch a markdown document by id",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClient()
+		doc, err := c.GetDoc(args[0])
+		if err != nil {
+			return err
+		}
+		return output.Render(os.Stdout, output.Resolve(formatFlag), doc, func(w io.Writer) {
+			renderDocTable(w, []client.Doc{*doc})
+		})
+	},
+}
+
+var taskDocUpdateCmd = &cobra.Command{
+	Use:   "update <doc-id>",
+	Short: "Update a markdown document title and/or content",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		in := client.UpdateDocInput{}
+		if cmd.Flags().Changed("title") {
+			v, _ := cmd.Flags().GetString("title")
+			in.Title = &v
+		}
+		if cmd.Flags().Changed("file") {
+			filePath, _ := cmd.Flags().GetString("file")
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				return err
+			}
+			v := string(content)
+			in.Content = &v
+		}
+		if in.Title == nil && in.Content == nil {
+			return errors.New("at least one of --title or --file is required")
+		}
+		c := newClient()
+		doc, err := c.UpdateDoc(args[0], in)
+		if err != nil {
+			return err
+		}
+		return output.Render(os.Stdout, output.Resolve(formatFlag), doc, func(w io.Writer) {
+			renderDocTable(w, []client.Doc{*doc})
+		})
+	},
+}
+
+var taskDocDeleteCmd = &cobra.Command{
+	Use:   "delete <doc-id>",
+	Short: "Remove a markdown document by id",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClient()
+		if err := c.DeleteDoc(args[0]); err != nil {
+			return err
+		}
+		return output.JSON(os.Stdout, map[string]any{"deleted": true, "id": args[0]})
+	},
+}
+
 var taskLinkCmd = &cobra.Command{
 	Use:   "link <task-id>",
 	Short: "Attach a URL (spec doc, PR, technical note…) to a task",
@@ -306,6 +413,16 @@ func renderTaskTable(w io.Writer, ts []client.Task) {
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n",
 			shortID(t.ID), t.State, t.Type, t.Priority, trimRune(t.Title, 50), deps)
+	}
+	tw.Flush()
+}
+
+func renderDocTable(w io.Writer, docs []client.Doc) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tTASK\tTITLE\tURL")
+	for _, doc := range docs {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+			shortID(doc.ID), shortID(doc.TaskID), trimRune(doc.Title, 50), doc.URL)
 	}
 	tw.Flush()
 }

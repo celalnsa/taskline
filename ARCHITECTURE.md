@@ -21,13 +21,15 @@ build/test/contribution mechanics see `AGENTS.md`.
                                                        ┌──────────────────┐
                                                        │  ./data/         │
                                                        │   ├ taskline.db  │
-                                                       │   └ images/<id>/ │
+                                                       │   ├ images/<id>/ │
+                                                       │   └ docs/<id>/   │
                                                        └──────────────────┘
 ```
 
 One binary (`taskline-server`) serves both the REST API and the React
 SPA. SQLite is one file on disk; image attachments live alongside it as
-plain files keyed by task id.
+plain files keyed by task id; task docs are Markdown files stored in the
+configured docs directory with only file references kept in SQLite.
 
 ## Server layering
 
@@ -52,7 +54,7 @@ graph:
 ```
 
 `internal/config/` is a sibling of service/store: it's loaded by `cmd/`
-once and passed through to the handler (for `ImagesDir`).
+once and passed through to the handler (for `ImagesDir` and `DocsDir`).
 
 ### Why the split
 
@@ -77,6 +79,8 @@ task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              CHECK(task_id ≠ depends_on_task_id))
 task_images (id, task_id → tasks.id, filename, mime_type,
              size_bytes, storage_path, uploaded_at)
+task_docs   (id, task_id → tasks.id, title, storage_path,
+             created_at, updated_at)
 task_links  (id, task_id → tasks.id, url, label, created_at)
 ```
 
@@ -88,6 +92,7 @@ Indexes:
 - `idx_tasks_priority(project_id, priority DESC)` — runnable ordering
 - `idx_task_deps_dep(depends_on_task_id)` — reverse-dep traversal
 - `idx_task_images_task(task_id)` — task detail attachment lookup
+- `idx_task_docs_task(task_id)` — task detail doc lookup
 - `idx_task_links_task(task_id)` — task detail link lookup
 
 Schema lives twice: once at `server/migrations/0001_init.sql` (for tools
@@ -193,6 +198,7 @@ auto-`MkdirAll` on first boot:
 - `TASKLINE_DB` — SQLite file (default `./data/taskline.db`)
 - `TASKLINE_LISTEN` — listen addr (default `:8787`)
 - `TASKLINE_IMAGES_DIR` — image storage root (default `./data/images`)
+- `TASKLINE_DOCS_DIR` — markdown doc storage root (default `./data/docs`)
 
 The checked-in `.env.example` intentionally points local runtime state at
 ignored `./.cache/data/...`; the defaults above are what the server uses

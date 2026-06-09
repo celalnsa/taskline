@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.7.0
+version: 0.8.0
 ---
 
 # taskline — task management for AI agents
@@ -95,6 +95,7 @@ focused on a single project.
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
+| `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |
 
 **State machine.** Any state may transition to any other named state.
 Forward jumps (`start` → `done`) and drop-backs (`review` → `dev`
@@ -153,7 +154,7 @@ taskline task get <id>
 # Mutate (PATCH semantics — only pass the flags you want changed)
 taskline task update <id> --state test
 taskline task update <id> --priority 5 --description "new prose"
-taskline task delete <id>                    # cascades deps + images
+taskline task delete <id>                    # cascades deps + attachments
 
 # Dependencies
 taskline task depend <id> --on <other-id>
@@ -162,7 +163,13 @@ taskline task undepend <id> --on <other-id>
 # Image attachment (any binary)
 taskline task upload <id> --file ./screenshot.png
 
-# Link (spec doc, PR, technical note — any URL the task should remember)
+# Markdown docs (stage deliverables, notes, reports)
+taskline task doc create <task-id> --title "Spec" --file ./spec.md
+taskline task doc get <doc-id>
+taskline task doc update <doc-id> --title "Test Report" --file ./test-report.md
+taskline task doc delete <doc-id>
+
+# Link (PR, external design doc, ticket, merged commit — any URL to remember)
 taskline task link <task-id> --url https://example.com/pr/42 --label "PR #42"
 
 # Remove a link by its id (links are returned inline on `task get`)
@@ -172,24 +179,41 @@ taskline task unlink <link-id>
 Delete returns `{"deleted": true, "id": ...}`; depend returns
 `{"task_id": ..., "depends_on": [...]}`. Pipe to `jq` freely.
 
-### Linking artifacts to a task
+### Task docs and links
 
-As you walk a task through the playbook you'll generate things
-that belong with it — a spec doc, a technical-plan note, the PR URL,
-the merged commit, a Slack thread. Attach them with
-`taskline task link <task-id> --url … --label …` instead of leaving
-them buried in chat history.
+As you walk a task through the playbook you'll generate artifacts that
+belong with it. Use task docs for Markdown content owned by the task
+itself, and links for external URLs such as PRs, commits, design tools,
+or chat threads. Do not keep stage deliverables only in chat history.
+
+Task docs are first-class Markdown files. They surface inline on
+`task get` with `url` fields under `/api/v1/docs/<doc-id>/content`;
+fetch full editable content with `taskline task doc get <doc-id>`.
+Create or update the stage doc before advancing out of the matching
+stage:
+
+- **spec → dev:** `Spec` doc with product design, technical design
+  (IDL/API definitions and implementation plan), and test plan/test
+  cases. If a Superpowers plan already exists, upload that content as
+  the task doc.
+- **dev → test:** `Dev Notes` doc summarizing implementation, issues
+  encountered, and any divergence from the spec/technical design.
+- **test → review:** `Test Report` doc reviewing test cases, module
+  tests, real e2e/API/CLI/browser/device checks, agent evaluation,
+  pass rate, failures, and whether failures require returning to dev.
+- **review → done:** `Review Report` doc covering PR comments, CI
+  status, whether the implementation still matches the original design,
+  and any justified design updates.
 
 Recommended moments to call it:
 
-- **spec**: a written product spec / interaction note URL ("Spec").
-- **dev**: a technical approach note if the work needs one ("Tech Plan").
-- **test → review**: the PR URL just after `gh pr create` ("PR #N").
+- **spec/dev/test/review**: create or update the matching Markdown doc.
+- **test → review**: link the PR URL just after `gh pr create` ("PR #N").
 - **review → done**: the merged-commit URL or anything a future
   reader would want to reach for ("merge", "post-mortem").
 
-Links surface inline on `task get` and in the web detail view.
-There is no limit on how many links a task can hold; favour
+Docs and links surface inline on `task get` and in the web detail view.
+There is no limit on how many docs or links a task can hold; favour
 adding too many over too few — they're cheap to remove later.
 
 ## Stage playbook — "work the queue"
@@ -203,10 +227,10 @@ more instructions:
    top-level fields) on success, or the literal `null` when nothing is
    runnable. If you see `null`, report there's nothing runnable and
    stop.
-3. Read `title`, `description`, and any `images` (each image includes
-   a `url` under `/api/v1/images/<image-id>` that can be opened from the
-   configured taskline server — surface it in your reply if it's
-   material to the task).
+3. Read `title`, `description`, any `docs`, and any `images`. Each doc
+   includes a raw Markdown `url` under `/api/v1/docs/<doc-id>/content`;
+   each image includes a `url` under `/api/v1/images/<image-id>`. Fetch
+   and surface them when they are material to the task.
 4. Walk the task through the stages below in order. Each stage has the
    same shape: **Trigger** (what just happened) → **Actions** (do
    these now) → **Advance** (literal CLI command to move state) →
@@ -240,8 +264,11 @@ installed.
      interaction behavior, and acceptance criteria. Do not ask the user
      for routine design approval; ask only when missing information
      makes safe implementation impossible.
-  2. Capture that contract in the task description or a linked spec note
-     so dev has a product target.
+  2. Capture that contract in a `Spec` task doc before advancing. The
+     doc must include product design, technical design (IDL/API
+     definitions and implementation plan), and test plan/test cases.
+     If you already wrote a Superpowers plan, upload that content as the
+     doc rather than duplicating it in the task description.
 - **Advance:** `taskline task update <id> --state dev`
 - **Skip when:** the change is mechanical (rename, formatting,
   one-line config) — go straight to dev.
@@ -286,6 +313,9 @@ task description or implementation notes, then continue.
   4. Write or extend failing tests for the new behavior.
   5. Implement until the focused tests pass and the behavior is ready
      for full local verification.
+  6. Create or update a `Dev Notes` task doc summarizing the
+     implementation, issues encountered, and any divergence from the
+     `Spec` doc with the reason.
 - **Advance:** `taskline task update <id> --state test`
 - **Skip when:** never. Implementation must be ready for local
   verification before review begins.
@@ -309,10 +339,13 @@ task description or implementation notes, then continue.
      (capability: code review — `code-review:code-review`)
   5. Fix anything the review or tests surface; re-run the relevant
      tests after each fix.
-  6. Stage and commit. Conventional, minimal messages.
-  7. `git push -u origin <branch>`.
-  8. `gh pr create` with title, summary, and a test plan.
-  9. Attach the PR URL to the task:
+  6. Create or update a `Test Report` task doc with reviewed test
+     cases, commands/checks run, pass rate, failures, and whether any
+     failures require dropping back to `dev`.
+  7. Stage and commit. Conventional, minimal messages.
+  8. `git push -u origin <branch>`.
+  9. `gh pr create` with title, summary, and a test plan.
+  10. Attach the PR URL to the task:
      `taskline task link <task-id> --url <pr-url> --label "PR #N"`
      so anyone reading the task later can jump straight to the
      review.
@@ -346,6 +379,10 @@ task description or implementation notes, then continue.
      Address each finding; for real defects, drop the task back to
      `dev`, re-run tests after each batch, and push. If a comment is
      wrong, **reply with reasoning** rather than silently ignoring it.
+  4. Create or update a `Review Report` task doc covering PR comments,
+     CI status, and whether the implementation still matches the
+     original design. If not, either update the design doc with the
+     justified change or drop back to `dev` for rework.
 - **Advance:** `taskline task update <id> --state done` *only after*
   (a) CI green or N/A, (b) at least one review posted, and
   (c) every reviewer comment addressed or rebutted.

@@ -63,9 +63,14 @@ func (h *Handler) Register(s *server.Hertz) {
 	v1.POST("/tasks/:id/deps", h.addDependency)
 	v1.DELETE("/tasks/:id/deps/:dependsOn", h.deleteDependency)
 	v1.POST("/tasks/:id/images", h.uploadImage)
+	v1.POST("/tasks/:id/docs", h.createDoc)
 	v1.POST("/tasks/:id/links", h.addLink)
 	v1.GET("/images/:id", h.getImage)
+	v1.GET("/docs/:id", h.getDoc)
+	v1.GET("/docs/:id/content", h.getDocContent)
+	v1.PATCH("/docs/:id", h.updateDoc)
 	v1.DELETE("/images/:id", h.deleteImage)
+	v1.DELETE("/docs/:id", h.deleteDoc)
 	v1.DELETE("/links/:id", h.deleteLink)
 
 	// Mount the bundled UI last so /api/* and /healthz keep their handlers.
@@ -202,6 +207,7 @@ func (h *Handler) listTasks(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	h.attachTaskImageURLs(ts...)
+	h.attachTaskDocURLs(ts...)
 	writeJSON(c, http.StatusOK, map[string]any{"tasks": ts})
 }
 
@@ -213,6 +219,7 @@ func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) 
 		return
 	}
 	h.attachTaskImageURLs(ts...)
+	h.attachTaskDocURLs(ts...)
 	writeJSON(c, http.StatusOK, map[string]any{"tasks": ts})
 }
 
@@ -228,6 +235,7 @@ func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	h.attachTaskImageURLs(t)
+	h.attachTaskDocURLs(t)
 	writeJSON(c, http.StatusOK, map[string]any{"task": t})
 }
 
@@ -239,6 +247,7 @@ func (h *Handler) getTask(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	h.attachTaskImageURLs(t)
+	h.attachTaskDocURLs(t)
 	writeJSON(c, http.StatusOK, t)
 }
 
@@ -281,6 +290,7 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	h.attachTaskImageURLs(t)
+	h.attachTaskDocURLs(t)
 	writeJSON(c, http.StatusOK, t)
 }
 
@@ -354,6 +364,144 @@ func (h *Handler) deleteLink(ctx context.Context, c *app.RequestContext) {
 	if err := h.svc.DeleteLink(ctx, id); err != nil {
 		writeServiceError(c, err)
 		return
+	}
+	writeJSON(c, http.StatusOK, map[string]any{"deleted": true, "id": id})
+}
+
+type createDocReq struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func (h *Handler) createDoc(ctx context.Context, c *app.RequestContext) {
+	taskID := c.Param("id")
+	if _, err := h.svc.GetTask(ctx, taskID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	var req createDocReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		writeError(c, http.StatusBadRequest, errors.New("doc title required"))
+		return
+	}
+	doc, err := h.saveDoc(taskID, req.Title, req.Content)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	if err := h.svc.AddDoc(ctx, doc); err != nil {
+		_ = os.Remove(doc.StoragePath)
+		writeServiceError(c, err)
+		return
+	}
+	doc.Content = req.Content
+	h.attachDocURL(doc)
+	writeJSON(c, http.StatusCreated, doc)
+}
+
+func (h *Handler) getDoc(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	doc, err := h.svc.GetDoc(ctx, id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	content, err := h.readDocContent(doc)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	doc.Content = string(content)
+	h.attachDocURL(doc)
+	writeJSON(c, http.StatusOK, doc)
+}
+
+func (h *Handler) getDocContent(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	doc, err := h.svc.GetDoc(ctx, id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if _, err := os.Stat(doc.StoragePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeServiceError(c, fmt.Errorf("%w: doc file missing", store.ErrNotFound))
+			return
+		}
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.SetStatusCode(http.StatusOK)
+	c.Response.Header.Set("Content-Type", "text/markdown; charset=utf-8")
+	c.Response.Header.Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+		"filename": doc.ID + ".md",
+	}))
+	c.File(doc.StoragePath)
+}
+
+type updateDocReq struct {
+	Title   *string `json:"title,omitempty"`
+	Content *string `json:"content,omitempty"`
+}
+
+func (h *Handler) updateDoc(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	doc, err := h.svc.GetDoc(ctx, id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	var req updateDocReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	u := store.DocUpdate{}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			writeError(c, http.StatusBadRequest, errors.New("doc title required"))
+			return
+		}
+		u.Title = &title
+	}
+	if req.Content != nil {
+		if err := os.WriteFile(doc.StoragePath, []byte(*req.Content), 0o600); err != nil {
+			writeError(c, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	updated, err := h.svc.UpdateDoc(ctx, id, u)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if req.Content != nil {
+		updated.Content = *req.Content
+	} else if content, err := h.readDocContent(updated); err != nil {
+		writeServiceError(c, err)
+		return
+	} else {
+		updated.Content = string(content)
+	}
+	h.attachDocURL(updated)
+	writeJSON(c, http.StatusOK, updated)
+}
+
+func (h *Handler) deleteDoc(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	doc, err := h.svc.DeleteDoc(ctx, id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if doc.StoragePath != "" {
+		_ = os.Remove(doc.StoragePath)
 	}
 	writeJSON(c, http.StatusOK, map[string]any{"deleted": true, "id": id})
 }
@@ -445,11 +593,29 @@ func (h *Handler) attachTaskImageURLs(tasks ...*model.Task) {
 	}
 }
 
+func (h *Handler) attachTaskDocURLs(tasks ...*model.Task) {
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		for i := range task.Docs {
+			h.attachDocURL(&task.Docs[i])
+		}
+	}
+}
+
 func (h *Handler) attachImageURL(img *model.Image) {
 	if img == nil || img.ID == "" {
 		return
 	}
 	img.URL = "/api/v1/images/" + url.PathEscape(img.ID)
+}
+
+func (h *Handler) attachDocURL(doc *model.Doc) {
+	if doc == nil || doc.ID == "" {
+		return
+	}
+	doc.URL = "/api/v1/docs/" + url.PathEscape(doc.ID) + "/content"
 }
 
 func decodeJSON(c *app.RequestContext, dst any) error {
@@ -529,4 +695,33 @@ func (h *Handler) saveUpload(taskID string, fh *multipart.FileHeader) (*model.Im
 		SizeBytes:   written,
 		StoragePath: storagePath,
 	}, nil
+}
+
+func (h *Handler) saveDoc(taskID, title, content string) (*model.Doc, error) {
+	docID := uuid.NewString()
+	taskDir := filepath.Join(h.cfg.DocsDir, taskID)
+	if err := os.MkdirAll(taskDir, 0o700); err != nil {
+		return nil, err
+	}
+	storagePath := filepath.Join(taskDir, docID+".md")
+	if err := os.WriteFile(storagePath, []byte(content), 0o600); err != nil {
+		return nil, err
+	}
+	return &model.Doc{
+		ID:          docID,
+		TaskID:      taskID,
+		Title:       title,
+		StoragePath: storagePath,
+	}, nil
+}
+
+func (h *Handler) readDocContent(doc *model.Doc) ([]byte, error) {
+	content, err := os.ReadFile(doc.StoragePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: doc file missing", store.ErrNotFound)
+		}
+		return nil, err
+	}
+	return content, nil
 }

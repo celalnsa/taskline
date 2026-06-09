@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"taskline_server/api/model"
 	"taskline_server/internal/store"
@@ -120,7 +121,7 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 	return s.st.UpdateTask(ctx, id, u)
 }
 
-// DeleteTask removes a task and its dependencies / images via FK cascade.
+// DeleteTask removes a task and its dependency / attachment rows via FK cascade.
 func (s *Service) DeleteTask(ctx context.Context, id string) error {
 	return s.st.DeleteTask(ctx, id)
 }
@@ -155,6 +156,45 @@ func (s *Service) GetImage(ctx context.Context, id string) (*model.Image, error)
 // DeleteImage removes an image attachment by id.
 func (s *Service) DeleteImage(ctx context.Context, id string) (*model.Image, error) {
 	return s.st.DeleteImage(ctx, id)
+}
+
+// AddDoc attaches a markdown document to a task. The handler owns file IO; the
+// service validates metadata before the store records the file reference.
+func (s *Service) AddDoc(ctx context.Context, doc *model.Doc) error {
+	if doc == nil {
+		return errors.New("doc required")
+	}
+	doc.Title = strings.TrimSpace(doc.Title)
+	if doc.Title == "" {
+		return errors.New("doc title required")
+	}
+	if doc.StoragePath == "" {
+		return errors.New("doc storage path required")
+	}
+	return s.st.AddDoc(ctx, doc)
+}
+
+// GetDoc fetches a markdown document by id.
+func (s *Service) GetDoc(ctx context.Context, id string) (*model.Doc, error) {
+	return s.st.GetDoc(ctx, id)
+}
+
+// UpdateDoc updates document metadata. Content updates are written by the
+// handler before calling this method to bump the document timestamp.
+func (s *Service) UpdateDoc(ctx context.Context, id string, u store.DocUpdate) (*model.Doc, error) {
+	if u.Title != nil {
+		title := strings.TrimSpace(*u.Title)
+		if title == "" {
+			return nil, errors.New("doc title required")
+		}
+		u.Title = &title
+	}
+	return s.st.UpdateDoc(ctx, id, u)
+}
+
+// DeleteDoc removes document metadata by id.
+func (s *Service) DeleteDoc(ctx context.Context, id string) (*model.Doc, error) {
+	return s.st.DeleteDoc(ctx, id)
 }
 
 // AddLink attaches a URL to a task. rawURL is required and must use the

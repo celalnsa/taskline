@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Project, Task, TaskImage, TaskLink } from "../lib/api";
+import type { Project, Task, TaskDoc, TaskImage, TaskLink } from "../lib/api";
 import { TaskEditor } from "./TaskEditor";
 
 const project: Project = {
@@ -752,6 +752,144 @@ describe("TaskEditor image attachments", () => {
   });
 });
 
+describe("TaskEditor docs", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens and updates an existing markdown doc", async () => {
+    const user = userEvent.setup();
+    const existing: TaskDoc = {
+      id: "doc-1",
+      task_id: task.id,
+      title: "Spec",
+      url: "/api/v1/docs/doc-1/content",
+      created_at: 1780051741142,
+      updated_at: 1780051741142,
+    };
+    const fetched: TaskDoc = {
+      ...existing,
+      content: "# Current spec",
+    };
+    const updated: TaskDoc = {
+      ...existing,
+      title: "Updated Spec",
+      content: "# Updated spec",
+      updated_at: 1780051741143,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(fetched), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(updated), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(vi.fn(), { ...task, docs: [existing] });
+
+    await user.click(screen.getByRole("button", { name: /open doc spec/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /markdown document editor/i });
+    expect(dialog).toBeTruthy();
+    await user.clear(screen.getByLabelText("Document title"));
+    await user.type(screen.getByLabelText("Document title"), "Updated Spec");
+    const markdownInput = await screen.findByLabelText("Markdown document");
+    fireEvent.change(markdownInput, { target: { value: "# Updated spec" } });
+    await user.click(within(dialog).getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /markdown document editor/i })).toBeNull());
+    expect(await screen.findByText("Updated Spec")).toBeTruthy();
+    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), init?.method])).toEqual([
+      ["/api/v1/docs/doc-1", "GET"],
+      ["/api/v1/docs/doc-1", "PATCH"],
+    ]);
+    expect(fetchMock.mock.calls[1][1]?.body).toBe(
+      JSON.stringify({ title: "Updated Spec", content: "# Updated spec" })
+    );
+  });
+
+  it("creates a new markdown doc from the docs section", async () => {
+    const user = userEvent.setup();
+    const created: TaskDoc = {
+      id: "doc-2",
+      task_id: task.id,
+      title: "Dev notes",
+      url: "/api/v1/docs/doc-2/content",
+      content: "Implementation notes",
+      created_at: 1780051741142,
+      updated_at: 1780051741142,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(created), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor();
+
+    await user.click(screen.getByRole("button", { name: /add doc/i }));
+    const dialog = await screen.findByRole("dialog", { name: /markdown document editor/i });
+    await user.type(await screen.findByLabelText("Document title"), "Dev notes");
+    fireEvent.change(await screen.findByLabelText("Markdown document"), {
+      target: { value: "Implementation notes" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText("Dev notes")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task-1/docs",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "Dev notes", content: "Implementation notes" }),
+      })
+    );
+  });
+
+  it("deletes an existing markdown doc", async () => {
+    const user = userEvent.setup();
+    const existing: TaskDoc = {
+      id: "doc-1",
+      task_id: task.id,
+      title: "Old report",
+      url: "/api/v1/docs/doc-1/content",
+      created_at: 1780051741142,
+      updated_at: 1780051741142,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ deleted: true, id: existing.id }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(vi.fn(), { ...task, docs: [existing] });
+
+    await user.click(screen.getByRole("button", { name: /delete doc old report/i }));
+
+    await waitFor(() => expect(screen.queryByText("Old report")).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/docs/doc-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("shows docs as unavailable until a created task has an id", () => {
+    renderCreateEditor();
+
+    expect(screen.getByText("Create the task before adding docs.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /add doc/i })).toBeNull();
+  });
+});
+
 describe("TaskEditor links and dependencies", () => {
   afterEach(() => {
     cleanup();
@@ -771,10 +909,20 @@ describe("TaskEditor links and dependencies", () => {
     state: "done",
   };
 
-  it("keeps images, links, and dependencies in the requested order", () => {
+  it("keeps images, docs, links, and dependencies in the requested order", () => {
     const editorTask: Task = {
       ...task,
       depends_on: [activeDep.id],
+      docs: [
+        {
+          id: "doc-1",
+          task_id: task.id,
+          title: "Spec",
+          url: "/api/v1/docs/doc-1/content",
+          created_at: 1780051741142,
+          updated_at: 1780051741142,
+        },
+      ],
       links: [
         {
           id: "link-1",
@@ -790,6 +938,8 @@ describe("TaskEditor links and dependencies", () => {
 
     const text = document.body.textContent ?? "";
     expect(text.indexOf("Images")).toBeLessThan(text.indexOf("Links"));
+    expect(text.indexOf("Images")).toBeLessThan(text.indexOf("Docs"));
+    expect(text.indexOf("Docs")).toBeLessThan(text.indexOf("Links"));
     expect(text.indexOf("Links")).toBeLessThan(text.indexOf("Depends"));
   });
 

@@ -21,7 +21,7 @@ func main() {
 		logger.Error("load config", "err", err)
 		os.Exit(1)
 	}
-	logger.Info("config loaded", "db", cfg.DBPath, "listen", cfg.ListenAddr, "images", cfg.ImagesDir)
+	logger.Info("config loaded", "db", cfg.DBPath, "listen", cfg.ListenAddr, "images", cfg.ImagesDir, "docs", cfg.DocsDir)
 
 	st, err := store.New(cfg.DBPath)
 	if err != nil {

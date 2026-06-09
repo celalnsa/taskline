@@ -48,6 +48,7 @@ type Task struct {
 	Priority    int      `json:"priority"`
 	DependsOn   []string `json:"depends_on,omitempty"`
 	Images      []Image  `json:"images,omitempty"`
+	Docs        []Doc    `json:"docs,omitempty"`
 	Links       []Link   `json:"links,omitempty"`
 	CreatedAt   int64    `json:"created_at"`
 	UpdatedAt   int64    `json:"updated_at"`
@@ -71,6 +72,17 @@ type Image struct {
 	SizeBytes  int64  `json:"size_bytes"`
 	URL        string `json:"url,omitempty"`
 	UploadedAt int64  `json:"uploaded_at"`
+}
+
+// Doc is a markdown document attached to a task.
+type Doc struct {
+	ID        string `json:"id"`
+	TaskID    string `json:"task_id"`
+	Title     string `json:"title"`
+	URL       string `json:"url,omitempty"`
+	Content   string `json:"content,omitempty"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 // ─── Project endpoints ──────────────────────────────────────────────────
@@ -227,6 +239,48 @@ func (c *Client) AddLink(taskID string, in AddLinkInput) (*Link, error) {
 
 func (c *Client) DeleteLink(linkID string) error {
 	path := fmt.Sprintf("/api/v1/links/%s", url.PathEscape(linkID))
+	return c.do("DELETE", path, nil, nil)
+}
+
+type CreateDocInput struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func (c *Client) CreateDoc(taskID string, in CreateDocInput) (*Doc, error) {
+	var out Doc
+	path := fmt.Sprintf("/api/v1/tasks/%s/docs", url.PathEscape(taskID))
+	if err := c.do("POST", path, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) GetDoc(docID string) (*Doc, error) {
+	var out Doc
+	path := fmt.Sprintf("/api/v1/docs/%s", url.PathEscape(docID))
+	if err := c.do("GET", path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type UpdateDocInput struct {
+	Title   *string `json:"title,omitempty"`
+	Content *string `json:"content,omitempty"`
+}
+
+func (c *Client) UpdateDoc(docID string, in UpdateDocInput) (*Doc, error) {
+	var out Doc
+	path := fmt.Sprintf("/api/v1/docs/%s", url.PathEscape(docID))
+	if err := c.do("PATCH", path, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteDoc(docID string) error {
+	path := fmt.Sprintf("/api/v1/docs/%s", url.PathEscape(docID))
 	return c.do("DELETE", path, nil, nil)
 }
 

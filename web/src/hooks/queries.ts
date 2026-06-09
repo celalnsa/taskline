@@ -65,6 +65,43 @@ export function useDeleteImage(projectIdOrName: string) {
   });
 }
 
+export function useCreateDoc(projectIdOrName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, title, content }: { taskId: string; title: string; content: string }) =>
+      api.createTaskDoc(taskId, { title, content }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectIdOrName] }),
+  });
+}
+
+export function useGetDoc() {
+  return useMutation({
+    mutationFn: (docId: string) => api.getTaskDoc(docId),
+  });
+}
+
+export function useUpdateDoc(projectIdOrName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      docId,
+      patch,
+    }: {
+      docId: string;
+      patch: Parameters<typeof api.updateTaskDoc>[1];
+    }) => api.updateTaskDoc(docId, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectIdOrName] }),
+  });
+}
+
+export function useDeleteDoc(projectIdOrName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (docId: string) => api.deleteTaskDoc(docId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectIdOrName] }),
+  });
+}
+
 export function useAddDependency(projectIdOrName: string) {
   const qc = useQueryClient();
   return useMutation({

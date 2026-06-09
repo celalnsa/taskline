@@ -21,10 +21,12 @@ import (
 //	TASKLINE_DB         — sqlite file path (default ./data/taskline.db)
 //	TASKLINE_LISTEN     — listen addr (default :8787)
 //	TASKLINE_IMAGES_DIR — image storage dir (default ./data/images)
+//	TASKLINE_DOCS_DIR   — markdown doc storage dir (default ./data/docs)
 type Config struct {
 	DBPath     string
 	ListenAddr string
 	ImagesDir  string
+	DocsDir    string
 }
 
 // Load reads .env from envPath (empty = "./.env"), merges with the process
@@ -42,6 +44,7 @@ func Load(envPath string) (*Config, error) {
 		DBPath:     getenv("TASKLINE_DB", "./data/taskline.db"),
 		ListenAddr: getenv("TASKLINE_LISTEN", ":8787"),
 		ImagesDir:  getenv("TASKLINE_IMAGES_DIR", "./data/images"),
+		DocsDir:    getenv("TASKLINE_DOCS_DIR", "./data/docs"),
 	}
 
 	if dir := filepath.Dir(c.DBPath); dir != "" && dir != "." {
@@ -51,6 +54,9 @@ func Load(envPath string) (*Config, error) {
 	}
 	if err := os.MkdirAll(c.ImagesDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create images dir: %w", err)
+	}
+	if err := os.MkdirAll(c.DocsDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create docs dir: %w", err)
 	}
 	return c, nil
 }

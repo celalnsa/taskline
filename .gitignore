@@ -1,6 +1,7 @@
 /dist/
 /bin/
 /.env
+/data/
 *.db
 *.db-journal
 *.db-shm

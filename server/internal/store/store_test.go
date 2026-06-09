@@ -296,6 +296,55 @@ func TestImageCRUD(t *testing.T) {
 	require.Empty(t, withoutImage.Images)
 }
 
+func TestDocCRUD(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, _ := st.CreateProject(ctx, "p", "")
+	tk, _ := st.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, model.StateStart)
+
+	doc := &model.Doc{
+		TaskID:      tk.ID,
+		Title:       "Spec",
+		StoragePath: filepath.Join(t.TempDir(), "spec.md"),
+	}
+	require.NoError(t, st.AddDoc(ctx, doc))
+	require.NotEmpty(t, doc.ID)
+	require.NotZero(t, doc.CreatedAt)
+	require.NotZero(t, doc.UpdatedAt)
+
+	got, err := st.GetDoc(ctx, doc.ID)
+	require.NoError(t, err)
+	require.Equal(t, doc.ID, got.ID)
+	require.Equal(t, tk.ID, got.TaskID)
+	require.Equal(t, "Spec", got.Title)
+	require.Equal(t, doc.StoragePath, got.StoragePath)
+
+	withDoc, err := st.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Len(t, withDoc.Docs, 1)
+	require.Equal(t, doc.ID, withDoc.Docs[0].ID)
+	require.Equal(t, "Spec", withDoc.Docs[0].Title)
+
+	nextTitle := "Updated Spec"
+	updated, err := st.UpdateDoc(ctx, doc.ID, store.DocUpdate{Title: &nextTitle})
+	require.NoError(t, err)
+	require.Equal(t, nextTitle, updated.Title)
+	require.GreaterOrEqual(t, updated.UpdatedAt, doc.UpdatedAt)
+
+	bogus := &model.Doc{TaskID: "no-such", Title: "No task", StoragePath: "x.md"}
+	require.ErrorIs(t, st.AddDoc(ctx, bogus), store.ErrNotFound)
+
+	deleted, err := st.DeleteDoc(ctx, doc.ID)
+	require.NoError(t, err)
+	require.Equal(t, doc.ID, deleted.ID)
+	_, err = st.DeleteDoc(ctx, doc.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	withoutDoc, err := st.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Empty(t, withoutDoc.Docs)
+}
+
 // TestMigrationsRunOnceAcrossReopens verifies that PRAGMA user_version
 // gates migration application: after a first open the version is at
 // the latest entry in schemaMigrations, and a second open against the
