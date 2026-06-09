@@ -366,10 +366,17 @@ func TestStateTransitionAtAPI(t *testing.T) {
 	require.Equal(t, http.StatusOK, st)
 	require.Equal(t, "dev", tk.State)
 
-	// Retired state — must be rejected as invalid.
+	// test is a first-class local verification stage before review.
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
-		map[string]any{"state": "test"}, nil)
-	require.Equal(t, http.StatusBadRequest, st)
+		map[string]any{"state": "test"}, &tk)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, "test", tk.State)
+
+	var testOnly taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/states/tasks?state=test", nil, &testOnly)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, testOnly.Tasks, 1)
+	require.Equal(t, tk.ID, testOnly.Tasks[0].ID)
 
 	// Retired state name — design was renamed to spec.
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,

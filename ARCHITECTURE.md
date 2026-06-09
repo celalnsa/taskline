@@ -70,7 +70,7 @@ once and passed through to the handler (for `ImagesDir`).
 projects(id, name UNIQUE, description, created_at, updated_at)
 tasks   (id, project_id → projects.id, title, description,
          type ∈ {feature,bug},
-         state ∈ {pending,start,spec,dev,review,done}, priority,
+         state ∈ {pending,start,spec,dev,test,review,done}, priority,
          created_at, updated_at)
 task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              PRIMARY KEY(task_id, depends_on_task_id),
@@ -99,9 +99,9 @@ directory). Keep them identical.
 ## State machine
 
 ```
-pending ⇄ start ──▶ spec ──▶ dev ──▶ review ──▶ done
-              ▲         ▲         ▲        ▲
-              └─────────┴─────────┴────────┘
+pending ⇄ start ──▶ spec ──▶ dev ──▶ test ──▶ review ──▶ done
+              ▲         ▲         ▲        ▲          ▲
+              └─────────┴─────────┴────────┴──────────┘
               any move between known states is allowed
               any state may also transition into pending
 ```
@@ -112,6 +112,9 @@ service layer enforces validation before calling `store.UpdateTask`.
 Jumping `start → done` is intentional (close trivial work without
 ceremony); dropping `review → dev` is intentional too (a review can
 surface a defect that legitimately reopens the implementation).
+`test` is the local verification stage after implementation and before
+PR/review: unit tests, API e2e, browser smoke, and test coverage review
+belong there, while code review and CI belong in `review`.
 
 `pending` lives off the main pipeline: tasks created without
 `auto_start=true` land there, and any state may transition into it to

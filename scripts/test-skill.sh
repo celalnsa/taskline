@@ -31,7 +31,8 @@ required_sections = {
     "skills/taskline-management/SKILL.md": [
         "### start → spec",
         "### spec → dev",
-        "### dev → review",
+        "### dev → test",
+        "### test → review",
         "### review → done",
         "## Fast path",
     ],

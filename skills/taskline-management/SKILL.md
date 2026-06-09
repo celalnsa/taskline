@@ -4,7 +4,7 @@ description: |
   Use whenever the user wants to track agent work as structured tasks
   inside a project — capturing a feature or bug, sequencing dependent
   work, picking the next thing to pull, advancing a task through the
-  pending → start → spec → dev → review → done lifecycle, recording
+  pending → start → spec → dev → test → review → done lifecycle, recording
   progress, or asking "what's left?". Trigger phrases include "create
   a task", "add a feature", "what should I work on next", "block this
   task on …", "mark X as in review / done", "show me the open bugs",
@@ -16,14 +16,14 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.6.0
+version: 0.7.0
 ---
 
 # taskline — task management for AI agents
 
 The `taskline` CLI is your only interface to taskline. It tracks
 projects and the tasks (features / bugs) inside them, enforces a
-six-state lifecycle (`pending → start → spec → dev → review → done`),
+seven-state lifecycle (`pending → start → spec → dev → test → review → done`),
 models inter-task dependencies as a DAG, and answers "what's runnable
 now?".
 
@@ -91,7 +91,7 @@ focused on a single project.
 | `title`       | required, short                                                            |
 | `description` | optional, longer prose                                                     |
 | `type`        | `feature` (default) or `bug`                                               |
-| `state`       | `pending`, `start`, `spec`, `dev`, `review`, `done`                        |
+| `state`       | `pending`, `start`, `spec`, `dev`, `test`, `review`, `done`                |
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
@@ -100,6 +100,9 @@ focused on a single project.
 Forward jumps (`start` → `done`) and drop-backs (`review` → `dev`
 when a defect surfaces) are both legal. Unknown state names are
 rejected — don't invent new ones.
+`test` is the local verification stage between implementation and
+review: test review, unit tests, API e2e, browser smoke, and any other
+checks that should pass before PR review/CI begins.
 
 **`pending` is the parking lot.** Tasks in `pending` are explicitly
 **not runnable**: `task next` and `task list --runnable` skip them.
@@ -141,14 +144,14 @@ taskline task create --project demo --title "later idea" --auto-start=false
 
 # List (filter by state with comma-separated names)
 taskline task list --project demo
-taskline task list --project demo --state start,dev
+taskline task list --project demo --state start,dev,test
 
 # Pick / inspect
 taskline task next --project demo            # highest-priority runnable, or null
 taskline task get <id>
 
 # Mutate (PATCH semantics — only pass the flags you want changed)
-taskline task update <id> --state review
+taskline task update <id> --state test
 taskline task update <id> --priority 5 --description "new prose"
 taskline task delete <id>                    # cascades deps + images
 
@@ -181,7 +184,7 @@ Recommended moments to call it:
 
 - **spec**: a written product spec / interaction note URL ("Spec").
 - **dev**: a technical approach note if the work needs one ("Tech Plan").
-- **dev → review**: the PR URL just after `gh pr create` ("PR #N").
+- **test → review**: the PR URL just after `gh pr create` ("PR #N").
 - **review → done**: the merged-commit URL or anything a future
   reader would want to reach for ("merge", "post-mortem").
 
@@ -267,7 +270,7 @@ cannot proceed without information that is not in the repo or taskline
 task. In all other cases, record the chosen approach and reason in the
 task description or implementation notes, then continue.
 
-### dev → review
+### dev → test
 
 - **Trigger:** product spec / acceptance criteria in hand.
 - **Actions** (test-first):
@@ -281,31 +284,48 @@ task description or implementation notes, then continue.
      test strategy. (capability: plan writing —
      `superpowers:writing-plans`)
   4. Write or extend failing tests for the new behavior.
-  5. Implement until tests pass.
-  6. Run the full project test suite for whatever you touched.
+  5. Implement until the focused tests pass and the behavior is ready
+     for full local verification.
+- **Advance:** `taskline task update <id> --state test`
+- **Skip when:** never. Implementation must be ready for local
+  verification before review begins.
+
+### test → review
+
+- **Trigger:** implementation behavior is complete in the local
+  worktree.
+- **Actions:**
+  1. Review the tests you wrote or touched. Add coverage now if the
+     behavior, migration path, CLI surface, or UI state can regress.
+  2. Run the full project test suite for whatever you touched.
      For this repo: `( cd server && go test ./... )`,
-     `( cd cli && go test ./... )`, `( cd web && pnpm build )`.
-     Lint / format as the project requires.
-  7. Stage and commit. Conventional, minimal messages.
+     `( cd cli && go test ./... )`, `( cd web && pnpm lint && pnpm test && pnpm build )`.
+     Run `./scripts/test-skill.sh` when skill docs changed. Lint /
+     format as the project requires.
+  3. For taskline itself, or any project with an embedded frontend,
+     migrations, or runtime startup behavior, verify against the rebuilt
+     running binary rather than only isolated tests.
+  4. Self code-review for bugs, dead code, boundary issues.
+     (capability: code review — `code-review:code-review`)
+  5. Fix anything the review or tests surface; re-run the relevant
+     tests after each fix.
+  6. Stage and commit. Conventional, minimal messages.
+  7. `git push -u origin <branch>`.
+  8. `gh pr create` with title, summary, and a test plan.
+  9. Attach the PR URL to the task:
+     `taskline task link <task-id> --url <pr-url> --label "PR #N"`
+     so anyone reading the task later can jump straight to the
+     review.
 - **Advance:** `taskline task update <id> --state review`
 - **Skip when:** never. Tests are the gate.
 
 ### review → done
 
-- **Trigger:** implementation committed on the feature branch.
+- **Trigger:** a PR exists for the committed implementation.
 - **Actions:**
-  1. Self code-review for bugs, dead code, boundary issues.
-     (capability: code review — `code-review:code-review`)
-  2. Fix anything the review surfaces; re-run tests after each fix.
-  3. `git push -u origin <branch>`.
-  4. `gh pr create` with title, summary, and a test plan.
-  5. Attach the PR URL to the task:
-     `taskline task link <task-id> --url <pr-url> --label "PR #N"`
-     so anyone reading the task later can jump straight to the
-     review.
-  6. **Wait for CI** if configured. If it fails, fix the root cause
-     locally, re-run tests, push.
-  7. **Wait for at least one review** — human or bot
+  1. **Wait for CI** if configured. If it fails, drop the task back to
+     `dev`, fix the root cause locally, re-run tests, and push.
+  2. **Wait for at least one review** — human or bot
      (`gemini-code-assist`, etc.). Don't merge before any review has
      posted; the whole point of opening a PR is the second pair of
      eyes. Poll with:
@@ -315,7 +335,7 @@ task description or implementation notes, then continue.
      ```
 
      Re-check periodically until `reviews` is non-empty.
-  8. Read **every** comment surface — one endpoint isn't enough:
+  3. Read **every** comment surface — one endpoint isn't enough:
 
      ```bash
      gh api repos/<owner>/<repo>/pulls/<n>/reviews     # bot summaries
@@ -323,9 +343,9 @@ task description or implementation notes, then continue.
      gh api repos/<owner>/<repo>/issues/<n>/comments   # top-level PR conversation
      ```
 
-     Address each finding; re-run tests after each batch; push. If a
-     comment is wrong, **reply with reasoning** rather than silently
-     ignoring it.
+     Address each finding; for real defects, drop the task back to
+     `dev`, re-run tests after each batch, and push. If a comment is
+     wrong, **reply with reasoning** rather than silently ignoring it.
 - **Advance:** `taskline task update <id> --state done` *only after*
   (a) CI green or N/A, (b) at least one review posted, and
   (c) every reviewer comment addressed or rebutted.
@@ -369,9 +389,9 @@ one-line message. The state machine still records what happened.
   `upload`) operate on the task id directly and reject the flag with
   "unknown flag".
 - **`invalid next state "..."`** — you used a name that isn't in
-  `pending/start/spec/dev/review/done`. The state `created` was
-  renamed to `start`, `design` was renamed to `spec`, and `test` was
-  retired; don't reintroduce any of them.
+  `pending/start/spec/dev/test/review/done`. The state `created` was
+  renamed to `start`, and `design` was renamed to `spec`; don't
+  reintroduce old names.
 - **`dependency would create a cycle`** — the edge would loop back.
   Restructure the graph or pick a different anchor.
 - **`project name "X" already exists`** — name collision. Reuse the
@@ -381,7 +401,7 @@ one-line message. The state machine still records what happened.
 - **`task next` returned `null`** — nothing runnable. Either the
   project is empty, every non-done task is blocked, or everything
   left is parked in `pending`. Run
-  `taskline task list --project <p> --state pending,start,spec,dev,review`
+  `taskline task list --project <p> --state pending,start,spec,dev,test,review`
   to see what's stuck and why. Do not automatically move `pending`
   tasks into `start`; promote them only when the task description,
   dependencies, or the user makes clear that they are ready to run.

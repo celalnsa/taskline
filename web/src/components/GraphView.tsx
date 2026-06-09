@@ -25,6 +25,7 @@ const STATE_COLORS: Record<TaskState, string> = {
   start: "#cbd5e1",
   spec: "#a5b4fc",
   dev: "#86efac",
+  test: "#facc15",
   review: "#fdba74",
   done: "#9ca3af",
 };

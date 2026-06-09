@@ -56,6 +56,11 @@ func TestUpdateTaskAllowsBackwardTransition(t *testing.T) {
 	got, err = s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.StateDev)})
 	require.NoError(t, err)
 	require.Equal(t, model.StateDev, got.State)
+
+	// The local verification stage is a normal in-progress state.
+	got, err = s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.StateTest)})
+	require.NoError(t, err)
+	require.Equal(t, model.StateTest, got.State)
 }
 
 func TestUpdateTaskRejectsUnknownState(t *testing.T) {
@@ -64,8 +69,7 @@ func TestUpdateTaskRejectsUnknownState(t *testing.T) {
 	p, _ := s.CreateProject(ctx, "p", "")
 	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
 
-	// 'test' was retired — passing it should be rejected as invalid.
-	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.TaskState("test"))})
+	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.TaskState("bogus"))})
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "invalid"))
 }

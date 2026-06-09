@@ -83,13 +83,17 @@ func TestStateTransitionRules(t *testing.T) {
 	// Backward moves are allowed too — the workflow no longer enforces direction.
 	require.NoError(t, model.StateReview.CanTransitionTo(model.StateDev))
 	require.NoError(t, model.StateDone.CanTransitionTo(model.StateStart))
+	// The test stage sits between dev and review, but transitions are still
+	// membership-only rather than directionally constrained.
+	require.NoError(t, model.StateDev.CanTransitionTo(model.StateTest))
+	require.NoError(t, model.StateTest.CanTransitionTo(model.StateReview))
+	require.NoError(t, model.StateTest.CanTransitionTo(model.StateDev))
 	// Pending may be reached from any state, including done.
 	require.NoError(t, model.StateDone.CanTransitionTo(model.StatePending))
 	require.NoError(t, model.StateDev.CanTransitionTo(model.StatePending))
 	require.NoError(t, model.StatePending.CanTransitionTo(model.StateStart))
 	// Unknown state names still fail validation.
 	require.Error(t, model.TaskState("bogus").CanTransitionTo(model.StateDev))
-	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("test")))
 	// 'created' was renamed to 'start' — passing it should now be rejected.
 	require.Error(t, model.StateDev.CanTransitionTo(model.TaskState("created")))
 	// 'design' was renamed to 'spec' — passing it should now be rejected.
@@ -202,6 +206,15 @@ func TestListTasksFilteredByState(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, devOnly, 1)
 	require.Equal(t, t2.ID, devOnly[0].ID)
+
+	stTest := model.StateTest
+	_, err = st.UpdateTask(ctx, t2.ID, store.TaskUpdate{State: &stTest})
+	require.NoError(t, err)
+
+	testOnly, err := st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, States: []model.TaskState{stTest}})
+	require.NoError(t, err)
+	require.Len(t, testOnly, 1)
+	require.Equal(t, t2.ID, testOnly[0].ID)
 }
 
 func TestLinkCRUD(t *testing.T) {
@@ -297,7 +310,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v1, 5, "first open should advance to >=5")
+	require.GreaterOrEqual(t, v1, 6, "first open should advance to >=6")
 
 	require.NoError(t, st1.Close())
 
@@ -366,7 +379,7 @@ func TestMigrationUpgradesCreatedAndDesignRows(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v, 5, "migration should have run at least through 0005")
+	require.GreaterOrEqual(t, v, 6, "migration should have run at least through 0006")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")

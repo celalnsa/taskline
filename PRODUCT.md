@@ -36,7 +36,7 @@ DAG, a priority field, and a JSON-first CLI.
 
 The CLI defaults to JSON output when stdout isn't a TTY. Exit codes are
 stable. Diagnostics go to stderr. The server's contract is small enough
-to memorize: six states, two task types, one priority integer, one
+to memorize: seven states, two task types, one priority integer, one
 edge type. A human-friendly UI exists, but it's a *visualization* layer
 on top of the agent contract — never the source of truth.
 
@@ -55,7 +55,7 @@ that exist in one view but not another. A single SQL query can answer
 
 ### 3. Reversible state
 
-`pending → start → spec → dev → review → done`. The expected motion
+`pending → start → spec → dev → test → review → done`. The expected motion
 is forward from `start`, but the state machine permits any move between
 known states. A review that surfaces a defect should drop the task
 back to `dev`; work that turns out to need product clarification should
@@ -79,9 +79,9 @@ the CLI flag is `--auto-start` (default true).
 
 The earlier "forward-only" rule was a guard against stalled-card
 graveyards. Priority + the runnable query already prevent that: a
-task that has fallen back to `dev` is just another `dev` task —
-visible, sortable, and surfaced by `task next`. The graveyard problem
-was never about backward edges; it was about invisibility.
+task that has fallen back to `dev` or `test` is still visible,
+sortable, and surfaced by `task next`. The graveyard problem was never
+about backward edges; it was about invisibility.
 
 ### 4. Dependencies are a DAG, not a tree
 
@@ -117,23 +117,22 @@ importance", "estimated effort", "blocked by user feedback", or any of
 the other decoration humans like to add. If you need that, derive it on
 the agent side and translate to a number.
 
-## Why these specific six states
+## Why these specific seven states
 
-`pending → start → spec → dev → review → done` is opinionated. Other
+`pending → start → spec → dev → test → review → done` is opinionated. Other
 shapes were considered:
 
 - **Three states** (`todo / doing / done`): too coarse. Agents working
   in parallel need to know whether something is in spec (product
   requirements, UX, scope, and acceptance criteria are still malleable)
-  or in dev (technical design, implementation, and tests are underway).
-- **A separate `test` stage** (the original shape): redundant with
-  `dev`. Tests live in the same commit as the implementation; a task
-  isn't "in test" while waiting for someone else to write them.
-  Verification belongs in `review`. Removing `test` shrunk the
-  contract without losing real signal.
+  or in dev (technical design and implementation are underway).
+- **No separate `test` stage**: too easy for agents to treat "code is
+  written" as "development is complete". `test` is explicit local
+  verification: test review, unit tests, API e2e, browser smoke, and
+  any other checks that should pass before PR review begins.
 - **Custom per-project workflows**: tempting, but the agent contract
   becomes per-project, and `task next` stops being a single thing. The
-  six states cover ~all of "knowledge work that ships software"; if
+  seven states cover ~all of "knowledge work that ships software"; if
   you need something else, this isn't your tool.
 - **A separate "blocked" state**: redundant with the dep DAG. A task
   with an unfinished dep is *already* not returned by `task next`;

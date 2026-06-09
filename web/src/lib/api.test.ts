@@ -1,5 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteTaskImage, taskImageURL, uploadTaskImage, type TaskImage } from "./api";
+import {
+  deleteTaskImage,
+  STATE_LABELS,
+  STATES,
+  taskImageURL,
+  uploadTaskImage,
+  type TaskImage,
+} from "./api";
+
+describe("task states", () => {
+  it("includes the local test stage between dev and review", () => {
+    expect(STATES).toEqual([
+      "pending",
+      "start",
+      "spec",
+      "dev",
+      "test",
+      "review",
+      "done",
+    ]);
+    expect(STATE_LABELS.test).toBe("Test");
+  });
+});
 
 describe("uploadTaskImage", () => {
   afterEach(() => {

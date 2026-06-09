@@ -31,6 +31,9 @@ var schemaTaskLinks string
 //go:embed schema/0005_design_to_spec.sql
 var schemaDesignToSpec string
 
+//go:embed schema/0006_add_test_state.sql
+var schemaAddTestState string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -48,6 +51,7 @@ var schemaMigrations = []migration{
 	{version: 3, sql: schemaPendingState},
 	{version: 4, sql: schemaTaskLinks},
 	{version: 5, sql: schemaDesignToSpec},
+	{version: 6, sql: schemaAddTestState},
 }
 
 // ErrNotFound is returned when a lookup misses.

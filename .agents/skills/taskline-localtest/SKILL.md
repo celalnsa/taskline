@@ -5,7 +5,7 @@ description: |
   repo) and you need to verify your changes actually work against a
   real running binary — not just unit tests in isolation. Required
   whenever a change can affect the embedded web bundle, server-side
-  state at startup (migrations, embedded SQL), or the dev → review
+  state at startup (migrations, embedded SQL), or the test → review
   transition defined in taskline-management's playbook. Trigger
   phrases: "I changed the server code", "I touched the kanban",
   "rebuild and restart", "verify against the running server",
@@ -148,9 +148,9 @@ exactly this.
 ## Relationship to other skills
 
 - `taskline-management` — the agent-facing skill that drives the CLI
-  through `start → spec → dev → review → done`. **This** skill
+  through `start → spec → dev → test → review → done`. **This** skill
   (`taskline-localtest`) is the concrete checklist for the
-  **dev → review** transition specifically when developing taskline
+  **test → review** transition specifically when developing taskline
   itself.
 - The two are complementary: management says "run tests, then advance
   state"; localtest spells out what "tests" actually means for a

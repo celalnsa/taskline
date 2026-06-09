@@ -64,8 +64,8 @@ export TASKLINE_PROJECT=demo
 
 Two views, switchable from the toolbar:
 
-- **Kanban** — six columns (pending / start / spec / dev / review /
-  done), cards sorted by priority within each column. Drag a card to
+- **Kanban** — seven columns (pending / start / spec / dev / test /
+  review / done), cards sorted by priority within each column. Drag a card to
   change its state; the server accepts moves in either direction.
   `pending` is a parking lot — tasks there are not runnable, and the
   "+ New task" modal exposes an *Auto-start* toggle (on by default) to

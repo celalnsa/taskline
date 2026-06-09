@@ -6,6 +6,7 @@ export type TaskState =
   | "start"
   | "spec"
   | "dev"
+  | "test"
   | "review"
   | "done";
 
@@ -14,6 +15,7 @@ export const STATES: TaskState[] = [
   "start",
   "spec",
   "dev",
+  "test",
   "review",
   "done",
 ];
@@ -23,6 +25,7 @@ export const STATE_LABELS: Record<TaskState, string> = {
   start: "Start",
   spec: "Spec",
   dev: "Dev",
+  test: "Test",
   review: "Review",
   done: "Done",
 };

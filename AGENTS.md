@@ -73,13 +73,14 @@ and are not installed globally.
 
 - **No CGO.** SQLite via `modernc.org/sqlite`. Never introduce a CGO
   dependency — it breaks cross-compile and the `go run` workflow.
-- **State machine.** `pending → start → spec → dev → review → done`.
+- **State machine.** `pending → start → spec → dev → test → review → done`.
   Movement in either direction is allowed (review surfacing a bug →
   drop back to dev is a real workflow); validation only rejects unknown
   state names. `pending` is a non-runnable parking lot; the entry-point
   state is `start` (formerly `created`). `spec` is for product
   requirements, UX, scope, and acceptance criteria; technical design
-  starts in `dev`. Tasks created without
+  and implementation start in `dev`; full local verification belongs in
+  `test`; code review and CI belong in `review`. Tasks created without
   `auto_start` land in `pending`. Lives in `server/api/model/model.go`
   (`CanTransitionTo`).
 - **Dependency DAG.** `AddDependency` rejects cycles with 409. Any new

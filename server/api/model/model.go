@@ -28,6 +28,7 @@ const (
 	StateStart   TaskState = "start"
 	StateSpec    TaskState = "spec"
 	StateDev     TaskState = "dev"
+	StateTest    TaskState = "test"
 	StateReview  TaskState = "review"
 	StateDone    TaskState = "done"
 )
@@ -42,8 +43,9 @@ var stateOrder = map[TaskState]int{
 	StateStart:   0,
 	StateSpec:    1,
 	StateDev:     2,
-	StateReview:  3,
-	StateDone:    4,
+	StateTest:    3,
+	StateReview:  4,
+	StateDone:    5,
 }
 
 func (s TaskState) Valid() bool {
