@@ -83,6 +83,21 @@ describe("TaskCard", () => {
     expect(screen.getByText("+1")).toBeTruthy();
   });
 
+  it("renders common labels with distinct theme metadata", () => {
+    renderCard(vi.fn(), vi.fn(), {
+      ...task,
+      labels: ["bug", "documentation", "review"],
+    });
+
+    const bug = screen.getByText("bug").closest("span");
+    const documentation = screen.getByText("documentation").closest("span");
+    const review = screen.getByText("review").closest("span");
+
+    expect(bug?.getAttribute("data-label-theme")).toBe("red");
+    expect(documentation?.getAttribute("data-label-theme")).toBe("violet");
+    expect(review?.getAttribute("data-label-theme")).toBe("amber");
+  });
+
   it("deletes from the card icon without opening the editor", async () => {
     const user = userEvent.setup();
     const confirm = vi.fn(() => true);

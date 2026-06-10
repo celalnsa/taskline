@@ -2,6 +2,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { Trash2 } from "lucide-react";
 import { useRef } from "react";
 import type { Task } from "../lib/api";
+import { getTaskLabelTheme, taskLabelChipClass } from "../lib/labels";
 import { formatRelativeTime } from "../lib/time";
 
 interface Props {
@@ -197,7 +198,11 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
               {visibleLabels.map((label) => (
                 <span
                   key={label}
-                  className="max-w-full truncate rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] leading-4 text-slate-600"
+                  data-label-theme={getTaskLabelTheme(label).name}
+                  className={
+                    "max-w-full truncate rounded border px-1.5 py-0.5 text-[10px] leading-4 " +
+                    taskLabelChipClass(label)
+                  }
                   title={label}
                 >
                   {label}

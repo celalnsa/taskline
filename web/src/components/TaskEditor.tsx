@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -11,7 +12,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from "react";
-import { FileCode2, FileText, ImagePlus, Plus, Tag, Trash2, X } from "lucide-react";
+import { ChevronDown, FileCode2, FileText, ImagePlus, Plus, Tag, Trash2, X } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
@@ -24,6 +25,7 @@ import {
   type TaskState,
   type TaskType,
 } from "../lib/api";
+import { COMMON_TASK_LABELS, getTaskLabelTheme, taskLabelChipClass } from "../lib/labels";
 import {
   useAddDependency,
   useAddLink,
@@ -433,9 +435,26 @@ function LabelSection({
   setLabels: Dispatch<SetStateAction<string[]>>;
 }) {
   const [draft, setDraft] = useState("");
+  const [showCommonLabels, setShowCommonLabels] = useState(false);
+  const hasLabelRoom = labels.length < MAX_TASK_LABELS;
+  const selectedLabelKeys = useMemo(
+    () => new Set(labels.map((label) => label.trim().toLowerCase())),
+    [labels]
+  );
+  const availableCommonLabels = useMemo(
+    () => COMMON_TASK_LABELS.filter((label) => !selectedLabelKeys.has(label.toLowerCase())),
+    [selectedLabelKeys]
+  );
+  const canShowCommonLabels = hasLabelRoom && availableCommonLabels.length > 0;
 
-  const addLabel = useCallback(() => {
-    const label = draft.trim();
+  useEffect(() => {
+    if (!canShowCommonLabels) {
+      setShowCommonLabels(false);
+    }
+  }, [canShowCommonLabels]);
+
+  const addLabelValue = useCallback((rawLabel: string) => {
+    const label = rawLabel.trim();
     if (!label) return;
     setLabels((current) => {
       if (current.length >= MAX_TASK_LABELS) return current;
@@ -443,12 +462,21 @@ function LabelSection({
       return exists ? current : [...current, label];
     });
     setDraft("");
-  }, [draft, setLabels]);
+  }, [setLabels]);
+
+  const addDraftLabel = useCallback(() => {
+    addLabelValue(draft);
+  }, [addLabelValue, draft]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" && event.key !== ",") return;
     event.preventDefault();
-    addLabel();
+    addDraftLabel();
+  };
+
+  const addCommonLabel = (label: string) => {
+    addLabelValue(label);
+    setShowCommonLabels(false);
   };
 
   const removeLabel = (label: string) => {
@@ -464,9 +492,17 @@ function LabelSection({
         {labels.map((label) => (
           <span
             key={label}
-            className="inline-flex max-w-full items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
+            data-label-theme={getTaskLabelTheme(label).name}
+            className={
+              "inline-flex max-w-full items-center gap-1 rounded border px-2 py-0.5 text-xs " +
+              taskLabelChipClass(label)
+            }
           >
-            <Tag size={11} aria-hidden="true" className="shrink-0 text-slate-400" />
+            <Tag
+              size={11}
+              aria-hidden="true"
+              className={"shrink-0 " + getTaskLabelTheme(label).iconClass}
+            />
             <span className="truncate">{label}</span>
             <button
               type="button"
@@ -479,20 +515,63 @@ function LabelSection({
           </span>
         ))}
       </div>
-      <input
-        aria-label="New label"
-        className="w-full text-xs border rounded px-2 py-1"
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={onKeyDown}
-        maxLength={MAX_TASK_LABEL_LENGTH}
-        disabled={labels.length >= MAX_TASK_LABELS}
-        placeholder={
-          labels.length >= MAX_TASK_LABELS
-            ? "Maximum of 20 labels reached"
-            : "Type a label and press Enter or comma"
-        }
-      />
+      <div className="relative">
+        <div className="flex gap-1.5">
+          <input
+            aria-label="New label"
+            className="min-w-0 flex-1 text-xs border rounded px-2 py-1"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+            maxLength={MAX_TASK_LABEL_LENGTH}
+            disabled={!hasLabelRoom}
+            placeholder={
+              hasLabelRoom
+                ? "Type a label and press Enter or comma"
+                : "Maximum of 20 labels reached"
+            }
+          />
+          <button
+            type="button"
+            aria-label="Show common labels"
+            aria-expanded={showCommonLabels}
+            aria-controls="task-common-labels"
+            title="Common labels"
+            disabled={!canShowCommonLabels}
+            className="flex h-7 w-8 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => setShowCommonLabels((open) => !open)}
+          >
+            <ChevronDown size={14} aria-hidden="true" />
+          </button>
+        </div>
+        {showCommonLabels && (
+          <div
+            id="task-common-labels"
+            role="menu"
+            aria-label="Common labels"
+            className="absolute z-20 mt-1 grid max-h-44 w-full grid-cols-2 gap-1 overflow-y-auto rounded border border-slate-200 bg-white p-1.5 shadow-lg"
+          >
+            {availableCommonLabels.map((label) => {
+              const theme = getTaskLabelTheme(label);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  role="menuitem"
+                  aria-label={`Add label ${label}`}
+                  className={
+                    "min-w-0 truncate rounded border px-2 py-1 text-left text-xs " +
+                    theme.optionClass
+                  }
+                  onClick={() => addCommonLabel(label)}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

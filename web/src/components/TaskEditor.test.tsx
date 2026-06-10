@@ -320,6 +320,73 @@ describe("TaskEditor create attachments", () => {
     );
   });
 
+  it("adds a common label from the dropdown while keeping free text labels", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const created: Task = {
+      ...task,
+      id: "task-created",
+      title: "Create with common labels",
+      labels: ["bug", "custom"],
+    };
+    const fetchMock = vi.fn((url: string | URL | Request, _init?: RequestInit) => {
+      const path = String(url);
+      if (path === "/api/v1/projects/project-1/tasks") {
+        return Promise.resolve(
+          new Response(JSON.stringify(created), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: `unexpected ${path}` }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderCreateEditor(onClose);
+
+    await user.type(screen.getByLabelText("Title"), created.title);
+    await user.click(screen.getByRole("button", { name: /show common labels/i }));
+    await user.click(screen.getByRole("menuitem", { name: /add label bug/i }));
+    await user.type(screen.getByLabelText("New label"), "custom{enter}");
+
+    expect(
+      screen.getByRole("button", { name: /remove label bug/i })
+        .closest("span")
+        ?.getAttribute("data-label-theme")
+    ).toBe("red");
+    expect(screen.getByText("custom")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({
+        title: created.title,
+        description: "",
+        type: "feature",
+        priority: 0,
+        labels: ["bug", "custom"],
+        auto_start: true,
+      })
+    );
+  });
+
+  it("hides already selected common labels from the dropdown", async () => {
+    const user = userEvent.setup();
+    renderEditor(vi.fn(), { ...task, labels: ["bug"] });
+
+    await user.click(screen.getByRole("button", { name: /show common labels/i }));
+    const menu = screen.getByRole("menu", { name: /common labels/i });
+
+    expect(within(menu).queryByRole("menuitem", { name: /add label bug/i })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: /add label documentation/i })).toBeTruthy();
+  });
+
   it("enforces label input limits in the editor", async () => {
     const user = userEvent.setup();
     const labels = Array.from({ length: 19 }, (_, index) => `label-${index + 1}`);
@@ -336,6 +403,9 @@ describe("TaskEditor create attachments", () => {
     const fullInput = screen.getByLabelText("New label") as HTMLInputElement;
     expect(fullInput.disabled).toBe(true);
     expect(fullInput.placeholder).toBe("Maximum of 20 labels reached");
+    expect(
+      (screen.getByRole("button", { name: /show common labels/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
   });
 
   it("retries failed staged operations without duplicating successful work", async () => {
