@@ -48,6 +48,7 @@ export interface Task {
   type: TaskType;
   state: TaskState;
   priority: number;
+  labels: string[];
   depends_on?: string[];
   images?: TaskImage[];
   docs?: TaskDoc[];
@@ -147,6 +148,7 @@ export async function createTask(
     description?: string;
     type: TaskType;
     priority: number;
+    labels?: string[];
     auto_start?: boolean;
   }
 ): Promise<Task> {
@@ -159,7 +161,9 @@ export async function createTask(
 
 export async function updateTask(
   id: string,
-  patch: Partial<Pick<Task, "title" | "description" | "type" | "state" | "priority">>
+  patch: Partial<
+    Pick<Task, "title" | "description" | "type" | "state" | "priority" | "labels">
+  >
 ): Promise<Task> {
   return request<Task>("PATCH", `/api/v1/tasks/${encodeURIComponent(id)}`, patch);
 }

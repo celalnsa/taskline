@@ -107,3 +107,60 @@ func TestDocClientLifecycle(t *testing.T) {
 		}
 	}
 }
+
+func TestTaskLabelsClientPayloads(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/projects/demo/tasks":
+			var in client.CreateTaskInput
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				t.Fatalf("decode create task input: %v", err)
+			}
+			if len(in.Labels) != 2 || in.Labels[0] != "backend" || in.Labels[1] != "ui" {
+				t.Fatalf("unexpected create labels: %#v", in.Labels)
+			}
+			_ = json.NewEncoder(w).Encode(client.Task{
+				ID: "task-one", ProjectID: "project-one", Title: in.Title, Type: "feature",
+				State: "start", Labels: in.Labels,
+			})
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/tasks/task-one":
+			var in client.UpdateTaskInput
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				t.Fatalf("decode update task input: %v", err)
+			}
+			if in.Labels == nil || len(*in.Labels) != 1 || (*in.Labels)[0] != "review" {
+				t.Fatalf("unexpected update labels: %#v", in.Labels)
+			}
+			_ = json.NewEncoder(w).Encode(client.Task{
+				ID: "task-one", ProjectID: "project-one", Title: "labeled", Type: "feature",
+				State: "start", Labels: *in.Labels,
+			})
+		default:
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	created, err := c.CreateTask("demo", client.CreateTaskInput{
+		Title:  "labeled",
+		Type:   "feature",
+		Labels: []string{"backend", "ui"},
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if len(created.Labels) != 2 || created.Labels[0] != "backend" || created.Labels[1] != "ui" {
+		t.Fatalf("unexpected created labels: %#v", created.Labels)
+	}
+
+	labels := []string{"review"}
+	updated, err := c.UpdateTask("task-one", client.UpdateTaskInput{Labels: &labels})
+	if err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+	if len(updated.Labels) != 1 || updated.Labels[0] != "review" {
+		t.Fatalf("unexpected updated labels: %#v", updated.Labels)
+	}
+}

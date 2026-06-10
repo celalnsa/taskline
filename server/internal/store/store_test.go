@@ -117,6 +117,44 @@ func TestUpdateTaskAndDelete(t *testing.T) {
 	require.True(t, errors.Is(st.DeleteTask(ctx, tk.ID), store.ErrNotFound))
 }
 
+func TestTaskLabels(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, _ := st.CreateProject(ctx, "p", "")
+
+	tk, err := st.CreateTask(ctx, p.ID, "labeled", "", model.TaskTypeFeature, 0, model.StateStart, []string{" backend ", "UI", "backend"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"backend", "UI"}, tk.Labels)
+
+	got, err := st.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"backend", "UI"}, got.Labels)
+
+	listed, err := st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, []string{"backend", "UI"}, listed[0].Labels)
+
+	runnable, err := st.ListRunnableTasks(ctx, p.ID)
+	require.NoError(t, err)
+	require.Len(t, runnable, 1)
+	require.Equal(t, []string{"backend", "UI"}, runnable[0].Labels)
+
+	updatedLabels := []string{" review ", "Frontend"}
+	updated, err := st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Labels: &updatedLabels})
+	require.NoError(t, err)
+	require.Equal(t, []string{"review", "Frontend"}, updated.Labels)
+
+	clearedLabels := []string{}
+	cleared, err := st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Labels: &clearedLabels})
+	require.NoError(t, err)
+	require.Empty(t, cleared.Labels)
+
+	blankLabels := []string{"ok", " "}
+	_, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Labels: &blankLabels})
+	require.Error(t, err)
+}
+
 func TestDependencyCycleProtection(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

@@ -86,6 +86,7 @@ type Task struct {
 	Type        TaskType  `json:"type"`
 	State       TaskState `json:"state"`
 	Priority    int       `json:"priority"`
+	Labels      []string  `json:"labels"`
 	DependsOn   []string  `json:"depends_on,omitempty"`
 	Images      []Image   `json:"images,omitempty"`
 	Docs        []Doc     `json:"docs,omitempty"`

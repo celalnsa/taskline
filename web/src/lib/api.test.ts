@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createTask,
   createTaskDoc,
   deleteTaskDoc,
   deleteTaskImage,
@@ -8,6 +9,7 @@ import {
   STATES,
   taskDocContentURL,
   taskImageURL,
+  updateTask,
   updateTaskDoc,
   uploadTaskImage,
   type TaskDoc,
@@ -26,6 +28,50 @@ describe("task states", () => {
       "done",
     ]);
     expect(STATE_LABELS.test).toBe("Test");
+  });
+});
+
+describe("task labels helpers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends labels when creating and updating tasks", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "task-1", labels: ["backend", "ui"] }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "task-1", labels: ["review"] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createTask("taskline", {
+      title: "Labeled task",
+      type: "feature",
+      priority: 0,
+      labels: ["backend", "ui"],
+    });
+    await updateTask("task-1", { labels: ["review"] });
+
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({
+        title: "Labeled task",
+        type: "feature",
+        priority: 0,
+        labels: ["backend", "ui"],
+      })
+    );
+    expect(fetchMock.mock.calls[1][1]?.body).toBe(
+      JSON.stringify({ labels: ["review"] })
+    );
   });
 });
 
