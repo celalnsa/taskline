@@ -436,6 +436,7 @@ function LabelSection({
 }) {
   const [draft, setDraft] = useState("");
   const [showCommonLabels, setShowCommonLabels] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const hasLabelRoom = labels.length < MAX_TASK_LABELS;
   const selectedLabelKeys = useMemo(
     () => new Set(labels.map((label) => label.trim().toLowerCase())),
@@ -452,6 +453,32 @@ function LabelSection({
       setShowCommonLabels(false);
     }
   }, [canShowCommonLabels]);
+
+  useEffect(() => {
+    if (!showCommonLabels) return;
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!containerRef.current?.contains(target)) {
+        setShowCommonLabels(false);
+      }
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setShowCommonLabels(false);
+    };
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, [showCommonLabels]);
 
   const addLabelValue = useCallback((rawLabel: string) => {
     const label = rawLabel.trim();
@@ -515,7 +542,7 @@ function LabelSection({
           </span>
         ))}
       </div>
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <div className="flex gap-1.5">
           <input
             aria-label="New label"

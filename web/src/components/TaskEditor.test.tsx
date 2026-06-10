@@ -387,6 +387,33 @@ describe("TaskEditor create attachments", () => {
     expect(within(menu).getByRole("menuitem", { name: /add label documentation/i })).toBeTruthy();
   });
 
+  it("closes the common-label dropdown on Escape without closing the editor", async () => {
+    const user = userEvent.setup();
+    const onClose = renderCreateEditor();
+
+    const toggle = screen.getByRole("button", { name: /show common labels/i });
+    await user.click(toggle);
+    expect(screen.getByRole("menu", { name: /common labels/i })).toBeTruthy();
+
+    fireEvent.keyDown(toggle, { key: "Escape" });
+
+    expect(screen.queryByRole("menu", { name: /common labels/i })).toBeNull();
+    expect(screen.getByRole("heading", { name: /new task in taskline/i })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("closes the common-label dropdown when clicking outside it", async () => {
+    const user = userEvent.setup();
+    renderCreateEditor();
+
+    await user.click(screen.getByRole("button", { name: /show common labels/i }));
+    expect(screen.getByRole("menu", { name: /common labels/i })).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByLabelText("Title"));
+
+    expect(screen.queryByRole("menu", { name: /common labels/i })).toBeNull();
+  });
+
   it("enforces label input limits in the editor", async () => {
     const user = userEvent.setup();
     const labels = Array.from({ length: 19 }, (_, index) => `label-${index + 1}`);
