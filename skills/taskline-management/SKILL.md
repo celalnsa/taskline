@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.8.0
+version: 0.9.0
 ---
 
 # taskline — task management for AI agents
@@ -93,6 +93,7 @@ focused on a single project.
 | `type`        | `feature` (default) or `bug`                                               |
 | `state`       | `pending`, `start`, `spec`, `dev`, `test`, `review`, `done`                |
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
+| `labels`      | task-local GitHub-style text labels, ordered and deduped by the server     |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
 | `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |
@@ -139,6 +140,7 @@ taskline project list
 ```bash
 # Create (defaults to 'start' state — immediately runnable)
 taskline task create --project demo --title "first task" --type feature --priority 1
+taskline task create --project demo --title "labeled task" --label backend --label ui
 
 # Create and park in 'pending' (won't show up in `task next`)
 taskline task create --project demo --title "later idea" --auto-start=false
@@ -154,6 +156,8 @@ taskline task get <id>
 # Mutate (PATCH semantics — only pass the flags you want changed)
 taskline task update <id> --state test
 taskline task update <id> --priority 5 --description "new prose"
+taskline task update <id> --label review --label frontend   # replace labels
+taskline task update <id> --clear-labels                    # remove labels
 taskline task delete <id>                    # cascades deps + attachments
 
 # Dependencies

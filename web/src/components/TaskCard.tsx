@@ -20,6 +20,9 @@ interface Props {
 export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }: Props) {
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const skipNextDeleteClick = useRef(false);
+  const labels = task.labels ?? [];
+  const visibleLabels = labels.slice(0, 3);
+  const hiddenLabelCount = Math.max(0, labels.length - visibleLabels.length);
   // Disable the draggable hook entirely on the overlay clone so the
   // DOM only has a single registered draggable per task id.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -189,6 +192,27 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
             )}
           </div>
           <p className="text-sm font-medium leading-snug">{task.title}</p>
+          {labels.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {visibleLabels.map((label) => (
+                <span
+                  key={label}
+                  className="max-w-full truncate rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] leading-4 text-slate-600"
+                  title={label}
+                >
+                  {label}
+                </span>
+              ))}
+              {hiddenLabelCount > 0 && (
+                <span
+                  className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] leading-4 text-slate-400"
+                  title={`${hiddenLabelCount} more labels`}
+                >
+                  +{hiddenLabelCount}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-2 flex items-center justify-end">

@@ -97,6 +97,9 @@ and are not installed globally.
   and are referenced by `task_docs.storage_path`. Keep file IO in the
   handler/config boundary; the store should only persist metadata and
   attach doc rows to task reads.
+- **Task labels.** Labels are task-local strings stored as JSON on the
+  `tasks` row. They are not a project-level registry yet; keep create/update
+  support in the normal task API/CLI/editor flow.
 
 ## Frontend ↔ backend contract
 

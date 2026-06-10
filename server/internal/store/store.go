@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -37,6 +39,9 @@ var schemaAddTestState string
 //go:embed schema/0007_task_docs.sql
 var schemaTaskDocs string
 
+//go:embed schema/0008_task_labels.sql
+var schemaTaskLabels string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -56,6 +61,7 @@ var schemaMigrations = []migration{
 	{version: 5, sql: schemaDesignToSpec},
 	{version: 6, sql: schemaAddTestState},
 	{version: 7, sql: schemaTaskDocs},
+	{version: 8, sql: schemaTaskLabels},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -153,6 +159,68 @@ func now() int64 { return time.Now().UnixMilli() }
 
 func newID() string { return uuid.NewString() }
 
+const (
+	maxTaskLabels      = 20
+	maxTaskLabelRunes  = 64
+	emptyTaskLabelsRaw = "[]"
+)
+
+func optionalLabels(labels [][]string) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	return labels[0]
+}
+
+func normalizeLabels(labels []string) ([]string, error) {
+	if len(labels) > maxTaskLabels {
+		return nil, fmt.Errorf("too many labels: max %d", maxTaskLabels)
+	}
+	out := make([]string, 0, len(labels))
+	seen := map[string]struct{}{}
+	for _, label := range labels {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			return nil, errors.New("label cannot be blank")
+		}
+		if strings.ContainsAny(label, ",\t\n\r") {
+			return nil, fmt.Errorf("label %q cannot contain commas, tabs, or newlines", label)
+		}
+		if utf8.RuneCountInString(label) > maxTaskLabelRunes {
+			return nil, fmt.Errorf("label %q is too long: max %d characters", label, maxTaskLabelRunes)
+		}
+		key := strings.ToLower(label)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, label)
+	}
+	return out, nil
+}
+
+func encodeLabels(labels []string) (string, error) {
+	if labels == nil {
+		return emptyTaskLabelsRaw, nil
+	}
+	raw, err := json.Marshal(labels)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func decodeLabels(raw string) ([]string, error) {
+	if raw == "" {
+		raw = emptyTaskLabelsRaw
+	}
+	var labels []string
+	if err := json.Unmarshal([]byte(raw), &labels); err != nil {
+		return nil, fmt.Errorf("decode task labels: %w", err)
+	}
+	return labels, nil
+}
+
 // ─── Projects ───────────────────────────────────────────────────────────
 
 // CreateProject inserts a new project. name must be unique.
@@ -213,12 +281,20 @@ func (s *Store) ListProjects(ctx context.Context) ([]*model.Project, error) {
 // ─── Tasks ──────────────────────────────────────────────────────────────
 
 // CreateTask inserts a new task with the given initial state.
-func (s *Store) CreateTask(ctx context.Context, projectID, title, description string, taskType model.TaskType, priority int, initialState model.TaskState) (*model.Task, error) {
+func (s *Store) CreateTask(ctx context.Context, projectID, title, description string, taskType model.TaskType, priority int, initialState model.TaskState, labels ...[]string) (*model.Task, error) {
 	if !taskType.Valid() {
 		return nil, fmt.Errorf("invalid task type %q", taskType)
 	}
 	if !initialState.Valid() {
 		return nil, fmt.Errorf("invalid initial state %q", initialState)
+	}
+	normalizedLabels, err := normalizeLabels(optionalLabels(labels))
+	if err != nil {
+		return nil, err
+	}
+	labelsJSON, err := encodeLabels(normalizedLabels)
+	if err != nil {
+		return nil, err
 	}
 	t := &model.Task{
 		ID:          newID(),
@@ -228,12 +304,13 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 		Type:        taskType,
 		State:       initialState,
 		Priority:    priority,
+		Labels:      normalizedLabels,
 		CreatedAt:   now(),
 		UpdatedAt:   now(),
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO tasks(id,project_id,title,description,type,state,priority,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.ProjectID, t.Title, t.Description, t.Type, t.State, t.Priority, t.CreatedAt, t.UpdatedAt,
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO tasks(id,project_id,title,description,type,state,priority,labels,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.ProjectID, t.Title, t.Description, t.Type, t.State, t.Priority, labelsJSON, t.CreatedAt, t.UpdatedAt,
 	)
 	if err != nil {
 		if isFKErr(err) {
@@ -247,7 +324,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 // GetTask returns a single task with its dependencies and attachments.
 func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id,project_id,title,description,type,state,priority,created_at,updated_at
+		`SELECT id,project_id,title,description,type,state,priority,labels,created_at,updated_at
 		   FROM tasks WHERE id = ?`, id)
 	t, err := scanTask(row)
 	if err != nil {
@@ -280,7 +357,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	if f.ProjectID == "" {
 		return nil, errors.New("ListTasks: ProjectID required")
 	}
-	q := `SELECT id,project_id,title,description,type,state,priority,created_at,updated_at
+	q := `SELECT id,project_id,title,description,type,state,priority,labels,created_at,updated_at
 	        FROM tasks WHERE project_id = ?`
 	args := []any{f.ProjectID}
 	if len(f.States) > 0 {
@@ -334,7 +411,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 // Sorted priority DESC, created_at ASC.
 func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*model.Task, error) {
 	q := `
-		SELECT t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.created_at,t.updated_at
+		SELECT t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.labels,t.created_at,t.updated_at
 		  FROM tasks t
 		 WHERE t.project_id = ?
 		   AND t.state NOT IN ('done','pending')
@@ -384,6 +461,7 @@ type TaskUpdate struct {
 	Type        *model.TaskType
 	State       *model.TaskState
 	Priority    *int
+	Labels      *[]string
 }
 
 // UpdateTask applies the update. State transitions are validated by the caller
@@ -414,10 +492,21 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	if u.Priority != nil {
 		cur.Priority = *u.Priority
 	}
+	if u.Labels != nil {
+		labels, err := normalizeLabels(*u.Labels)
+		if err != nil {
+			return nil, err
+		}
+		cur.Labels = labels
+	}
+	labelsJSON, err := encodeLabels(cur.Labels)
+	if err != nil {
+		return nil, err
+	}
 	cur.UpdatedAt = now()
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,updated_at=? WHERE id=?`,
-		cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, cur.UpdatedAt, cur.ID,
+		`UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,updated_at=? WHERE id=?`,
+		cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.UpdatedAt, cur.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -725,12 +814,18 @@ func scanProject(r rowScanner) (*model.Project, error) {
 
 func scanTask(r rowScanner) (*model.Task, error) {
 	var t model.Task
-	if err := r.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Type, &t.State, &t.Priority, &t.CreatedAt, &t.UpdatedAt); err != nil {
+	var labelsRaw string
+	if err := r.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Type, &t.State, &t.Priority, &labelsRaw, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
+	labels, err := decodeLabels(labelsRaw)
+	if err != nil {
+		return nil, err
+	}
+	t.Labels = labels
 	return &t, nil
 }
 

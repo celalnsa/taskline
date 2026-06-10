@@ -161,10 +161,11 @@ func (h *Handler) listProjects(ctx context.Context, c *app.RequestContext) {
 // ─── Task handlers ──────────────────────────────────────────────────────
 
 type createTaskReq struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
-	Priority    int    `json:"priority"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Type        string   `json:"type"`
+	Priority    int      `json:"priority"`
+	Labels      []string `json:"labels,omitempty"`
 	// AutoStart picks the initial state: true → "start", omitted/false →
 	// "pending". Pointer so callers that don't send the field get the
 	// documented default (pending), instead of silent auto-start.
@@ -182,7 +183,7 @@ func (h *Handler) createTask(ctx context.Context, c *app.RequestContext) {
 		req.Type = string(model.TaskTypeFeature)
 	}
 	autoStart := req.AutoStart != nil && *req.AutoStart
-	t, err := h.svc.CreateTask(ctx, project, req.Title, req.Description, model.TaskType(req.Type), req.Priority, autoStart)
+	t, err := h.svc.CreateTask(ctx, project, req.Title, req.Description, model.TaskType(req.Type), req.Priority, autoStart, req.Labels)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -252,11 +253,12 @@ func (h *Handler) getTask(ctx context.Context, c *app.RequestContext) {
 }
 
 type updateTaskReq struct {
-	Title       *string `json:"title,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Type        *string `json:"type,omitempty"`
-	State       *string `json:"state,omitempty"`
-	Priority    *int    `json:"priority,omitempty"`
+	Title       *string   `json:"title,omitempty"`
+	Description *string   `json:"description,omitempty"`
+	Type        *string   `json:"type,omitempty"`
+	State       *string   `json:"state,omitempty"`
+	Priority    *int      `json:"priority,omitempty"`
+	Labels      *[]string `json:"labels,omitempty"`
 }
 
 func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
@@ -283,6 +285,9 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 	}
 	if req.Priority != nil {
 		u.Priority = req.Priority
+	}
+	if req.Labels != nil {
+		u.Labels = req.Labels
 	}
 	t, err := h.svc.UpdateTask(ctx, id, u)
 	if err != nil {

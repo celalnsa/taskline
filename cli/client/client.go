@@ -46,6 +46,7 @@ type Task struct {
 	Type        string   `json:"type"`
 	State       string   `json:"state"`
 	Priority    int      `json:"priority"`
+	Labels      []string `json:"labels"`
 	DependsOn   []string `json:"depends_on,omitempty"`
 	Images      []Image  `json:"images,omitempty"`
 	Docs        []Doc    `json:"docs,omitempty"`
@@ -115,10 +116,11 @@ func (c *Client) ListProjects() ([]Project, error) {
 // ─── Task endpoints ─────────────────────────────────────────────────────
 
 type CreateTaskInput struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
-	Priority    int    `json:"priority"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Type        string   `json:"type"`
+	Priority    int      `json:"priority"`
+	Labels      []string `json:"labels,omitempty"`
 	// AutoStart, when true, creates the task directly in 'start' rather
 	// than 'pending'. Omitted = pending (the server default).
 	AutoStart *bool `json:"auto_start,omitempty"`
@@ -184,11 +186,12 @@ func (c *Client) GetTask(id string) (*Task, error) {
 }
 
 type UpdateTaskInput struct {
-	Title       *string `json:"title,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Type        *string `json:"type,omitempty"`
-	State       *string `json:"state,omitempty"`
-	Priority    *int    `json:"priority,omitempty"`
+	Title       *string   `json:"title,omitempty"`
+	Description *string   `json:"description,omitempty"`
+	Type        *string   `json:"type,omitempty"`
+	State       *string   `json:"state,omitempty"`
+	Priority    *int      `json:"priority,omitempty"`
+	Labels      *[]string `json:"labels,omitempty"`
 }
 
 func (c *Client) UpdateTask(id string, in UpdateTaskInput) (*Task, error) {

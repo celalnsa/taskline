@@ -21,6 +21,7 @@ const dependency: Task = {
   type: "feature",
   state: "start",
   priority: 1,
+  labels: [],
   depends_on: [],
   links: [],
   images: [],
@@ -95,6 +96,7 @@ describe("CreateTaskButton", () => {
           description: created.description,
           type: "bug",
           priority: 3,
+          labels: [],
           auto_start: false,
         }),
       })

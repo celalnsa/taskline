@@ -16,14 +16,15 @@ const task: Task = {
   created_at: 1780051741142,
   updated_at: 1780051741142,
   depends_on: [],
+  labels: [],
   links: [],
   images: [],
 };
 
-function renderCard(onClick = vi.fn(), onDelete = vi.fn()) {
+function renderCard(onClick = vi.fn(), onDelete = vi.fn(), cardTask: Task = task) {
   render(
     <DndContext>
-      <TaskCard task={task} isBlocked={false} onClick={onClick} onDelete={onDelete} />
+      <TaskCard task={cardTask} isBlocked={false} onClick={onClick} onDelete={onDelete} />
     </DndContext>
   );
 
@@ -68,6 +69,18 @@ describe("TaskCard", () => {
     renderCard();
 
     expect(screen.queryByText(/^edit$/i)).toBeNull();
+  });
+
+  it("renders compact label chips with overflow count", () => {
+    renderCard(vi.fn(), vi.fn(), {
+      ...task,
+      labels: ["backend", "ui", "review", "later"],
+    });
+
+    expect(screen.getByText("backend")).toBeTruthy();
+    expect(screen.getByText("ui")).toBeTruthy();
+    expect(screen.getByText("review")).toBeTruthy();
+    expect(screen.getByText("+1")).toBeTruthy();
   });
 
   it("deletes from the card icon without opening the editor", async () => {

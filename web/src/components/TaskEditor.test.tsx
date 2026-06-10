@@ -24,6 +24,7 @@ const task: Task = {
   created_at: 1780051741142,
   updated_at: 1780051741142,
   depends_on: [],
+  labels: [],
   links: [],
   images: [],
 };
@@ -266,6 +267,75 @@ describe("TaskEditor create attachments", () => {
     expect(fetchMock.mock.calls[3][1]?.body).toBe(
       JSON.stringify({ depends_on: activeDep.id })
     );
+  });
+
+  it("submits labels with the initial create request", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const created: Task = {
+      ...task,
+      id: "task-created",
+      title: "Create with labels",
+      labels: ["backend", "ui"],
+    };
+    const fetchMock = vi.fn((url: string | URL | Request, _init?: RequestInit) => {
+      const path = String(url);
+      if (path === "/api/v1/projects/project-1/tasks") {
+        return Promise.resolve(
+          new Response(JSON.stringify(created), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: `unexpected ${path}` }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderCreateEditor(onClose);
+
+    await user.type(screen.getByLabelText("Title"), created.title);
+    await user.type(screen.getByLabelText("New label"), "backend{enter}");
+    await user.type(screen.getByLabelText("New label"), "ui{enter}");
+
+    expect(screen.getByText("backend")).toBeTruthy();
+    expect(screen.getByText("ui")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({
+        title: created.title,
+        description: "",
+        type: "feature",
+        priority: 0,
+        labels: ["backend", "ui"],
+        auto_start: true,
+      })
+    );
+  });
+
+  it("enforces label input limits in the editor", async () => {
+    const user = userEvent.setup();
+    const labels = Array.from({ length: 19 }, (_, index) => `label-${index + 1}`);
+    renderEditor(vi.fn(), { ...task, labels });
+
+    const input = screen.getByLabelText("New label") as HTMLInputElement;
+    expect(input.maxLength).toBe(64);
+    expect(input.disabled).toBe(false);
+    expect(input.placeholder).toBe("Type a label and press Enter or comma");
+
+    await user.type(input, "last{enter}");
+
+    expect(screen.getByText("last")).toBeTruthy();
+    const fullInput = screen.getByLabelText("New label") as HTMLInputElement;
+    expect(fullInput.disabled).toBe(true);
+    expect(fullInput.placeholder).toBe("Maximum of 20 labels reached");
   });
 
   it("retries failed staged operations without duplicating successful work", async () => {
@@ -523,6 +593,42 @@ describe("TaskEditor edit actions", () => {
     renderEditor();
 
     expect(screen.queryByRole("button", { name: /^delete$/i })).toBeNull();
+  });
+
+  it("removes labels and submits them with task edits", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const labeledTask: Task = { ...task, labels: ["backend", "ui"] };
+    const updated: Task = { ...labeledTask, labels: ["ui"] };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderEditor(onClose, labeledTask);
+
+    await user.click(screen.getByRole("button", { name: /remove label backend/i }));
+    expect(screen.queryByText("backend")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          title: "Markdown task",
+          description: "Initial **markdown**",
+          type: "feature",
+          state: "start",
+          priority: 1,
+          labels: ["ui"],
+        }),
+      })
+    );
   });
 });
 

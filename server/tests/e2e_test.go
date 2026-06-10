@@ -103,6 +103,7 @@ type project struct {
 type task struct {
 	ID, ProjectID, Title, Description, Type, State string
 	Priority                                       int
+	Labels                                         []string `json:"labels,omitempty"`
 	DependsOn                                      []string `json:"depends_on,omitempty"`
 	Images                                         []image  `json:"images,omitempty"`
 	Docs                                           []doc    `json:"docs,omitempty"`
@@ -438,6 +439,59 @@ func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
 	jsonReq(t, "GET", base+"/api/v1/projects/parked/tasks/runnable", nil, &rs)
 	require.Len(t, rs.Tasks, 1)
 	require.Equal(t, parked.ID, rs.Tasks[0].ID)
+}
+
+func TestTaskLabelsAtAPI(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "labels"}, &project{})
+
+	var tk task
+	st := jsonReq(t, "POST", base+"/api/v1/projects/labels/tasks",
+		map[string]any{
+			"title":      "with labels",
+			"type":       "feature",
+			"auto_start": true,
+			"labels":     []string{" backend ", "UI", "backend"},
+		}, &tk)
+	require.Equal(t, http.StatusCreated, st)
+	require.Equal(t, []string{"backend", "UI"}, tk.Labels)
+
+	var got task
+	st = jsonReq(t, "GET", base+"/api/v1/tasks/"+tk.ID, nil, &got)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, []string{"backend", "UI"}, got.Labels)
+
+	var listed taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/labels/tasks", nil, &listed)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, listed.Tasks, 1)
+	require.Equal(t, []string{"backend", "UI"}, listed.Tasks[0].Labels)
+
+	var next nextResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/labels/tasks/next", nil, &next)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, next.Task)
+	require.Equal(t, []string{"backend", "UI"}, next.Task.Labels)
+
+	var updated task
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"labels": []string{" review ", "Frontend"}}, &updated)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, []string{"review", "Frontend"}, updated.Labels)
+
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"labels": []string{}}, &updated)
+	require.Equal(t, http.StatusOK, st)
+	require.Empty(t, updated.Labels)
+
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"labels": []string{"ok", " "}}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"labels": []string{"ok", "bad,label"}}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
 }
 
 func TestTaskLinkLifecycleAtAPI(t *testing.T) {

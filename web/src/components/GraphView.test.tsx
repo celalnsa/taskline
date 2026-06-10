@@ -99,6 +99,7 @@ function task(input: Partial<Task> & Pick<Task, "id" | "title">): Task {
     priority: 0,
     created_at: 1780051741142,
     updated_at: 1780051741142,
+    labels: [],
     depends_on: [],
     links: [],
     images: [],

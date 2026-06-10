@@ -7,10 +7,11 @@ import {
   useState,
   type ChangeEvent,
   type Dispatch,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from "react";
-import { FileCode2, FileText, ImagePlus, Plus, Trash2, X } from "lucide-react";
+import { FileCode2, FileText, ImagePlus, Plus, Tag, Trash2, X } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
@@ -67,6 +68,7 @@ function createEmptyTask(projectId: string): Task {
     type: "feature",
     state: "start",
     priority: 0,
+    labels: [],
     created_at: 0,
     updated_at: 0,
     depends_on: [],
@@ -131,6 +133,7 @@ export function TaskEditor({
   const [type, setType] = useState<TaskType>(currentTask.type);
   const [state, setState] = useState<TaskState>(currentTask.state);
   const [priority, setPriority] = useState(currentTask.priority);
+  const [labels, setLabels] = useState<string[]>(currentTask.labels ?? []);
   const [error, setError] = useState<string | null>(null);
   const [markdownOpen, setMarkdownOpen] = useState(false);
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
@@ -184,6 +187,7 @@ export function TaskEditor({
             description,
             type,
             priority,
+            labels,
             auto_start: state !== "pending",
           });
           setCreatedTask(activeTask);
@@ -232,7 +236,7 @@ export function TaskEditor({
       } else {
         await update.mutateAsync({
           id: currentTask.id,
-          patch: { title: trimmedTitle, description, type, state, priority },
+          patch: { title: trimmedTitle, description, type, state, priority, labels },
         });
       }
       onClose();
@@ -337,6 +341,8 @@ export function TaskEditor({
             </label>
           </div>
 
+          <LabelSection labels={labels} setLabels={setLabels} />
+
           <ImageSection
             project={project}
             task={currentTask}
@@ -415,6 +421,81 @@ type DocDialogState = {
   title: string;
   content: string;
 };
+
+const MAX_TASK_LABELS = 20;
+const MAX_TASK_LABEL_LENGTH = 64;
+
+function LabelSection({
+  labels,
+  setLabels,
+}: {
+  labels: string[];
+  setLabels: Dispatch<SetStateAction<string[]>>;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const addLabel = useCallback(() => {
+    const label = draft.trim();
+    if (!label) return;
+    setLabels((current) => {
+      if (current.length >= MAX_TASK_LABELS) return current;
+      const exists = current.some((item) => item.toLowerCase() === label.toLowerCase());
+      return exists ? current : [...current, label];
+    });
+    setDraft("");
+  }, [draft, setLabels]);
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" && event.key !== ",") return;
+    event.preventDefault();
+    addLabel();
+  };
+
+  const removeLabel = (label: string) => {
+    setLabels((current) => current.filter((item) => item !== label));
+  };
+
+  return (
+    <div className="border-t pt-3 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-slate-500">Labels</p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {labels.map((label) => (
+          <span
+            key={label}
+            className="inline-flex max-w-full items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
+          >
+            <Tag size={11} aria-hidden="true" className="shrink-0 text-slate-400" />
+            <span className="truncate">{label}</span>
+            <button
+              type="button"
+              aria-label={`Remove label ${label}`}
+              className="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+              onClick={() => removeLabel(label)}
+            >
+              <X size={10} aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        aria-label="New label"
+        className="w-full text-xs border rounded px-2 py-1"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={onKeyDown}
+        maxLength={MAX_TASK_LABEL_LENGTH}
+        disabled={labels.length >= MAX_TASK_LABELS}
+        placeholder={
+          labels.length >= MAX_TASK_LABELS
+            ? "Maximum of 20 labels reached"
+            : "Type a label and press Enter or comma"
+        }
+      />
+    </div>
+  );
+}
 
 function ImageSection({
   project,

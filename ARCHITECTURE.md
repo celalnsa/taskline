@@ -73,6 +73,7 @@ projects(id, name UNIQUE, description, created_at, updated_at)
 tasks   (id, project_id → projects.id, title, description,
          type ∈ {feature,bug},
          state ∈ {pending,start,spec,dev,test,review,done}, priority,
+         labels JSON string array,
          created_at, updated_at)
 task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              PRIMARY KEY(task_id, depends_on_task_id),

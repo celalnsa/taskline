@@ -48,6 +48,7 @@ func init() {
 	taskCreateCmd.Flags().String("description", "", "task description")
 	taskCreateCmd.Flags().String("type", "feature", "task type: feature|bug")
 	taskCreateCmd.Flags().Int("priority", 0, "task priority (higher = runs sooner)")
+	taskCreateCmd.Flags().StringArray("label", nil, "task label (repeatable)")
 	taskCreateCmd.Flags().Bool("auto-start", true, "start the task immediately ('start'); pass --auto-start=false to park it as 'pending'")
 	_ = taskCreateCmd.MarkFlagRequired("title")
 
@@ -58,6 +59,8 @@ func init() {
 	taskUpdateCmd.Flags().String("type", "", "new type: feature|bug")
 	taskUpdateCmd.Flags().String("state", "", "new state: pending|start|spec|dev|test|review|done")
 	taskUpdateCmd.Flags().Int("priority", 0, "new priority")
+	taskUpdateCmd.Flags().StringArray("label", nil, "replace task labels (repeatable)")
+	taskUpdateCmd.Flags().Bool("clear-labels", false, "clear all task labels")
 
 	taskDependCmd.Flags().String("on", "", "id of the task this one depends on (required)")
 	_ = taskDependCmd.MarkFlagRequired("on")
@@ -98,10 +101,12 @@ var taskCreateCmd = &cobra.Command{
 		desc, _ := cmd.Flags().GetString("description")
 		typ, _ := cmd.Flags().GetString("type")
 		prio, _ := cmd.Flags().GetInt("priority")
+		labels, _ := cmd.Flags().GetStringArray("label")
 		autoStart, _ := cmd.Flags().GetBool("auto-start")
 		c := newClient()
 		t, err := c.CreateTask(project, client.CreateTaskInput{
 			Title: title, Description: desc, Type: typ, Priority: prio,
+			Labels:    labels,
 			AutoStart: &autoStart,
 		})
 		if err != nil {
@@ -206,6 +211,19 @@ var taskUpdateCmd = &cobra.Command{
 		if cmd.Flags().Changed("priority") {
 			v, _ := cmd.Flags().GetInt("priority")
 			in.Priority = &v
+		}
+		labelsChanged := cmd.Flags().Changed("label")
+		clearLabels, _ := cmd.Flags().GetBool("clear-labels")
+		if labelsChanged && clearLabels {
+			return errors.New("--label and --clear-labels cannot be used together")
+		}
+		if labelsChanged {
+			v, _ := cmd.Flags().GetStringArray("label")
+			in.Labels = &v
+		}
+		if clearLabels {
+			v := []string{}
+			in.Labels = &v
 		}
 		c := newClient()
 		t, err := c.UpdateTask(args[0], in)
@@ -401,7 +419,7 @@ var taskUnlinkCmd = &cobra.Command{
 
 func renderTaskTable(w io.Writer, ts []client.Task) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tSTATE\tTYPE\tPRIO\tTITLE\tDEPS")
+	fmt.Fprintln(tw, "ID\tSTATE\tTYPE\tPRIO\tLABELS\tTITLE\tDEPS")
 	for _, t := range ts {
 		deps := "-"
 		if len(t.DependsOn) > 0 {
@@ -411,10 +429,17 @@ func renderTaskTable(w io.Writer, ts []client.Task) {
 			}
 			deps = strings.Join(short, ",")
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n",
-			shortID(t.ID), t.State, t.Type, t.Priority, trimRune(t.Title, 50), deps)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+			shortID(t.ID), t.State, t.Type, t.Priority, renderLabels(t.Labels), trimRune(t.Title, 50), deps)
 	}
 	tw.Flush()
+}
+
+func renderLabels(labels []string) string {
+	if len(labels) == 0 {
+		return "-"
+	}
+	return trimRune(strings.Join(labels, ","), 40)
 }
 
 func renderDocTable(w io.Writer, docs []client.Doc) {

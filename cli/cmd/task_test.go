@@ -39,3 +39,15 @@ func TestTaskDocCommandsRegistered(t *testing.T) {
 		t.Fatal("task doc update should expose --title and --file flags")
 	}
 }
+
+func TestTaskLabelFlagsRegistered(t *testing.T) {
+	if taskCreateCmd.Flag("label") == nil {
+		t.Fatal("task create should expose repeatable --label flag")
+	}
+	if taskUpdateCmd.Flag("label") == nil {
+		t.Fatal("task update should expose repeatable --label flag")
+	}
+	if taskUpdateCmd.Flag("clear-labels") == nil {
+		t.Fatal("task update should expose --clear-labels flag")
+	}
+}
