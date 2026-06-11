@@ -3,7 +3,8 @@ import { useQueryState } from "nuqs";
 import { Sidebar } from "./components/Sidebar";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { GraphView } from "./components/GraphView";
-import { useProjects } from "./hooks/queries";
+import { CreateTaskButton } from "./components/CreateTaskButton";
+import { useProjects, useTasks } from "./hooks/queries";
 import type { Project } from "./lib/api";
 
 type View = "kanban" | "graph";
@@ -22,7 +23,6 @@ export default function App() {
     projects.data?.find(
       (p) => p.name === projectKey || p.id === projectKey
     ) ?? null;
-  const [view, setView] = useState<View>("kanban");
 
   // Prefer the human-readable name in the URL; the resolver above also
   // accepts an id, so older saved links keep working.
@@ -35,16 +35,7 @@ export default function App() {
       <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {project ? (
-          <>
-            <div className="flex items-center gap-2 px-6 pt-3 bg-slate-50">
-              <ViewToggle view={view} onChange={setView} />
-            </div>
-            {view === "kanban" ? (
-              <KanbanBoard project={project} />
-            ) : (
-              <GraphView project={project} />
-            )}
-          </>
+          <ProjectWorkspace project={project} />
         ) : (
           <Welcome
             unresolved={!!projectKey && projects.isSuccess && !project}
@@ -56,13 +47,46 @@ export default function App() {
   );
 }
 
+function ProjectWorkspace({ project }: { project: Project }) {
+  const [view, setView] = useState<View>("kanban");
+  const tasksQ = useTasks(project.id);
+  const tasks = tasksQ.data ?? [];
+
+  return (
+    <>
+      <header className="shrink-0 border-b border-slate-200 bg-white px-6 py-3">
+        <h2 className="text-lg font-bold leading-tight text-slate-900">{project.name}</h2>
+        {project.description && (
+          <p className="mt-0.5 text-xs text-slate-500">{project.description}</p>
+        )}
+      </header>
+      <section className="relative flex-1 overflow-hidden bg-slate-50">
+        <div className="absolute right-4 top-3 z-20 flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 p-1 shadow-sm backdrop-blur">
+          <ViewToggle view={view} onChange={setView} />
+          <CreateTaskButton project={project} allTasks={tasks} />
+        </div>
+        <div className="box-border h-full pt-14">
+          {view === "kanban" ? (
+            <KanbanBoard project={project} />
+          ) : (
+            <GraphView project={project} />
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+
 function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   const opts: { id: View; label: string }[] = [
     { id: "kanban", label: "Kanban" },
-    { id: "graph", label: "Dependency graph" },
+    { id: "graph", label: "Graph" },
   ];
   return (
-    <div className="inline-flex rounded border border-slate-300 overflow-hidden text-xs">
+    <div
+      aria-label="Board view"
+      className="inline-flex overflow-hidden rounded-md border border-slate-300 text-xs"
+    >
       {opts.map((o) => (
         <button
           key={o.id}

@@ -12,10 +12,6 @@ const queryMocks = vi.hoisted(() => ({
 
 vi.mock("../hooks/queries", () => queryMocks);
 
-vi.mock("./CreateTaskButton", () => ({
-  CreateTaskButton: () => <button type="button">+ New task</button>,
-}));
-
 vi.mock("./TaskEditor", () => ({
   TaskEditor: ({
     task,

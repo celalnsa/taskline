@@ -67,7 +67,7 @@ describe("CreateTaskButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderCreateButton();
 
-    await user.click(screen.getByRole("button", { name: /new task/i }));
+    await user.click(screen.getByRole("button", { name: "+ New" }));
 
     expect(screen.getByRole("heading", { name: /new task in taskline/i })).toBeTruthy();
     expect(screen.getByLabelText("Description")).toBeTruthy();
@@ -137,7 +137,7 @@ describe("CreateTaskButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderCreateButton();
 
-    await user.click(screen.getByRole("button", { name: /new task/i }));
+    await user.click(screen.getByRole("button", { name: "+ New" }));
     await user.type(screen.getByLabelText("Title"), created.title);
     await user.type(screen.getByLabelText("Description"), created.description);
     await user.selectOptions(screen.getByLabelText("State"), "dev");
