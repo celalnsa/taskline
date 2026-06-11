@@ -170,7 +170,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
           <Trash2 size={12} className="mx-auto" aria-hidden="true" />
         </button>
       )}
-      <div className="pointer-events-none absolute right-7 top-0 z-10 flex -translate-y-1/2 items-center gap-1">
+      <div className="absolute right-7 top-0 z-10 flex -translate-y-1/2 items-center gap-1">
         <span
           className={`${badgeClass} border-sky-200 bg-sky-50 text-sky-700`}
           title={`Priority ${task.priority}`}
@@ -192,7 +192,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
           </span>
         )}
       </div>
-      <div className="min-w-0 pt-2">
+      <div className="min-w-0 pr-6 pt-2.5">
         <div>
           <p className="line-clamp-2 min-w-0 text-[13px] font-medium leading-snug text-slate-900">
             {task.title}

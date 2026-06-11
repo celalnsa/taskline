@@ -156,10 +156,14 @@ describe("TaskCard", () => {
     const dependencyBadge = screen.getByText("deps 1");
     const cornerBadgeRow = priorityBadge.parentElement;
     const title = screen.getByText("Blocked task with dependencies");
+    const titleContainer = title.parentElement?.parentElement;
 
     expect(priorityBadge).toBeTruthy();
     expect(dependencyBadge).toBeTruthy();
     expect(cornerBadgeRow?.className).toContain("absolute");
+    expect(cornerBadgeRow?.className).not.toContain("pointer-events-none");
+    expect(titleContainer?.className).toContain("pr-6");
+    expect(titleContainer?.className).toContain("pt-2.5");
     expect(title.parentElement?.textContent).toBe("Blocked task with dependencies");
     expect(screen.queryByText("p=48")).toBeNull();
     expect(screen.getByText("deps 1")).toBeTruthy();

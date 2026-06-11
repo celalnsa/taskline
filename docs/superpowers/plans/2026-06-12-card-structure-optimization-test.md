@@ -53,6 +53,32 @@ warning during production builds.
   - label row height was `14px`;
   - title still computed `-webkit-line-clamp: 2`.
 
+## Review Follow-up Revalidation
+
+After review feedback, the badge row was changed to allow pointer events so
+native badge `title` tooltips can appear, and the title container gained
+`pr-6 pt-2.5` to avoid collision with the delete button and floating badges.
+
+- Focused test:
+  `mise exec -- pnpm --dir web test src/components/TaskCard.test.tsx` passed
+  with `10` tests.
+- Frontend lint:
+  `mise exec -- pnpm --dir web lint` passed.
+- Frontend test:
+  `mise exec -- pnpm --dir web test` passed with `7` files and `65` tests.
+- Frontend build:
+  `mise exec -- pnpm --dir web build` passed.
+- Rebuilt and restarted the embedded server with
+  `mise exec -- ./scripts/start-local.sh`.
+- Confirmed `http://127.0.0.1:8787/healthz` returned `{"ok":true}`.
+- Headless Chrome smoke confirmed:
+  - badge row class did not include `pointer-events-none`;
+  - title container class included `pr-6 pt-2.5`;
+  - floating badge centers remained within `1px` of the card top edge;
+  - `links 2` and `p=48` remained absent;
+  - label row height remained `14px`;
+  - title still computed `-webkit-line-clamp: 2`.
+
 ## Result
 
 The implementation is ready for review.
