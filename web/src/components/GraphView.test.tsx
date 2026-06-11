@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project, Task } from "../lib/api";
@@ -12,6 +12,17 @@ const queryMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../hooks/queries", () => queryMocks);
+
+vi.mock("./TaskEditor", () => ({
+  TaskEditor: ({ task, onClose }: { task: Task; onClose: () => void }) => (
+    <div role="dialog" aria-label={`Edit task ${task.title}`}>
+      <p>{task.title}</p>
+      <button type="button" onClick={onClose}>
+        Close editor
+      </button>
+    </div>
+  ),
+}));
 
 vi.mock("@xyflow/react", () => ({
   Background: () => <div data-testid="background" />,
@@ -185,6 +196,40 @@ describe("GraphView", () => {
 
     expect(screen.getByTestId("node-d").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-b").dataset.selected).toBe("false");
+  });
+
+  it("opens the task editor when clicking a graph task node", async () => {
+    const user = userEvent.setup();
+    renderGraph([
+      task({ id: "a", title: "A" }),
+      task({ id: "b", title: "Editable task", depends_on: ["a"] }),
+    ]);
+
+    await user.click(screen.getByTestId("node-b"));
+
+    expect(
+      screen.getByRole("dialog", { name: /edit task editable task/i })
+    ).toBeTruthy();
+    expect(screen.getByTestId("node-b").dataset.selected).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: /close editor/i }));
+
+    expect(screen.queryByRole("dialog", { name: /edit task editable task/i })).toBeNull();
+  });
+
+  it("keeps the inline state selector from opening the task editor", async () => {
+    const user = userEvent.setup();
+    const { updateMutate } = renderGraph([
+      task({ id: "b", title: "Editable task" }),
+    ]);
+
+    await user.selectOptions(within(screen.getByTestId("node-b")).getByRole("combobox"), "dev");
+
+    expect(updateMutate).toHaveBeenCalledWith({
+      id: "b",
+      patch: { state: "dev" },
+    });
+    expect(screen.queryByRole("dialog", { name: /edit task editable task/i })).toBeNull();
   });
 
   it("creates a dependency when connecting one task to another", async () => {

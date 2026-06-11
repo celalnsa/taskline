@@ -19,6 +19,7 @@ import {
   type TaskState,
 } from "../lib/api";
 import { useAddDependency, useTasks, useUpdateTask } from "../hooks/queries";
+import { TaskEditor } from "./TaskEditor";
 
 const STATE_COLORS: Record<TaskState, string> = {
   pending: "#e2e8f0",
@@ -52,6 +53,7 @@ export function GraphView({ project }: Props) {
   const updateTask = useUpdateTask(project.id);
   const addDependency = useAddDependency(project.id);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Task | null>(null);
   const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
 
   const onConnect = useCallback(
@@ -143,7 +145,10 @@ export function GraphView({ project }: Props) {
         edges={edges}
         nodeTypes={{ taskNode: TaskNode }}
         onConnect={onConnect}
-        onNodeClick={(_, node) => setSelectedTaskId(node.id)}
+        onNodeClick={(_, node) => {
+          setSelectedTaskId(node.id);
+          setEditing(node.data.task);
+        }}
         onPaneClick={() => setSelectedTaskId(null)}
         fitView
         proOptions={{ hideAttribution: true }}
@@ -151,6 +156,14 @@ export function GraphView({ project }: Props) {
         <Background gap={16} />
         <Controls />
       </ReactFlow>
+      {editing && (
+        <TaskEditor
+          project={project}
+          task={editing}
+          allTasks={tasks}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -177,6 +190,8 @@ function TaskNode({
       <select
         className="mt-2 w-full text-[10px] border rounded px-1 py-0.5"
         value={task.state}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         onChange={(e) => {
           const next = e.target.value as TaskState;
           if (next !== task.state) {
