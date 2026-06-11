@@ -5,13 +5,14 @@ import type { Project, Task } from "./lib/api";
 import App from "./App";
 
 const mocks = vi.hoisted(() => ({
+  projectKey: "taskline",
   setProjectKey: vi.fn(),
   useProjects: vi.fn(),
   useTasks: vi.fn(),
 }));
 
 vi.mock("nuqs", () => ({
-  useQueryState: () => ["taskline", mocks.setProjectKey],
+  useQueryState: () => [mocks.projectKey, mocks.setProjectKey],
 }));
 
 vi.mock("./hooks/queries", () => ({
@@ -49,6 +50,14 @@ const project: Project = {
   updated_at: 1780051741142,
 };
 
+const otherProject: Project = {
+  id: "project-2",
+  name: "chanwire",
+  description: "Channel board",
+  created_at: 1780051741142,
+  updated_at: 1780051741142,
+};
+
 const task: Task = {
   id: "task-1",
   project_id: project.id,
@@ -67,18 +76,19 @@ const task: Task = {
 
 function renderApp() {
   mocks.useProjects.mockReturnValue({
-    data: [project],
+    data: [project, otherProject],
     isSuccess: true,
   });
   mocks.useTasks.mockReturnValue({
     data: [task],
   });
-  render(<App />);
+  return render(<App />);
 }
 
 describe("App workspace layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.projectKey = "taskline";
   });
 
   afterEach(() => {
@@ -109,5 +119,24 @@ describe("App workspace layout", () => {
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
     expect(screen.getByRole("dialog", { name: "Create task" })).toBeTruthy();
+  });
+
+  it("resets workspace-local view and editor state when the project changes", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Graph" }));
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    expect(screen.getByRole("region", { name: "Graph board" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Create task" })).toBeTruthy();
+
+    mocks.projectKey = "chanwire";
+    rerender(<App />);
+
+    expect(screen.getByRole("heading", { level: 2, name: "chanwire" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Kanban board" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Graph board" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Create task" })).toBeNull();
   });
 });

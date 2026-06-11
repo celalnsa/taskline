@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project, Task } from "../lib/api";
@@ -67,7 +67,9 @@ describe("CreateTaskButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderCreateButton();
 
-    await user.click(screen.getByRole("button", { name: "+ New" }));
+    const createButton = screen.getByRole("button", { name: "+ New" });
+    expect(createButton.getAttribute("type")).toBe("button");
+    await user.click(createButton);
 
     expect(screen.getByRole("heading", { name: /new task in taskline/i })).toBeTruthy();
     expect(screen.getByLabelText("Description")).toBeTruthy();
@@ -158,5 +160,19 @@ describe("CreateTaskButton", () => {
         body: JSON.stringify({ state: "dev" }),
       })
     );
+  });
+
+  it("lets TaskEditor handle Escape while the editor is open", async () => {
+    const user = userEvent.setup();
+    renderCreateButton();
+
+    await user.click(screen.getByRole("button", { name: "+ New" }));
+    await user.click(screen.getByRole("button", { name: /open markdown editor/i }));
+    await screen.findByRole("dialog", { name: /markdown description editor/i });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: /markdown description editor/i })).toBeNull();
+    expect(screen.getByRole("heading", { name: /new task in taskline/i })).toBeTruthy();
   });
 });

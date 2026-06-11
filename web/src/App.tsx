@@ -35,7 +35,7 @@ export default function App() {
       <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
       <main className="flex-1 flex flex-col overflow-hidden">
         {project ? (
-          <ProjectWorkspace project={project} />
+          <ProjectWorkspace key={project.id} project={project} />
         ) : (
           <Welcome
             unresolved={!!projectKey && projects.isSuccess && !project}

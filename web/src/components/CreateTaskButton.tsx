@@ -11,11 +11,6 @@ export function CreateTaskButton({ project, allTasks }: { project: Project; allT
       if (!open && cmd && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen(true);
-        return;
-      }
-      if (!open) return;
-      if (e.key === "Escape") {
-        setOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -25,6 +20,7 @@ export function CreateTaskButton({ project, allTasks }: { project: Project; allT
   return (
     <>
       <button
+        type="button"
         className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
         onClick={() => setOpen(true)}
       >
