@@ -86,6 +86,16 @@ describe("TaskCard", () => {
     expect(screen.getByText("ui")).toBeTruthy();
     expect(screen.getByText("review")).toBeTruthy();
     expect(screen.getByText("+1")).toBeTruthy();
+
+    const labelRow = screen.getByText("backend").parentElement;
+    const backendChip = screen.getByText("backend").closest("span");
+
+    expect(labelRow?.className).toContain("flex-wrap");
+    expect(labelRow?.className).toContain("max-h");
+    expect(labelRow?.className).toContain("overflow-hidden");
+    expect(backendChip?.className).toContain("text-[10px]");
+    expect(backendChip?.className).toContain("max-w-full");
+    expect(backendChip?.className).not.toContain("max-w-[5rem]");
   });
 
   it("renders common labels with distinct theme metadata", () => {
@@ -116,7 +126,7 @@ describe("TaskCard", () => {
     expect(card.className).toContain("border-l-violet-500");
   });
 
-  it("renders priority and dependency metadata as compact badges", () => {
+  it("renders priority and dependency metadata as leading label chips", () => {
     renderCard(
       vi.fn(),
       vi.fn(),
@@ -125,14 +135,47 @@ describe("TaskCard", () => {
         title: "Blocked task with dependencies",
         priority: 48,
         depends_on: ["dep-1"],
+        labels: ["backend", "ui", "review", "later"],
+        links: [
+          {
+            id: "link-1",
+            task_id: "task-1",
+            url: "https://example.com",
+            label: "Example",
+            created_at: 1780051741142,
+          },
+          {
+            id: "link-2",
+            task_id: "task-1",
+            url: "https://example.org",
+            label: "Example 2",
+            created_at: 1780051741142,
+          },
+        ],
       },
       true
     );
 
-    expect(screen.getByText("p=48")).toBeTruthy();
+    const priorityBadge = screen.getByText("p 48");
+    const dependencyBadge = screen.getByText("deps 1");
+    const labelRow = priorityBadge.parentElement;
+    const title = screen.getByText("Blocked task with dependencies");
+    const titleContainer = title.parentElement?.parentElement;
+
+    expect(priorityBadge).toBeTruthy();
+    expect(dependencyBadge).toBeTruthy();
+    expect(labelRow?.className).toContain("flex-wrap");
+    expect(labelRow?.className).toContain("max-h");
+    expect(labelRow?.textContent?.startsWith("p 48deps 1backend")).toBe(true);
+    expect(titleContainer?.className).toContain("pr-6");
+    expect(titleContainer?.className).not.toContain("pt-2.5");
+    expect(title.parentElement?.textContent).toBe("Blocked task with dependencies");
+    expect(screen.queryByText("p=48")).toBeNull();
     expect(screen.getByText("deps 1")).toBeTruthy();
     expect(screen.queryByText("blocked")).toBeNull();
     expect(screen.queryByText("deps: 1")).toBeNull();
+    expect(screen.queryByText("links 2")).toBeNull();
+    expect(screen.getByText("+1")).toBeTruthy();
   });
 
   it("clamps long titles to two lines", () => {
