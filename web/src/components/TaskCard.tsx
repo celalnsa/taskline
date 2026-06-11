@@ -1,6 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { Trash2 } from "lucide-react";
-import { useRef } from "react";
+import { useRef, type MouseEvent as ReactMouseEvent } from "react";
 import type { Task } from "../lib/api";
 import { getTaskLabelTheme, taskLabelChipClass } from "../lib/labels";
 import { formatRelativeTime } from "../lib/time";
@@ -9,7 +8,7 @@ interface Props {
   task: Task;
   isBlocked: boolean;
   onClick: () => void;
-  onDelete?: () => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void;
   // When true, the card renders as a static clone for use inside
   // <DragOverlay/> — no useDraggable wiring, no transform, the
   // overlay handles positioning. The original card in the column
@@ -18,9 +17,8 @@ interface Props {
   overlay?: boolean;
 }
 
-export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }: Props) {
+export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = false }: Props) {
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
-  const skipNextDeleteClick = useRef(false);
   const labels = task.labels ?? [];
   const visibleLabels = labels.slice(0, 3);
   const hiddenLabelCount = Math.max(0, labels.length - visibleLabels.length);
@@ -99,25 +97,6 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
     listeners?.onKeyDown?.(event);
   }
 
-  function deleteFromCard() {
-    pointerStart.current = null;
-    if (
-      !globalThis.confirm(
-        `Delete task "${task.title}"? This cascades to dependencies and images.`
-      )
-    ) {
-      return;
-    }
-    onDelete?.();
-  }
-
-  function skipFollowUpClick() {
-    skipNextDeleteClick.current = true;
-    window.setTimeout(() => {
-      skipNextDeleteClick.current = false;
-    }, 0);
-  }
-
   return (
     <div
       ref={overlay ? undefined : setNodeRef}
@@ -131,6 +110,16 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
         pointerStart.current = null;
       }}
       onKeyDown={openFromKeyboard}
+      onContextMenu={
+        overlay
+          ? undefined
+          : (event) => {
+              pointerStart.current = null;
+              event.preventDefault();
+              event.stopPropagation();
+              onContextMenu?.(event);
+            }
+      }
       className={
         "relative group rounded-md border border-slate-200 bg-white p-2.5 shadow-sm border-l-4 transition " +
         typeColor +
@@ -138,40 +127,6 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
         interactiveClass
       }
     >
-      {!overlay && onDelete && (
-        <button
-          type="button"
-          aria-label={`Delete task ${task.title}`}
-          title="Delete task"
-          className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-white/90 text-slate-400 opacity-0 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-300 group-hover:opacity-100"
-          onPointerDown={(event) => {
-            event.stopPropagation();
-            pointerStart.current = null;
-          }}
-          onPointerUp={(event) => {
-            event.stopPropagation();
-            if (event.button !== 0) return;
-            deleteFromCard();
-            skipFollowUpClick();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (skipNextDeleteClick.current) {
-              skipNextDeleteClick.current = false;
-              return;
-            }
-            deleteFromCard();
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            event.stopPropagation();
-            deleteFromCard();
-          }}
-        >
-          <Trash2 size={12} className="mx-auto" aria-hidden="true" />
-        </button>
-      )}
       <div className="min-w-0 pr-6">
         <div>
           <p className="line-clamp-2 min-w-0 text-[13px] font-medium leading-snug text-slate-900">

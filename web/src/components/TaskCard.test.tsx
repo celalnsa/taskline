@@ -25,15 +25,21 @@ function renderCard(
   onClick = vi.fn(),
   onDelete = vi.fn(),
   cardTask: Task = task,
-  isBlocked = false
+  isBlocked = false,
+  onContextMenu = vi.fn()
 ) {
   render(
     <DndContext>
-      <TaskCard task={cardTask} isBlocked={isBlocked} onClick={onClick} onDelete={onDelete} />
+      <TaskCard
+        task={cardTask}
+        isBlocked={isBlocked}
+        onClick={onClick}
+        onContextMenu={onContextMenu}
+      />
     </DndContext>
   );
 
-  return { onClick, onDelete };
+  return { onClick, onDelete, onContextMenu };
 }
 
 describe("TaskCard", () => {
@@ -74,6 +80,16 @@ describe("TaskCard", () => {
     renderCard();
 
     expect(screen.queryByText(/^edit$/i)).toBeNull();
+  });
+
+  it("opens the task context menu on right-click without opening the editor", () => {
+    const { onClick, onContextMenu } = renderCard();
+    const card = screen.getByRole("button", { name: /open task clickable task card/i });
+
+    fireEvent.contextMenu(card, { clientX: 24, clientY: 36 });
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it("renders compact label chips with overflow count", () => {
@@ -191,19 +207,9 @@ describe("TaskCard", () => {
     expect(title.className).toContain("line-clamp-2");
   });
 
-  it("deletes from the card icon without opening the editor", async () => {
-    const user = userEvent.setup();
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirm);
-    const { onClick, onDelete } = renderCard();
+  it("does not render the old hover delete icon", () => {
+    renderCard();
 
-    const deleteButton = screen.getByRole("button", { name: /delete task clickable task card/i });
-    await user.click(deleteButton);
-
-    expect(confirm).toHaveBeenCalledWith(
-      'Delete task "Clickable task card"? This cascades to dependencies and images.'
-    );
-    expect(onDelete).toHaveBeenCalledTimes(1);
-    expect(onClick).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /delete task clickable task card/i })).toBeNull();
   });
 });

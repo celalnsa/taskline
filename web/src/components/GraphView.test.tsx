@@ -10,14 +10,32 @@ const queryMocks = vi.hoisted(() => ({
   useUpdateTask: vi.fn(),
   useAddDependency: vi.fn(),
   useDeleteDependency: vi.fn(),
+  useDeleteTask: vi.fn(),
 }));
 
 vi.mock("../hooks/queries", () => queryMocks);
 
 vi.mock("./TaskEditor", () => ({
-  TaskEditor: ({ task, onClose }: { task: Task; onClose: () => void }) => (
-    <div role="dialog" aria-label={`Edit task ${task.title}`}>
-      <p>{task.title}</p>
+  TaskEditor: ({
+    task,
+    mode = "edit",
+    onClose,
+  }: {
+    task?: Task;
+    mode?: "create" | "edit";
+    onClose: () => void;
+  }) => (
+    <div
+      role="dialog"
+      aria-label={`${mode === "create" ? "Create task" : "Edit task"} ${task?.title ?? ""}`}
+    >
+      <p data-testid="editor-mode">{mode}</p>
+      <p>{task?.title}</p>
+      <p>{task?.description}</p>
+      <p>{task?.type}</p>
+      <p>{task?.state}</p>
+      <p>{task?.priority}</p>
+      <p>{task?.labels?.join(",")}</p>
       <button type="button" onClick={onClose}>
         Close editor
       </button>
@@ -55,6 +73,7 @@ vi.mock("@xyflow/react", () => ({
     onEdgeClick,
     onNodeClick,
     onNodeDoubleClick,
+    onNodeContextMenu,
     onPaneClick,
   }: {
     nodes: Array<{
@@ -76,6 +95,10 @@ vi.mock("@xyflow/react", () => ({
       node: { id: string; data: Record<string, unknown> }
     ) => void;
     onNodeDoubleClick?: (
+      event: React.MouseEvent<HTMLDivElement>,
+      node: { id: string; data: Record<string, unknown> }
+    ) => void;
+    onNodeContextMenu?: (
       event: React.MouseEvent<HTMLDivElement>,
       node: { id: string; data: Record<string, unknown> }
     ) => void;
@@ -133,6 +156,7 @@ vi.mock("@xyflow/react", () => ({
             data-y={node.position.y}
             onClick={(event) => onNodeClick?.(event, node)}
             onDoubleClick={(event) => onNodeDoubleClick?.(event, node)}
+            onContextMenu={(event) => onNodeContextMenu?.(event, node)}
           >
             {NodeComponent ? <NodeComponent data={node.data} /> : node.id}
           </div>
@@ -174,11 +198,13 @@ function renderGraph(tasks: Task[]) {
   const updateMutate = vi.fn();
   const addDependencyMutate = vi.fn();
   const deleteDependencyMutate = vi.fn();
+  const deleteTaskMutate = vi.fn();
 
   queryMocks.useTasks.mockReturnValue({ data: tasks });
   queryMocks.useUpdateTask.mockReturnValue({ mutate: updateMutate });
   queryMocks.useAddDependency.mockReturnValue({ mutate: addDependencyMutate });
   queryMocks.useDeleteDependency.mockReturnValue({ mutate: deleteDependencyMutate });
+  queryMocks.useDeleteTask.mockReturnValue({ mutate: deleteTaskMutate });
 
   render(
     <QueryClientProvider client={client}>
@@ -186,7 +212,7 @@ function renderGraph(tasks: Task[]) {
     </QueryClientProvider>
   );
 
-  return { updateMutate, addDependencyMutate, deleteDependencyMutate };
+  return { updateMutate, addDependencyMutate, deleteDependencyMutate, deleteTaskMutate };
 }
 
 describe("GraphView", () => {
@@ -331,6 +357,53 @@ describe("GraphView", () => {
       patch: { state: "dev" },
     });
     expect(screen.queryByRole("dialog", { name: /edit task editable task/i })).toBeNull();
+  });
+
+  it("deletes a graph task from the right-click menu after confirmation", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    const { deleteTaskMutate } = renderGraph([
+      task({ id: "b", title: "Deletable graph task" }),
+    ]);
+
+    fireEvent.contextMenu(screen.getByTestId("node-b"), { clientX: 60, clientY: 80 });
+    await user.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Delete task "Deletable graph task"? This cascades to dependencies and images.'
+    );
+    expect(deleteTaskMutate).toHaveBeenCalledWith("b");
+    expect(screen.queryByRole("dialog", { name: /edit task deletable graph task/i })).toBeNull();
+  });
+
+  it("copies a graph task into a prefilled create editor from the right-click menu", async () => {
+    const user = userEvent.setup();
+    const { deleteTaskMutate } = renderGraph([
+      task({
+        id: "b",
+        title: "Copyable graph task",
+        description: "Copy graph basics",
+        type: "docs",
+        state: "review",
+        priority: 9,
+        labels: ["graph", "copy"],
+        depends_on: ["a"],
+      }),
+    ]);
+
+    fireEvent.contextMenu(screen.getByTestId("node-b"), { clientX: 60, clientY: 80 });
+    await user.click(screen.getByRole("menuitem", { name: /^copy$/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /create task copyable graph task/i });
+    expect(dialog).toBeTruthy();
+    expect(screen.getByTestId("editor-mode").textContent).toBe("create");
+    expect(within(dialog).getByText("Copy graph basics")).toBeTruthy();
+    expect(within(dialog).getByText("docs")).toBeTruthy();
+    expect(within(dialog).getByText("review")).toBeTruthy();
+    expect(within(dialog).getByText("9")).toBeTruthy();
+    expect(within(dialog).getByText("graph,copy")).toBeTruthy();
+    expect(deleteTaskMutate).not.toHaveBeenCalled();
   });
 
   it("creates a dependency when connecting one task to another", async () => {

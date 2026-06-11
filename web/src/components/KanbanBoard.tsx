@@ -17,7 +17,9 @@ import {
   type TaskState,
 } from "../lib/api";
 import { useDeleteTask, useTasks, useUpdateTask } from "../hooks/queries";
+import { createTaskCopyDraft } from "../lib/taskActions";
 import { TaskCard } from "./TaskCard";
+import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskEditor } from "./TaskEditor";
 import { CreateTaskButton } from "./CreateTaskButton";
 
@@ -30,11 +32,19 @@ interface Props {
 // invalidate every dependent useMemo on each render.
 const NO_TASKS: Task[] = [];
 
+type TaskMenuState = {
+  task: Task;
+  x: number;
+  y: number;
+};
+
 export function KanbanBoard({ project }: Props) {
   const tasksQ = useTasks(project.id);
   const updateTask = useUpdateTask(project.id);
   const deleteTask = useDeleteTask(project.id);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [copyDraft, setCopyDraft] = useState<Task | null>(null);
+  const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Track which task is currently being dragged so we can render it in a
   // <DragOverlay>. Without the overlay, the card stays in its source
@@ -103,6 +113,15 @@ export function KanbanBoard({ project }: Props) {
     );
   }
 
+  function deleteTaskWithError(task: Task) {
+    deleteTask.mutate(task.id, {
+      onError: (err) => {
+        setError((err as Error).message);
+        setTimeout(() => setError(null), 5000);
+      },
+    });
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
@@ -135,13 +154,8 @@ export function KanbanBoard({ project }: Props) {
                     task={t}
                     isBlocked={isBlocked(t)}
                     onClick={() => setEditing(t)}
-                    onDelete={() => {
-                      deleteTask.mutate(t.id, {
-                        onError: (err) => {
-                          setError((err as Error).message);
-                          setTimeout(() => setError(null), 5000);
-                        },
-                      });
+                    onContextMenu={(event) => {
+                      setTaskMenu({ task: t, x: event.clientX, y: event.clientY });
                     }}
                   />
                 ))}
@@ -168,6 +182,24 @@ export function KanbanBoard({ project }: Props) {
           task={editing}
           allTasks={tasks}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {copyDraft && (
+        <TaskEditor
+          project={project}
+          task={copyDraft}
+          allTasks={tasks}
+          mode="create"
+          onClose={() => setCopyDraft(null)}
+        />
+      )}
+      {taskMenu && (
+        <TaskContextMenu
+          task={taskMenu.task}
+          position={{ x: taskMenu.x, y: taskMenu.y }}
+          onClose={() => setTaskMenu(null)}
+          onDelete={deleteTaskWithError}
+          onCopy={(task) => setCopyDraft(createTaskCopyDraft(task))}
         />
       )}
     </div>
