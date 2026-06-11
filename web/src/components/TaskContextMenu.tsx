@@ -42,13 +42,16 @@ export function TaskContextMenu({ task, position, onCopy, onDelete, onClose }: P
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    const onScroll = () => onClose();
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("blur", onClose);
+    window.addEventListener("scroll", onScroll, { capture: true });
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("blur", onClose);
+      window.removeEventListener("scroll", onScroll, { capture: true });
     };
   }, [onClose]);
 

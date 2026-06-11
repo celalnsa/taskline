@@ -89,6 +89,7 @@ export function GraphView({ project }: Props) {
   const [editing, setEditing] = useState<Task | null>(null);
   const [copyDraft, setCopyDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const pendingTaskOpenTimer = useRef<number | null>(null);
   const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
 
@@ -128,6 +129,11 @@ export function GraphView({ project }: Props) {
     },
     [addDependency, tasks]
   );
+
+  const showMutationError = useCallback((err: unknown) => {
+    setError(err instanceof Error ? err.message : "Task update failed");
+    setTimeout(() => setError(null), 5000);
+  }, []);
 
   const { nodes, edges } = useMemo(() => {
     const colSpacing = 260;
@@ -219,7 +225,15 @@ export function GraphView({ project }: Props) {
   }, [deleteDependency, selectedEdgeId, selectedTaskId, tasks, updateTask]);
 
   return (
-    <div className="flex-1 h-full">
+    <div className="relative flex-1 h-full">
+      {error && (
+        <div
+          role="alert"
+          className="absolute left-4 right-4 top-4 z-20 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 shadow-sm"
+        >
+          {error}
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -288,7 +302,7 @@ export function GraphView({ project }: Props) {
           onClose={() => setTaskMenu(null)}
           onCopy={(task) => setCopyDraft(createTaskCopyDraft(task))}
           onDelete={(task) => {
-            deleteTask.mutate(task.id);
+            deleteTask.mutate(task.id, { onError: showMutationError });
             setSelectedTaskId(null);
             setSelectedEdgeId(null);
           }}

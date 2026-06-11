@@ -373,8 +373,26 @@ describe("GraphView", () => {
     expect(confirm).toHaveBeenCalledWith(
       'Delete task "Deletable graph task"? This cascades to dependencies and images.'
     );
-    expect(deleteTaskMutate).toHaveBeenCalledWith("b");
+    expect(deleteTaskMutate).toHaveBeenCalledWith("b", expect.any(Object));
     expect(screen.queryByRole("dialog", { name: /edit task deletable graph task/i })).toBeNull();
+  });
+
+  it("shows an error when graph task deletion fails", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const { deleteTaskMutate } = renderGraph([
+      task({ id: "b", title: "Fragile graph task" }),
+    ]);
+
+    fireEvent.contextMenu(screen.getByTestId("node-b"), { clientX: 60, clientY: 80 });
+    await user.click(screen.getByRole("menuitem", { name: /^delete$/i }));
+
+    const [, options] = deleteTaskMutate.mock.calls[0];
+    act(() => {
+      options.onError(new Error("delete failed"));
+    });
+
+    expect(screen.getByRole("alert").textContent).toBe("delete failed");
   });
 
   it("copies a graph task into a prefilled create editor from the right-click menu", async () => {
