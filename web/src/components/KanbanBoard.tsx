@@ -21,7 +21,6 @@ import { createTaskCopyDraft } from "../lib/taskActions";
 import { TaskCard } from "./TaskCard";
 import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskEditor } from "./TaskEditor";
-import { CreateTaskButton } from "./CreateTaskButton";
 
 interface Props {
   project: Project;
@@ -123,16 +122,7 @@ export function KanbanBoard({ project }: Props) {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-        <div>
-          <h2 className="text-lg font-bold">{project.name}</h2>
-          {project.description && (
-            <p className="text-xs text-slate-500">{project.description}</p>
-          )}
-        </div>
-        <CreateTaskButton project={project} allTasks={tasks} />
-      </header>
+    <div className="flex h-full flex-col overflow-hidden">
       {error && (
         <div className="bg-red-50 border-b border-red-200 px-6 py-2 text-sm text-red-800">
           {error}
