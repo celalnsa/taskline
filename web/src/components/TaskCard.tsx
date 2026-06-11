@@ -101,6 +101,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
     <div
       ref={overlay ? undefined : setNodeRef}
       style={style}
+      data-task-card={overlay ? undefined : "true"}
       {...(overlay ? {} : attributes)}
       {...(overlay ? {} : listeners)}
       aria-label={overlay ? undefined : `Open task ${task.title}`}

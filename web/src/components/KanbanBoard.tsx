@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -37,6 +37,41 @@ type TaskMenuState = {
   y: number;
 };
 
+type BoardPanState = {
+  pointerId: number;
+  startX: number;
+  startScrollLeft: number;
+};
+
+const BOARD_PAN_BLOCK_SELECTOR = [
+  "[data-task-card]",
+  "button",
+  "a",
+  "input",
+  "textarea",
+  "select",
+  "[role='button']",
+  "[role='dialog']",
+  "[role='menu']",
+  "[contenteditable='true']",
+].join(",");
+
+function canStartBoardPan(target: EventTarget | null) {
+  return target instanceof Element && !target.closest(BOARD_PAN_BLOCK_SELECTOR);
+}
+
+function isScrollbarPointer(event: React.PointerEvent<HTMLDivElement>) {
+  const el = event.currentTarget;
+  const rect = el.getBoundingClientRect();
+  const horizontalScrollbarHeight = el.offsetHeight - el.clientHeight;
+  const verticalScrollbarWidth = el.offsetWidth - el.clientWidth;
+  return (
+    (horizontalScrollbarHeight > 0 &&
+      event.clientY >= rect.bottom - horizontalScrollbarHeight) ||
+    (verticalScrollbarWidth > 0 && event.clientX >= rect.right - verticalScrollbarWidth)
+  );
+}
+
 export function KanbanBoard({ project }: Props) {
   const tasksQ = useTasks(project.id);
   const updateTask = useUpdateTask(project.id);
@@ -45,6 +80,7 @@ export function KanbanBoard({ project }: Props) {
   const [copyDraft, setCopyDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const boardPan = useRef<BoardPanState | null>(null);
   // Track which task is currently being dragged so we can render it in a
   // <DragOverlay>. Without the overlay, the card stays in its source
   // column's DOM and gets visually clipped by the column's overflow-auto
@@ -121,6 +157,40 @@ export function KanbanBoard({ project }: Props) {
     });
   }
 
+  function startBoardPan(event: React.PointerEvent<HTMLDivElement>) {
+    if (
+      event.button !== 0 ||
+      event.pointerType !== "mouse" ||
+      isScrollbarPointer(event) ||
+      !canStartBoardPan(event.target)
+    ) {
+      return;
+    }
+    boardPan.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: event.currentTarget.scrollLeft,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+
+  function moveBoardPan(event: React.PointerEvent<HTMLDivElement>) {
+    const pan = boardPan.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    event.currentTarget.scrollLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+    event.preventDefault();
+  }
+
+  function stopBoardPan(event: React.PointerEvent<HTMLDivElement>) {
+    const pan = boardPan.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    boardPan.current = null;
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {error && (
@@ -134,7 +204,15 @@ export function KanbanBoard({ project }: Props) {
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveTask(null)}
       >
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <div
+          data-testid="kanban-scroll-region"
+          className="flex-1 cursor-grab overflow-x-auto overflow-y-hidden active:cursor-grabbing"
+          onPointerDown={startBoardPan}
+          onPointerMove={moveBoardPan}
+          onPointerUp={stopBoardPan}
+          onPointerCancel={stopBoardPan}
+          onPointerLeave={stopBoardPan}
+        >
           <div className="flex h-full w-fit min-w-full gap-3 p-4">
             {STATES.map((s) => (
               <Column key={s} state={s}>

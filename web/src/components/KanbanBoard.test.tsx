@@ -123,4 +123,124 @@ describe("KanbanBoard context menu", () => {
     expect(screen.getByText("provider,review")).toBeTruthy();
     expect(deleteMutate).not.toHaveBeenCalled();
   });
+
+  it("pans the board horizontally when dragging empty kanban space", () => {
+    renderBoard();
+    const scrollRegion = screen.getByTestId("kanban-scroll-region");
+
+    scrollRegion.scrollLeft = 100;
+    fireEvent.pointerDown(scrollRegion, {
+      button: 0,
+      clientX: 240,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.pointerMove(scrollRegion, {
+      clientX: 160,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.pointerUp(scrollRegion, {
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+
+    expect(scrollRegion.scrollLeft).toBe(180);
+  });
+
+  it("does not pan the board from task cards", () => {
+    renderBoard();
+    const scrollRegion = screen.getByTestId("kanban-scroll-region");
+    const card = screen.getByRole("button", { name: /open task copy source task/i });
+
+    scrollRegion.scrollLeft = 100;
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 240,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.pointerMove(scrollRegion, {
+      clientX: 160,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.pointerUp(scrollRegion, {
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+
+    expect(scrollRegion.scrollLeft).toBe(100);
+  });
+
+  it("does not pan the board for touch pointers", () => {
+    renderBoard();
+    const scrollRegion = screen.getByTestId("kanban-scroll-region");
+
+    scrollRegion.scrollLeft = 100;
+    fireEvent.pointerDown(scrollRegion, {
+      button: 0,
+      clientX: 240,
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    fireEvent.pointerMove(scrollRegion, {
+      clientX: 160,
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    fireEvent.pointerUp(scrollRegion, {
+      pointerId: 1,
+      pointerType: "touch",
+    });
+
+    expect(scrollRegion.scrollLeft).toBe(100);
+  });
+
+  it("does not pan the board from the horizontal scrollbar gutter", () => {
+    renderBoard();
+    const scrollRegion = screen.getByTestId("kanban-scroll-region");
+
+    Object.defineProperties(scrollRegion, {
+      offsetHeight: { configurable: true, value: 200 },
+      clientHeight: { configurable: true, value: 184 },
+      offsetWidth: { configurable: true, value: 400 },
+      clientWidth: { configurable: true, value: 400 },
+    });
+    scrollRegion.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          right: 400,
+          bottom: 200,
+          width: 400,
+          height: 200,
+          toJSON: () => ({}),
+        }) as DOMRect
+    );
+
+    scrollRegion.scrollLeft = 100;
+    fireEvent.pointerDown(scrollRegion, {
+      button: 0,
+      clientX: 240,
+      clientY: 196,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.pointerMove(scrollRegion, {
+      clientX: 160,
+      clientY: 196,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.pointerUp(scrollRegion, {
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+
+    expect(scrollRegion.scrollLeft).toBe(100);
+  });
 });
