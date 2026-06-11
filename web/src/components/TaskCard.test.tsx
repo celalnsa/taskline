@@ -21,10 +21,15 @@ const task: Task = {
   images: [],
 };
 
-function renderCard(onClick = vi.fn(), onDelete = vi.fn(), cardTask: Task = task) {
+function renderCard(
+  onClick = vi.fn(),
+  onDelete = vi.fn(),
+  cardTask: Task = task,
+  isBlocked = false
+) {
   render(
     <DndContext>
-      <TaskCard task={cardTask} isBlocked={false} onClick={onClick} onDelete={onDelete} />
+      <TaskCard task={cardTask} isBlocked={isBlocked} onClick={onClick} onDelete={onDelete} />
     </DndContext>
   );
 
@@ -98,7 +103,7 @@ describe("TaskCard", () => {
     expect(review?.getAttribute("data-label-theme")).toBe("amber");
   });
 
-  it("renders docs tasks with a distinct type accent", () => {
+  it("keeps the type accent without rendering redundant type text", () => {
     renderCard(vi.fn(), vi.fn(), {
       ...task,
       type: "docs",
@@ -107,8 +112,40 @@ describe("TaskCard", () => {
 
     const card = screen.getByRole("button", { name: /open task update docs/i });
 
-    expect(screen.getByText("docs")).toBeTruthy();
+    expect(screen.queryByText(/^docs$/i)).toBeNull();
     expect(card.className).toContain("border-l-violet-500");
+  });
+
+  it("renders priority and dependency metadata as compact badges", () => {
+    renderCard(
+      vi.fn(),
+      vi.fn(),
+      {
+        ...task,
+        title: "Blocked task with dependencies",
+        priority: 48,
+        depends_on: ["dep-1"],
+      },
+      true
+    );
+
+    expect(screen.getByText("p=48")).toBeTruthy();
+    expect(screen.getByText("deps 1")).toBeTruthy();
+    expect(screen.queryByText("blocked")).toBeNull();
+    expect(screen.queryByText("deps: 1")).toBeNull();
+  });
+
+  it("clamps long titles to two lines", () => {
+    const longTitle =
+      "This task title is deliberately long enough to wrap beyond two lines in a narrow card";
+    renderCard(vi.fn(), vi.fn(), {
+      ...task,
+      title: longTitle,
+    });
+
+    const title = screen.getByText(longTitle);
+
+    expect(title.className).toContain("line-clamp-2");
   });
 
   it("deletes from the card icon without opening the editor", async () => {
