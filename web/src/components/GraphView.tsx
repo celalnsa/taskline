@@ -87,7 +87,11 @@ export function GraphView({ project }: Props) {
     pendingTaskOpenTimer.current = null;
   }, []);
 
-  useEffect(() => clearPendingTaskOpen, [clearPendingTaskOpen]);
+  useEffect(() => {
+    return () => {
+      clearPendingTaskOpen();
+    };
+  }, [clearPendingTaskOpen]);
 
   const scheduleTaskOpen = useCallback(
     (task: Task) => {
@@ -218,6 +222,7 @@ export function GraphView({ project }: Props) {
           setSelectedEdgeId(edge.id);
         }}
         onNodeClick={(_, node) => {
+          setSelectedTaskId(null);
           setSelectedEdgeId(null);
           scheduleTaskOpen(node.data.task);
         }}

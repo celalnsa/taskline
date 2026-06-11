@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project, Task } from "../lib/api";
@@ -196,6 +196,7 @@ describe("GraphView", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("hides done tasks and omits edges connected to hidden tasks", () => {
@@ -228,7 +229,7 @@ describe("GraphView", () => {
   });
 
   it("highlights the selected relationship chain on double-click and clears on pane click", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers();
     renderGraph([
       task({ id: "a", title: "A" }),
       task({ id: "b", title: "B", depends_on: ["a"] }),
@@ -236,36 +237,50 @@ describe("GraphView", () => {
       task({ id: "d", title: "Unrelated" }),
     ]);
 
-    await user.dblClick(screen.getByTestId("node-b"));
+    fireEvent.click(screen.getByTestId("node-b"));
+    fireEvent.click(screen.getByTestId("node-b"));
+    fireEvent.doubleClick(screen.getByTestId("node-b"));
 
     expect(screen.getByTestId("node-a").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-b").dataset.selected).toBe("true");
     expect(screen.getByTestId("node-c").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-d").dataset.dimmed).toBe("true");
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
     expect(screen.queryByRole("dialog", { name: /edit task b/i })).toBeNull();
 
-    await user.click(screen.getByTestId("pane"));
+    fireEvent.click(screen.getByTestId("pane"));
 
     expect(screen.getByTestId("node-d").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-b").dataset.selected).toBe("false");
   });
 
   it("opens the task editor on single-click without highlighting the chain", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers();
     renderGraph([
       task({ id: "a", title: "A" }),
       task({ id: "b", title: "Editable task", depends_on: ["a"] }),
     ]);
 
-    await user.click(screen.getByTestId("node-b"));
+    fireEvent.click(screen.getByTestId("node-a"));
+    fireEvent.click(screen.getByTestId("node-a"));
+    fireEvent.doubleClick(screen.getByTestId("node-a"));
+    expect(screen.getByTestId("node-a").dataset.selected).toBe("true");
+
+    fireEvent.click(screen.getByTestId("node-b"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
 
     expect(
-      await screen.findByRole("dialog", { name: /edit task editable task/i })
+      screen.getByRole("dialog", { name: /edit task editable task/i })
     ).toBeTruthy();
+    expect(screen.getByTestId("node-a").dataset.selected).toBe("false");
+    expect(screen.getByTestId("node-a").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-b").dataset.selected).toBe("false");
 
-    await user.click(screen.getByRole("button", { name: /close editor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
 
     expect(screen.queryByRole("dialog", { name: /edit task editable task/i })).toBeNull();
   });

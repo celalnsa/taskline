@@ -11,6 +11,8 @@ trigger two different actions with one click.
 
 - Single-clicking a task node in the dependency graph opens that task's editor.
 - Single-clicking a task node must not select or highlight the dependency chain.
+- If a dependency chain is already highlighted, single-clicking a task node
+  clears that graph selection while opening the editor.
 - Double-clicking a task node selects that task and highlights its dependency
   chain.
 - Double-clicking a task node must not also open the task editor.
@@ -23,7 +25,8 @@ trigger two different actions with one click.
 - Keep the change in `web/src/components/GraphView.tsx`.
 - Add `onNodeDoubleClick` to the React Flow graph and move node-chain selection
   there.
-- Keep `onNodeClick` responsible for opening the editor only.
+- Keep `onNodeClick` responsible for opening the editor and clearing existing
+  graph selection only.
 - Use a short pending-open timer for single-click edit so a native double-click
   can cancel the pending editor open before it fires.
 - Clear any pending single-click open when the user double-clicks a node, clicks

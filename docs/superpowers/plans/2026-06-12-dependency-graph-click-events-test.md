@@ -16,6 +16,10 @@ warning during production builds.
 - Focused green test:
   `mise exec -- pnpm --dir web test src/components/GraphView.test.tsx` passed
   with `8` tests.
+- Review follow-up focused test:
+  `mise exec -- pnpm --dir web test src/components/GraphView.test.tsx` passed
+  with `8` tests after switching the click-delay assertions to fake timers and
+  adding stale-highlight clearing coverage.
 - Frontend lint:
   `mise exec -- pnpm --dir web lint` passed.
 - Frontend test:
@@ -27,9 +31,9 @@ warning during production builds.
 
 - Rebuilt and restarted the embedded server with
   `mise exec -- ./scripts/start-local.sh`.
-- Created browser smoke project `graph-click-smoke-1781199568693` on the
+- Created browser smoke project `graph-click-smoke-1781199875797` on the
   running server.
-- Opened `http://127.0.0.1:8787/?project=graph-click-smoke-1781199568693` in
+- Opened `http://127.0.0.1:8787/?project=graph-click-smoke-1781199875797` in
   headless Chrome via CDP and switched to the Dependency graph tab.
 - Browser interaction checks passed:
   - single-clicking `Editable graph task` opened its editor;
@@ -38,7 +42,9 @@ warning during production builds.
   - double-clicking `Editable graph task` did not open the editor;
   - after double-click, `Editable graph task` was selected;
   - after double-click, dependency and child nodes stayed undimmed;
-  - after double-click, `Unrelated graph task` was dimmed.
+  - after double-click, `Unrelated graph task` was dimmed;
+  - single-clicking `Unrelated graph task` after the double-click highlight
+    opened that editor and cleared the old selected node and dimming.
 
 ## Result
 
