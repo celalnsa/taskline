@@ -46,6 +46,29 @@ large chunk warning during production builds.
   - badge right edges were inside the card (`deps` right edge `617.578125`,
     card right edge `652.578125`).
 
+## Review Follow-up Revalidation
+
+After review feedback, the title clamp moved from inline styles to Tailwind's
+`line-clamp-2` utility class.
+
+- Focused test:
+  `mise exec -- pnpm --dir web test src/components/TaskCard.test.tsx` passed
+  with `10` tests.
+- Frontend lint:
+  `mise exec -- pnpm --dir web lint` passed.
+- Frontend test:
+  `mise exec -- pnpm --dir web test` passed with `7` files and `65` tests.
+- Frontend build:
+  `mise exec -- pnpm --dir web build` passed.
+- Rebuilt and restarted the embedded server with
+  `mise exec -- ./scripts/start-local.sh`.
+- Confirmed `http://127.0.0.1:8787/healthz` returned `{"ok":true}`.
+- Headless Chrome smoke confirmed:
+  - title class included `line-clamp-2`;
+  - computed `-webkit-line-clamp` remained `2`;
+  - `p=48` and `deps 1` stayed inside the card;
+  - old `blocked`, `deps: 1`, and visible `bug` text stayed absent.
+
 ## Result
 
 The implementation is ready for review.

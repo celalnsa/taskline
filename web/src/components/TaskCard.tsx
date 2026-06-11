@@ -65,13 +65,6 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
     ? ""
     : " cursor-pointer hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400";
 
-  const titleStyle: React.CSSProperties = {
-    display: "-webkit-box",
-    overflow: "hidden",
-    WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
-  };
-
   const badgeClass =
     "rounded-sm border px-1 py-0.5 text-[10px] font-medium leading-3 tabular-nums shadow-sm";
 
@@ -182,8 +175,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             <p
-              className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-slate-900"
-              style={titleStyle}
+              className="line-clamp-2 min-w-0 flex-1 text-[13px] font-medium leading-snug text-slate-900"
             >
               {task.title}
             </p>

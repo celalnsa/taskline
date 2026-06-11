@@ -145,7 +145,7 @@ describe("TaskCard", () => {
 
     const title = screen.getByText(longTitle);
 
-    expect(title.getAttribute("style") ?? "").toContain("-webkit-line-clamp: 2");
+    expect(title.className).toContain("line-clamp-2");
   });
 
   it("deletes from the card icon without opening the editor", async () => {
