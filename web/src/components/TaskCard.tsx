@@ -24,6 +24,8 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
   const labels = task.labels ?? [];
   const visibleLabels = labels.slice(0, 3);
   const hiddenLabelCount = Math.max(0, labels.length - visibleLabels.length);
+  const dependencyCount = task.depends_on?.length ?? 0;
+  const linkCount = task.links?.length ?? 0;
   // Disable the draggable hook entirely on the overlay clone so the
   // DOM only has a single registered draggable per task id.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -62,6 +64,16 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
   const interactiveClass = overlay
     ? ""
     : " cursor-pointer hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400";
+
+  const titleStyle: React.CSSProperties = {
+    display: "-webkit-box",
+    overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2,
+  };
+
+  const badgeClass =
+    "rounded-sm border px-1 py-0.5 text-[10px] font-medium leading-3 tabular-nums shadow-sm";
 
   function openFromPointer(event: React.PointerEvent<HTMLDivElement>) {
     if (overlay) return;
@@ -126,7 +138,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
       }}
       onKeyDown={openFromKeyboard}
       className={
-        "relative group rounded-md border border-slate-200 bg-white p-3 shadow-sm border-l-4 transition " +
+        "relative group rounded-md border border-slate-200 bg-white p-2.5 shadow-sm border-l-4 transition " +
         typeColor +
         dragVisualClass +
         interactiveClass
@@ -137,7 +149,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
           type="button"
           aria-label={`Delete task ${task.title}`}
           title="Delete task"
-          className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white/90 text-slate-400 opacity-0 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-300 group-hover:opacity-100"
+          className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-white/90 text-slate-400 opacity-0 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-300 group-hover:opacity-100"
           onPointerDown={(event) => {
             event.stopPropagation();
             pointerStart.current = null;
@@ -163,46 +175,59 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
             deleteFromCard();
           }}
         >
-          <Trash2 size={13} className="mx-auto" aria-hidden="true" />
+          <Trash2 size={12} className="mx-auto" aria-hidden="true" />
         </button>
       )}
-      <div className="flex items-start gap-2 pr-7">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              {task.type}
-            </span>
-            <span className="text-[10px] tabular-nums text-slate-400">
-              p={task.priority}
-            </span>
-            {isBlocked && (
+      <div className="flex items-start gap-2 pr-6">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-2">
+            <p
+              className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-slate-900"
+              style={titleStyle}
+            >
+              {task.title}
+            </p>
+            <div className="flex max-w-[5.5rem] shrink-0 flex-wrap justify-end gap-1 pt-0.5">
               <span
-                className="text-[10px] px-1 rounded bg-amber-100 text-amber-800"
-                title="Blocked: depends on other tasks not yet done"
+                className={`${badgeClass} border-sky-200 bg-sky-50 text-sky-700`}
+                title={`Priority ${task.priority}`}
               >
-                blocked
+                p={task.priority}
               </span>
-            )}
-            {task.depends_on && task.depends_on.length > 0 && (
-              <span className="text-[10px] text-slate-400">
-                deps: {task.depends_on.length}
-              </span>
-            )}
-            {task.links && task.links.length > 0 && (
-              <span className="text-[10px] text-slate-400" title="attached links">
-                🔗 {task.links.length}
-              </span>
-            )}
+              {dependencyCount > 0 && (
+                <span
+                  className={`${badgeClass} ${
+                    isBlocked
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                  title={
+                    isBlocked
+                      ? "Blocked: depends on other tasks not yet done"
+                      : "Dependencies are done"
+                  }
+                >
+                  deps {dependencyCount}
+                </span>
+              )}
+              {linkCount > 0 && (
+                <span
+                  className={`${badgeClass} border-slate-200 bg-slate-50 text-slate-500`}
+                  title="Attached links"
+                >
+                  links {linkCount}
+                </span>
+              )}
+            </div>
           </div>
-          <p className="text-sm font-medium leading-snug">{task.title}</p>
           {labels.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="mt-1.5 flex flex-wrap gap-0.5">
               {visibleLabels.map((label) => (
                 <span
                   key={label}
                   data-label-theme={getTaskLabelTheme(label).name}
                   className={
-                    "max-w-full truncate rounded border px-1.5 py-0.5 text-[10px] leading-4 " +
+                    "max-w-full truncate rounded border px-1.5 py-0 text-[10px] leading-4 " +
                     taskLabelChipClass(label)
                   }
                   title={label}
@@ -212,7 +237,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
               ))}
               {hiddenLabelCount > 0 && (
                 <span
-                  className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] leading-4 text-slate-400"
+                  className="rounded border border-slate-200 bg-white px-1.5 py-0 text-[10px] leading-4 text-slate-400"
                   title={`${hiddenLabelCount} more labels`}
                 >
                   +{hiddenLabelCount}
@@ -222,7 +247,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
           )}
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-end">
+      <div className="mt-1.5 flex items-center justify-end">
         <span
           className="text-[10px] tabular-nums text-slate-400"
           title={new Date(task.updated_at).toLocaleString()}
