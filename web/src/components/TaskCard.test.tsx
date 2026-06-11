@@ -86,6 +86,13 @@ describe("TaskCard", () => {
     expect(screen.getByText("ui")).toBeTruthy();
     expect(screen.getByText("review")).toBeTruthy();
     expect(screen.getByText("+1")).toBeTruthy();
+
+    const labelRow = screen.getByText("backend").parentElement;
+    const backendChip = screen.getByText("backend").closest("span");
+
+    expect(labelRow?.className).toContain("flex-nowrap");
+    expect(labelRow?.className).toContain("overflow-hidden");
+    expect(backendChip?.className).toContain("text-[9px]");
   });
 
   it("renders common labels with distinct theme metadata", () => {
@@ -116,7 +123,7 @@ describe("TaskCard", () => {
     expect(card.className).toContain("border-l-violet-500");
   });
 
-  it("renders priority and dependency metadata as compact badges", () => {
+  it("renders priority and dependency metadata as floating corner badges", () => {
     renderCard(
       vi.fn(),
       vi.fn(),
@@ -125,14 +132,40 @@ describe("TaskCard", () => {
         title: "Blocked task with dependencies",
         priority: 48,
         depends_on: ["dep-1"],
+        links: [
+          {
+            id: "link-1",
+            task_id: "task-1",
+            url: "https://example.com",
+            label: "Example",
+            created_at: 1780051741142,
+          },
+          {
+            id: "link-2",
+            task_id: "task-1",
+            url: "https://example.org",
+            label: "Example 2",
+            created_at: 1780051741142,
+          },
+        ],
       },
       true
     );
 
-    expect(screen.getByText("p=48")).toBeTruthy();
+    const priorityBadge = screen.getByText("p 48");
+    const dependencyBadge = screen.getByText("deps 1");
+    const cornerBadgeRow = priorityBadge.parentElement;
+    const title = screen.getByText("Blocked task with dependencies");
+
+    expect(priorityBadge).toBeTruthy();
+    expect(dependencyBadge).toBeTruthy();
+    expect(cornerBadgeRow?.className).toContain("absolute");
+    expect(title.parentElement?.textContent).toBe("Blocked task with dependencies");
+    expect(screen.queryByText("p=48")).toBeNull();
     expect(screen.getByText("deps 1")).toBeTruthy();
     expect(screen.queryByText("blocked")).toBeNull();
     expect(screen.queryByText("deps: 1")).toBeNull();
+    expect(screen.queryByText("links 2")).toBeNull();
   });
 
   it("clamps long titles to two lines", () => {

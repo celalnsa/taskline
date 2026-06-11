@@ -25,7 +25,6 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
   const visibleLabels = labels.slice(0, 3);
   const hiddenLabelCount = Math.max(0, labels.length - visibleLabels.length);
   const dependencyCount = task.depends_on?.length ?? 0;
-  const linkCount = task.links?.length ?? 0;
   // Disable the draggable hook entirely on the overlay clone so the
   // DOM only has a single registered draggable per task id.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -66,7 +65,7 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
     : " cursor-pointer hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400";
 
   const badgeClass =
-    "rounded-sm border px-1 py-0.5 text-[10px] font-medium leading-3 tabular-nums shadow-sm";
+    "rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-3 tabular-nums shadow-sm";
 
   function openFromPointer(event: React.PointerEvent<HTMLDivElement>) {
     if (overlay) return;
@@ -171,75 +170,61 @@ export function TaskCard({ task, isBlocked, onClick, onDelete, overlay = false }
           <Trash2 size={12} className="mx-auto" aria-hidden="true" />
         </button>
       )}
-      <div className="flex items-start gap-2 pr-6">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <p
-              className="line-clamp-2 min-w-0 flex-1 text-[13px] font-medium leading-snug text-slate-900"
-            >
-              {task.title}
-            </p>
-            <div className="flex max-w-[5.5rem] shrink-0 flex-wrap justify-end gap-1 pt-0.5">
-              <span
-                className={`${badgeClass} border-sky-200 bg-sky-50 text-sky-700`}
-                title={`Priority ${task.priority}`}
-              >
-                p={task.priority}
-              </span>
-              {dependencyCount > 0 && (
-                <span
-                  className={`${badgeClass} ${
-                    isBlocked
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  }`}
-                  title={
-                    isBlocked
-                      ? "Blocked: depends on other tasks not yet done"
-                      : "Dependencies are done"
-                  }
-                >
-                  deps {dependencyCount}
-                </span>
-              )}
-              {linkCount > 0 && (
-                <span
-                  className={`${badgeClass} border-slate-200 bg-slate-50 text-slate-500`}
-                  title="Attached links"
-                >
-                  links {linkCount}
-                </span>
-              )}
-            </div>
-          </div>
-          {labels.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-0.5">
-              {visibleLabels.map((label) => (
-                <span
-                  key={label}
-                  data-label-theme={getTaskLabelTheme(label).name}
-                  className={
-                    "max-w-full truncate rounded border px-1.5 py-0 text-[10px] leading-4 " +
-                    taskLabelChipClass(label)
-                  }
-                  title={label}
-                >
-                  {label}
-                </span>
-              ))}
-              {hiddenLabelCount > 0 && (
-                <span
-                  className="rounded border border-slate-200 bg-white px-1.5 py-0 text-[10px] leading-4 text-slate-400"
-                  title={`${hiddenLabelCount} more labels`}
-                >
-                  +{hiddenLabelCount}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+      <div className="pointer-events-none absolute right-7 top-0 z-10 flex -translate-y-1/2 items-center gap-1">
+        <span
+          className={`${badgeClass} border-sky-200 bg-sky-50 text-sky-700`}
+          title={`Priority ${task.priority}`}
+        >
+          p {task.priority}
+        </span>
+        {dependencyCount > 0 && (
+          <span
+            className={`${badgeClass} ${
+              isBlocked
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+            title={
+              isBlocked ? "Blocked: depends on other tasks not yet done" : "Dependencies are done"
+            }
+          >
+            deps {dependencyCount}
+          </span>
+        )}
       </div>
-      <div className="mt-1.5 flex items-center justify-end">
+      <div className="min-w-0 pt-2">
+        <div>
+          <p className="line-clamp-2 min-w-0 text-[13px] font-medium leading-snug text-slate-900">
+            {task.title}
+          </p>
+        </div>
+        {labels.length > 0 && (
+          <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-0.5 overflow-hidden">
+            {visibleLabels.map((label) => (
+              <span
+                key={label}
+                data-label-theme={getTaskLabelTheme(label).name}
+                className={
+                  "max-w-[5rem] shrink truncate rounded border px-1 py-0 text-[9px] leading-3 " +
+                  taskLabelChipClass(label)
+                }
+                title={label}
+              >
+                {label}
+              </span>
+            ))}
+            {hiddenLabelCount > 0 && (
+              <span
+                className="shrink-0 rounded border border-slate-200 bg-white px-1 py-0 text-[9px] leading-3 text-slate-400"
+                title={`${hiddenLabelCount} more labels`}
+              >
+                +{hiddenLabelCount}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="mt-1 flex items-center justify-end">
         <span
           className="text-[10px] tabular-nums text-slate-400"
           title={new Date(task.updated_at).toLocaleString()}
