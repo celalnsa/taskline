@@ -5,7 +5,7 @@ import type { Project, Task } from "./lib/api";
 import App from "./App";
 
 const mocks = vi.hoisted(() => ({
-  projectKey: "taskline",
+  projectKey: "taskline" as string | null,
   setProjectKey: vi.fn(),
   useProjects: vi.fn(),
   useTasks: vi.fn(),
@@ -129,6 +129,7 @@ describe("App workspace layout", () => {
     expect(header).toBeTruthy();
     if (!header) throw new Error("expected project header");
     expect(header.contains(collapseButton)).toBe(true);
+    expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("complementary", { name: "Projects" })).toBeTruthy();
 
     await user.click(collapseButton);
@@ -136,11 +137,25 @@ describe("App workspace layout", () => {
     const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
     expect(screen.queryByRole("complementary", { name: "Projects" })).toBeNull();
     expect(header.contains(expandButton)).toBe(true);
+    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
 
     await user.click(expandButton);
 
     expect(screen.getByRole("complementary", { name: "Projects" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+  });
+
+  it("keeps the sidebar available on the welcome screen after collapsing it", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    mocks.projectKey = null;
+    rerender(<App />);
+
+    expect(screen.getByRole("complementary", { name: "Projects" })).toBeTruthy();
+    expect(screen.getByText(/Pick a project from the sidebar/i)).toBeTruthy();
   });
 
   it("keeps task creation available from the graph view and Cmd+K", async () => {

@@ -34,7 +34,7 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex">
-      {sidebarOpen && (
+      {(sidebarOpen || !project) && (
         <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
       )}
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -76,6 +76,7 @@ function ProjectWorkspace({
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
+            aria-expanded={sidebarOpen}
             aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             onClick={onToggleSidebar}
