@@ -33,10 +33,35 @@ vi.mock("./components/GraphView", () => ({
 }));
 
 vi.mock("./components/TaskEditor", () => ({
-  TaskEditor: ({ onClose }: { onClose: () => void }) => (
-    <div role="dialog" aria-label="Create task">
+  TaskEditor: ({
+    task,
+    onClose,
+  }: {
+    task?: Task | null;
+    onClose: () => void;
+  }) => (
+    <div role="dialog" aria-label={task ? "Edit task" : "Create task"}>
       <button type="button" onClick={onClose}>
         Close editor
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("./components/TaskSearchDialog", () => ({
+  TaskSearchDialog: ({
+    onClose,
+    onSelect,
+  }: {
+    onClose: () => void;
+    onSelect: (task: Task) => void;
+  }) => (
+    <div role="dialog" aria-label="Search tasks">
+      <button type="button" onClick={() => onSelect(task)}>
+        Select existing task
+      </button>
+      <button type="button" onClick={onClose}>
+        Close search
       </button>
     </div>
   ),
@@ -170,6 +195,31 @@ describe("App workspace layout", () => {
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
     expect(screen.getByRole("dialog", { name: "Create task" })).toBeTruthy();
+  });
+
+  it("opens task search from the title bar and Cmd+P", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const heading = screen.getByRole("heading", { level: 2, name: "taskline" });
+    const header = heading.closest("header");
+    const searchButton = screen.getByRole("button", { name: "Search tasks" });
+
+    expect(header).toBeTruthy();
+    if (!header) throw new Error("expected project header");
+    expect(header.contains(searchButton)).toBe(true);
+
+    await user.click(searchButton);
+    expect(screen.getByRole("dialog", { name: "Search tasks" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Close search" }));
+    expect(screen.queryByRole("dialog", { name: "Search tasks" })).toBeNull();
+
+    fireEvent.keyDown(window, { key: "p", metaKey: true });
+    expect(screen.getByRole("dialog", { name: "Search tasks" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Select existing task" }));
+    expect(screen.getByRole("dialog", { name: "Edit task" })).toBeTruthy();
   });
 
   it("resets workspace-local view and editor state when the project changes", async () => {

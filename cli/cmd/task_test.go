@@ -71,3 +71,22 @@ func TestTaskLabelFlagsRegistered(t *testing.T) {
 		t.Fatal("task update should expose --clear-labels flag")
 	}
 }
+
+func TestTaskSearchCommandRegistered(t *testing.T) {
+	found := false
+	for _, cmd := range taskCmd.Commands() {
+		if cmd.Name() == "search" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("task search command not registered")
+	}
+	if taskSearchCmd.Flag("project") == nil {
+		t.Fatal("task search should expose --project")
+	}
+	if taskSearchCmd.Flag("limit") == nil {
+		t.Fatal("task search should expose --limit")
+	}
+}

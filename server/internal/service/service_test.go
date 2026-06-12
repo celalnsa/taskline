@@ -85,6 +85,56 @@ func TestCreateTaskAcceptsDocsType(t *testing.T) {
 	require.Equal(t, model.StateStart, tk.State)
 }
 
+func TestSearchTasksRanksShortIDsAndKeywords(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+	p, _ := s.CreateProject(ctx, "p", "")
+	other, _ := s.CreateProject(ctx, "other", "")
+
+	eval, err := s.CreateTask(
+		ctx,
+		p.ID,
+		"Agent capability evaluation harness",
+		"Build tools, sandbox, and hooks coverage.",
+		model.TaskTypeFeature,
+		1,
+		true,
+		[]string{"evaluation", "tools"},
+	)
+	require.NoError(t, err)
+	search, err := s.CreateTask(
+		ctx,
+		p.ID,
+		"Task search command",
+		"Find historical task context from the CLI.",
+		model.TaskTypeFeature,
+		5,
+		true,
+		[]string{"cli"},
+	)
+	require.NoError(t, err)
+	_, err = s.CreateTask(ctx, other.ID, "Task search command", "wrong project", model.TaskTypeFeature, 99, true)
+	require.NoError(t, err)
+
+	byShortID, err := s.SearchTasks(ctx, p.ID, eval.ID[:8], 10)
+	require.NoError(t, err)
+	require.Len(t, byShortID, 1)
+	require.Equal(t, eval.ID, byShortID[0].ID)
+
+	byKeywords, err := s.SearchTasks(ctx, p.ID, "evaluation sandbox", 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, byKeywords)
+	require.Equal(t, eval.ID, byKeywords[0].ID)
+
+	byDescription, err := s.SearchTasks(ctx, p.ID, "historical context", 10)
+	require.NoError(t, err)
+	require.Len(t, byDescription, 1)
+	require.Equal(t, search.ID, byDescription[0].ID)
+
+	_, err = s.SearchTasks(ctx, p.ID, "   ", 10)
+	require.Error(t, err)
+}
+
 func TestNextRunnableTaskReturnsNilWhenNothingRunnable(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)

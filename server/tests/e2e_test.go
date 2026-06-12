@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,6 +211,50 @@ func TestEndToEndHappyPath(t *testing.T) {
 	require.Equal(t, http.StatusOK, st)
 	require.Len(t, allTasks.Tasks, 1)
 	require.Equal(t, t1.ID, allTasks.Tasks[0].ID)
+}
+
+func TestTaskSearchEndpoint(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+
+	var p project
+	st := jsonReq(t, "POST", base+"/api/v1/projects",
+		map[string]any{"name": "demo", "description": "search"}, &p)
+	require.Equal(t, http.StatusCreated, st)
+
+	var eval, docs task
+	st = jsonReq(t, "POST", base+"/api/v1/projects/demo/tasks",
+		map[string]any{
+			"title":       "Agent capability evaluation harness",
+			"description": "Tools, sandbox, and hooks coverage",
+			"type":        "feature",
+			"priority":    1,
+			"auto_start":  true,
+			"labels":      []string{"evaluation"},
+		}, &eval)
+	require.Equal(t, http.StatusCreated, st)
+	st = jsonReq(t, "POST", base+"/api/v1/projects/demo/tasks",
+		map[string]any{
+			"title":       "Task search command",
+			"description": "Find historical task context",
+			"type":        "feature",
+			"priority":    5,
+			"auto_start":  true,
+		}, &docs)
+	require.Equal(t, http.StatusCreated, st)
+
+	var byShortID taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/demo/tasks/search?q="+eval.ID[:8], nil, &byShortID)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, byShortID.Tasks, 1)
+	require.Equal(t, eval.ID, byShortID.Tasks[0].ID)
+
+	var byKeyword taskListResp
+	q := url.QueryEscape("historical context")
+	st = jsonReq(t, "GET", base+"/api/v1/projects/demo/tasks/search?q="+q+"&limit=1", nil, &byKeyword)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, byKeyword.Tasks, 1)
+	require.Equal(t, docs.ID, byKeyword.Tasks[0].ID)
 }
 
 func TestDocsTaskTypeRoundTrip(t *testing.T) {

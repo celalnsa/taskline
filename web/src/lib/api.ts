@@ -141,6 +141,20 @@ export async function listTasks(projectIdOrName: string): Promise<Task[]> {
   return r.tasks ?? [];
 }
 
+export async function searchTasks(
+  projectIdOrName: string,
+  query: string,
+  limit = 20
+): Promise<Task[]> {
+  const params = new URLSearchParams({ q: query });
+  if (limit > 0) params.set("limit", String(limit));
+  const r = await request<{ tasks: Task[] }>(
+    "GET",
+    `/api/v1/projects/${encodeURIComponent(projectIdOrName)}/tasks/search?${params.toString()}`
+  );
+  return r.tasks ?? [];
+}
+
 export async function createTask(
   projectIdOrName: string,
   input: {

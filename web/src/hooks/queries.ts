@@ -13,6 +13,15 @@ export function useTasks(projectIdOrName: string | null) {
   });
 }
 
+export function useTaskSearch(projectIdOrName: string | null, query: string) {
+  const trimmed = query.trim();
+  return useQuery({
+    queryKey: ["tasks", "search", projectIdOrName, trimmed],
+    queryFn: () => api.searchTasks(projectIdOrName!, trimmed),
+    enabled: !!projectIdOrName && trimmed.length > 0,
+  });
+}
+
 export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({

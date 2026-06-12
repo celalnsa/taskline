@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"taskline_server/api/model"
@@ -83,6 +84,134 @@ func (s *Service) ListTasks(ctx context.Context, projectIDOrName string, states 
 		}
 	}
 	return s.st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, States: states})
+}
+
+const (
+	defaultSearchLimit = 20
+	maxSearchLimit     = 100
+)
+
+// SearchTasks returns project-scoped tasks ranked by short id, title,
+// description, labels, type, and state matches.
+func (s *Service) SearchTasks(ctx context.Context, projectIDOrName, query string, limit int) ([]*model.Task, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, errors.New("search query required")
+	}
+	if limit <= 0 {
+		limit = defaultSearchLimit
+	}
+	if limit > maxSearchLimit {
+		limit = maxSearchLimit
+	}
+	p, err := s.ResolveProject(ctx, projectIDOrName)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := s.st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID})
+	if err != nil {
+		return nil, err
+	}
+	normalizedQuery := normalizeSearchText(query)
+	terms := searchTerms(normalizedQuery)
+	type scoredTask struct {
+		task  *model.Task
+		score int
+	}
+	scored := make([]scoredTask, 0, len(tasks))
+	for _, task := range tasks {
+		score := scoreTaskSearch(task, normalizedQuery, terms)
+		if score > 0 {
+			scored = append(scored, scoredTask{task: task, score: score})
+		}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		if scored[i].task.Priority != scored[j].task.Priority {
+			return scored[i].task.Priority > scored[j].task.Priority
+		}
+		return scored[i].task.CreatedAt < scored[j].task.CreatedAt
+	})
+	if len(scored) > limit {
+		scored = scored[:limit]
+	}
+	out := make([]*model.Task, 0, len(scored))
+	for _, item := range scored {
+		out = append(out, item.task)
+	}
+	return out, nil
+}
+
+func normalizeSearchText(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+func searchTerms(query string) []string {
+	raw := strings.Fields(query)
+	terms := make([]string, 0, len(raw))
+	seen := map[string]struct{}{}
+	for _, term := range raw {
+		if _, ok := seen[term]; ok {
+			continue
+		}
+		seen[term] = struct{}{}
+		terms = append(terms, term)
+	}
+	return terms
+}
+
+func scoreTaskSearch(task *model.Task, query string, terms []string) int {
+	if task == nil {
+		return 0
+	}
+	score := 0
+	id := normalizeSearchText(task.ID)
+	if query == id {
+		score += 20000
+	} else if len(query) >= 4 && strings.HasPrefix(id, query) {
+		score += 15000
+	} else if len(query) >= 4 && strings.Contains(id, query) {
+		score += 8000
+	}
+
+	title := normalizeSearchText(task.Title)
+	description := normalizeSearchText(task.Description)
+	labels := normalizeSearchText(strings.Join(task.Labels, " "))
+	taskType := normalizeSearchText(string(task.Type))
+	state := normalizeSearchText(string(task.State))
+
+	if query != "" {
+		if strings.Contains(title, query) {
+			score += 2000
+		}
+		if strings.Contains(description, query) {
+			score += 800
+		}
+		if strings.Contains(labels, query) {
+			score += 600
+		}
+		if query == taskType || query == state {
+			score += 400
+		}
+	}
+
+	for _, term := range terms {
+		if strings.Contains(title, term) {
+			score += 250
+		}
+		if strings.Contains(description, term) {
+			score += 100
+		}
+		if strings.Contains(labels, term) {
+			score += 150
+		}
+		if term == taskType || term == state {
+			score += 80
+		}
+	}
+	return score
 }
 
 // NextRunnableTask returns the highest-priority task whose deps are all done.

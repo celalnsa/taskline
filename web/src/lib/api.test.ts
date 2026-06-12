@@ -5,6 +5,7 @@ import {
   deleteTaskDoc,
   deleteTaskImage,
   getTaskDoc,
+  searchTasks,
   STATE_LABELS,
   STATES,
   taskDocContentURL,
@@ -71,6 +72,42 @@ describe("task labels helpers", () => {
     );
     expect(fetchMock.mock.calls[1][1]?.body).toBe(
       JSON.stringify({ labels: ["review"] })
+    );
+  });
+});
+
+describe("searchTasks", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("searches a project with encoded query and limit", async () => {
+    const found = {
+      id: "fc7a0732-0000-4000-8000-000000000000",
+      project_id: "project-1",
+      title: "Found task",
+      description: "",
+      type: "feature",
+      state: "start",
+      priority: 0,
+      labels: [],
+      created_at: 1780051741142,
+      updated_at: 1780051741142,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ tasks: [found] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await searchTasks("taskline", "fc7a0732 hooks", 7);
+
+    expect(result).toEqual([found]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/projects/taskline/tasks/search?q=fc7a0732+hooks&limit=7",
+      expect.objectContaining({ method: "GET" })
     );
   });
 });

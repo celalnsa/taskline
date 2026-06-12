@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -54,6 +55,7 @@ func (h *Handler) Register(s *server.Hertz) {
 
 	v1.POST("/projects/:project/tasks", h.createTask)
 	v1.GET("/projects/:project/tasks", h.listTasks)
+	v1.GET("/projects/:project/tasks/search", h.searchTasks)
 	v1.GET("/projects/:project/tasks/runnable", h.listRunnableTasks)
 	v1.GET("/projects/:project/tasks/next", h.nextRunnableTask)
 
@@ -203,6 +205,32 @@ func (h *Handler) listTasks(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 	ts, err := h.svc.ListTasks(ctx, project, states)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	h.attachTaskImageURLs(ts...)
+	h.attachTaskDocURLs(ts...)
+	writeJSON(c, http.StatusOK, map[string]any{"tasks": ts})
+}
+
+func (h *Handler) searchTasks(ctx context.Context, c *app.RequestContext) {
+	project := c.Param("project")
+	query := strings.TrimSpace(string(c.Query("q")))
+	if query == "" {
+		writeError(c, http.StatusBadRequest, errors.New("search query required"))
+		return
+	}
+	limit := 0
+	if raw := strings.TrimSpace(string(c.Query("limit"))); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			writeError(c, http.StatusBadRequest, errors.New("limit must be a positive integer"))
+			return
+		}
+		limit = parsed
+	}
+	ts, err := h.svc.SearchTasks(ctx, project, query, limit)
 	if err != nil {
 		writeServiceError(c, err)
 		return

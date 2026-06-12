@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -146,6 +147,21 @@ func (c *Client) ListTasks(projectIDOrName string, states []string) ([]Task, err
 		q.Set("state", strings.Join(states, ","))
 		path += "?" + q.Encode()
 	}
+	var out listTasksResp
+	if err := c.do("GET", path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Tasks, nil
+}
+
+func (c *Client) SearchTasks(projectIDOrName, query string, limit int) ([]Task, error) {
+	path := fmt.Sprintf("/api/v1/projects/%s/tasks/search", url.PathEscape(projectIDOrName))
+	q := url.Values{}
+	q.Set("q", query)
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	path += "?" + q.Encode()
 	var out listTasksResp
 	if err := c.do("GET", path, nil, &out); err != nil {
 		return nil, err

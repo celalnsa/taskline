@@ -164,3 +164,38 @@ func TestTaskLabelsClientPayloads(t *testing.T) {
 		t.Fatalf("unexpected updated labels: %#v", updated.Labels)
 	}
 }
+
+func TestSearchTasksClientEncodesQueryAndLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/projects/demo/tasks/search" {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
+			return
+		}
+		if got := r.URL.Query().Get("q"); got != "fc7a0732 hooks" {
+			t.Fatalf("q = %q", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "7" {
+			t.Fatalf("limit = %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tasks": []client.Task{{
+				ID:        "fc7a0732-0000-4000-8000-000000000000",
+				ProjectID: "project-one",
+				Title:     "Found task",
+				Type:      "feature",
+				State:     "start",
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	tasks, err := c.SearchTasks("demo", "fc7a0732 hooks", 7)
+	if err != nil {
+		t.Fatalf("SearchTasks: %v", err)
+	}
+	if len(tasks) != 1 || tasks[0].Title != "Found task" {
+		t.Fatalf("unexpected search results: %#v", tasks)
+	}
+}

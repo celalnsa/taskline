@@ -19,6 +19,7 @@ func init() {
 	taskCmd.AddCommand(
 		taskCreateCmd,
 		taskListCmd,
+		taskSearchCmd,
 		taskNextCmd,
 		taskGetCmd,
 		taskUpdateCmd,
@@ -39,7 +40,7 @@ func init() {
 
 	// Common --project flag (shared semantics across subcommands).
 	for _, cmd := range []*cobra.Command{
-		taskCreateCmd, taskListCmd, taskNextCmd,
+		taskCreateCmd, taskListCmd, taskSearchCmd, taskNextCmd,
 	} {
 		cmd.Flags().StringP("project", "p", "", "project id or name (or $TASKLINE_PROJECT)")
 	}
@@ -53,6 +54,7 @@ func init() {
 	_ = taskCreateCmd.MarkFlagRequired("title")
 
 	taskListCmd.Flags().String("state", "", "comma-separated states to include (default: all)")
+	taskSearchCmd.Flags().Int("limit", 20, "maximum number of matching tasks")
 
 	taskUpdateCmd.Flags().String("title", "", "new title")
 	taskUpdateCmd.Flags().String("description", "", "new description")
@@ -137,6 +139,35 @@ var taskListCmd = &cobra.Command{
 		}
 		c := newClient()
 		ts, err := c.ListTasks(project, states)
+		if err != nil {
+			return err
+		}
+		return output.Render(os.Stdout, output.Resolve(formatFlag), map[string]any{"tasks": ts}, func(w io.Writer) {
+			renderTaskTable(w, ts)
+		})
+	},
+}
+
+var taskSearchCmd = &cobra.Command{
+	Use:   "search <query>",
+	Short: "Search tasks in a project",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		flagVal, _ := cmd.Flags().GetString("project")
+		project := resolveProject(flagVal)
+		if project == "" {
+			return errors.New("project required (--project or $TASKLINE_PROJECT)")
+		}
+		query := strings.TrimSpace(strings.Join(args, " "))
+		if query == "" {
+			return errors.New("query required")
+		}
+		limit, _ := cmd.Flags().GetInt("limit")
+		if limit < 1 {
+			return errors.New("limit must be a positive integer")
+		}
+		c := newClient()
+		ts, err := c.SearchTasks(project, query, limit)
 		if err != nil {
 			return err
 		}

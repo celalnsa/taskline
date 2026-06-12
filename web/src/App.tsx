@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { Sidebar } from "./components/Sidebar";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { GraphView } from "./components/GraphView";
 import { CreateTaskButton } from "./components/CreateTaskButton";
+import { TaskEditor } from "./components/TaskEditor";
+import { TaskSearchDialog } from "./components/TaskSearchDialog";
 import { useProjects, useTasks } from "./hooks/queries";
-import type { Project } from "./lib/api";
+import type { Project, Task } from "./lib/api";
 
 type View = "kanban" | "graph";
 
@@ -66,9 +68,23 @@ function ProjectWorkspace({
   onToggleSidebar: () => void;
 }) {
   const [view, setView] = useState<View>("kanban");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const tasksQ = useTasks(project.id);
   const tasks = tasksQ.data ?? [];
   const SidebarIcon = sidebarOpen ? PanelLeftClose : PanelLeftOpen;
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const cmd = event.metaKey || event.ctrlKey;
+      if (cmd && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <>
@@ -94,6 +110,15 @@ function ProjectWorkspace({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            aria-label="Search tasks"
+            title="Search tasks"
+            onClick={() => setSearchOpen(true)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          >
+            <Search size={16} aria-hidden="true" />
+          </button>
           <ViewToggle view={view} onChange={setView} />
           <CreateTaskButton project={project} allTasks={tasks} />
         </div>
@@ -107,6 +132,24 @@ function ProjectWorkspace({
           )}
         </div>
       </section>
+      {searchOpen && (
+        <TaskSearchDialog
+          project={project}
+          onClose={() => setSearchOpen(false)}
+          onSelect={(task) => {
+            setSearchOpen(false);
+            setEditingTask(task);
+          }}
+        />
+      )}
+      {editingTask && (
+        <TaskEditor
+          project={project}
+          task={editingTask}
+          allTasks={tasks}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
     </>
   );
 }

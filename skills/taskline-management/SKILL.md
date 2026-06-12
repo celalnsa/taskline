@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.10.0
+version: 0.11.0
 ---
 
 # taskline — task management for AI agents
@@ -151,6 +151,8 @@ taskline task list --project demo --state start,dev,test
 
 # Pick / inspect
 taskline task next --project demo            # highest-priority runnable, or null
+taskline task search --project demo fc7a0732 # short id / full id / text matches
+taskline task search --project demo "historical context" --limit 10
 taskline task get <id>
 
 # Mutate (PATCH semantics — only pass the flags you want changed)
@@ -234,7 +236,10 @@ more instructions:
 3. Read `title`, `description`, any `docs`, and any `images`. Each doc
    includes a raw Markdown `url` under `/api/v1/docs/<doc-id>/content`;
    each image includes a `url` under `/api/v1/images/<image-id>`. Fetch
-   and surface them when they are material to the task.
+   and surface them when they are material to the task. When a task
+   references a short id, previous work, or historical context, use
+   `taskline task search --project <p> "<query>" --format json` to find
+   the related task before relying on memory or chat history.
 4. Walk the task through the stages below in order. Each stage has the
    same shape: **Trigger** (what just happened) → **Actions** (do
    these now) → **Advance** (literal CLI command to move state) →
@@ -425,8 +430,8 @@ one-line message. The state machine still records what happened.
 ## Gotchas
 
 - **Forgot `--project`?** Export `TASKLINE_PROJECT` once at session
-  start. Only `task create`, `task list`, and `task next` accept
-  `--project` — the rest (`get`, `update`, `delete`, `depend`,
+  start. Only `task create`, `task list`, `task search`, and
+  `task next` accept `--project` — the rest (`get`, `update`, `delete`, `depend`,
   `upload`) operate on the task id directly and reject the flag with
   "unknown flag".
 - **`invalid next state "..."`** — you used a name that isn't in
