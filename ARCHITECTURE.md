@@ -163,8 +163,9 @@ network blips.
 1. **Embedded** (`//go:embed all:dist`) — the production path. `pnpm
    build` writes into `server/web/dist/`; `go build` rolls it into the
    binary. A `.gitkeep` placeholder lets `go:embed` succeed on a fresh
-   checkout where `pnpm build` hasn't run yet, and `FS()` detects the
-   placeholder-only case and falls through.
+   checkout where `pnpm build` hasn't run yet. The web `prebuild` step
+   preserves that placeholder while replacing generated assets, and
+   `FS()` detects the placeholder-only case and falls through.
 2. **External `./dev-web/`** — if a directory by that name exists in the
    server working directory, it's served from disk. Useful for iterating
    on the UI without rebuilding the server.

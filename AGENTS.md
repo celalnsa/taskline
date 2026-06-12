@@ -108,7 +108,8 @@ and are not installed globally.
   derived constants (e.g. `STATES`, `STATE_LABELS`).
 - The web bundle is embedded into the server binary at build time
   (`server/web/embed.go`). The `dist/.gitkeep` placeholder must stay so
-  `go:embed all:dist` succeeds on a fresh checkout.
+  `go:embed all:dist` succeeds on a fresh checkout. The web `prebuild`
+  step removes generated assets while preserving that placeholder.
 
 ## Tests you should run before declaring done
 
