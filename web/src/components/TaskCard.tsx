@@ -67,7 +67,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
     : " cursor-pointer hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400";
 
   const labelChipClass =
-    "max-w-full shrink-0 truncate whitespace-nowrap rounded border px-1 py-0.5 text-[10px] leading-3 ";
+    "max-w-full shrink-0 truncate whitespace-nowrap rounded border px-1 py-0.5 text-[10px] leading-3";
 
   function openFromPointer(event: React.PointerEvent<HTMLDivElement>) {
     if (overlay) return;
@@ -138,14 +138,14 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
         </div>
         <div className="mt-1.5 flex max-h-[42px] min-w-0 flex-wrap items-start gap-1 overflow-hidden">
           <span
-            className={`${labelChipClass}border-sky-200 bg-sky-50 text-sky-700`}
+            className={`${labelChipClass} border-sky-200 bg-sky-50 text-sky-700`}
             title={`Priority ${task.priority}`}
           >
             p {task.priority}
           </span>
           {dependencyCount > 0 && (
             <span
-              className={`${labelChipClass}${
+              className={`${labelChipClass} ${
                 isBlocked
                   ? "border-amber-200 bg-amber-50 text-amber-800"
                   : "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -161,7 +161,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
             <span
               key={label}
               data-label-theme={getTaskLabelTheme(label).name}
-              className={labelChipClass + taskLabelChipClass(label)}
+              className={`${labelChipClass} ${taskLabelChipClass(label)}`}
               title={label}
             >
               {label}
@@ -169,7 +169,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
           ))}
           {hiddenLabelCount > 0 && (
             <span
-              className={`${labelChipClass}border-slate-200 bg-white text-slate-400`}
+              className={`${labelChipClass} border-slate-200 bg-white text-slate-400`}
               title={`${hiddenLabelCount} more labels`}
             >
               +{hiddenLabelCount}
