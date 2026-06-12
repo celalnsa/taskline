@@ -4,6 +4,8 @@ import type { Task } from "../lib/api";
 import { getTaskLabelTheme, taskLabelChipClass } from "../lib/labels";
 import { formatRelativeTime } from "../lib/time";
 
+const MAX_VISIBLE_CARD_CHIPS = 4;
+
 interface Props {
   task: Task;
   isBlocked: boolean;
@@ -20,9 +22,11 @@ interface Props {
 export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = false }: Props) {
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const labels = task.labels ?? [];
-  const visibleLabels = labels.slice(0, 3);
-  const hiddenLabelCount = Math.max(0, labels.length - visibleLabels.length);
   const dependencyCount = task.depends_on?.length ?? 0;
+  const metadataChipCount = 1 + (dependencyCount > 0 ? 1 : 0);
+  const visibleLabelCount = Math.max(0, MAX_VISIBLE_CARD_CHIPS - metadataChipCount);
+  const visibleLabels = labels.slice(0, visibleLabelCount);
+  const hiddenLabelCount = Math.max(0, labels.length - visibleLabels.length);
   // Disable the draggable hook entirely on the overlay clone so the
   // DOM only has a single registered draggable per task id.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -62,10 +66,8 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
     ? ""
     : " cursor-pointer hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400";
 
-  const badgeClass =
-    "shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-3 tabular-nums";
-
-  const labelChipClass = "max-w-full shrink-0 truncate whitespace-nowrap rounded border px-1 py-0.5 text-[10px] leading-3 ";
+  const labelChipClass =
+    "max-w-full shrink-0 truncate whitespace-nowrap rounded border px-1 py-0.5 text-[10px] leading-3 ";
 
   function openFromPointer(event: React.PointerEvent<HTMLDivElement>) {
     if (overlay) return;
@@ -134,16 +136,16 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
             {task.title}
           </p>
         </div>
-        <div className="mt-1.5 flex max-h-[34px] min-w-0 flex-wrap items-start gap-1 overflow-hidden">
+        <div className="mt-1.5 flex max-h-[42px] min-w-0 flex-wrap items-start gap-1 overflow-hidden">
           <span
-            className={`${badgeClass} border-sky-200 bg-sky-50 text-sky-700`}
+            className={`${labelChipClass}border-sky-200 bg-sky-50 text-sky-700`}
             title={`Priority ${task.priority}`}
           >
             p {task.priority}
           </span>
           {dependencyCount > 0 && (
             <span
-              className={`${badgeClass} ${
+              className={`${labelChipClass}${
                 isBlocked
                   ? "border-amber-200 bg-amber-50 text-amber-800"
                   : "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -167,7 +169,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
           ))}
           {hiddenLabelCount > 0 && (
             <span
-              className="shrink-0 whitespace-nowrap rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] leading-3 text-slate-400"
+              className={`${labelChipClass}border-slate-200 bg-white text-slate-400`}
               title={`${hiddenLabelCount} more labels`}
             >
               +{hiddenLabelCount}

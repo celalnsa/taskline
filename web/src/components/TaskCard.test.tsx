@@ -107,7 +107,7 @@ describe("TaskCard", () => {
     const backendChip = screen.getByText("backend").closest("span");
 
     expect(labelRow?.className).toContain("flex-wrap");
-    expect(labelRow?.className).toContain("max-h");
+    expect(labelRow?.className).toContain("max-h-[42px]");
     expect(labelRow?.className).toContain("overflow-hidden");
     expect(backendChip?.className).toContain("text-[10px]");
     expect(backendChip?.className).toContain("max-w-full");
@@ -191,7 +191,38 @@ describe("TaskCard", () => {
     expect(screen.queryByText("blocked")).toBeNull();
     expect(screen.queryByText("deps: 1")).toBeNull();
     expect(screen.queryByText("links 2")).toBeNull();
+    expect(screen.queryByText("review")).toBeNull();
+    expect(screen.queryByText("later")).toBeNull();
+    expect(screen.getByText("+2")).toBeTruthy();
+  });
+
+  it("counts priority and dependency chips when deciding hidden labels", () => {
+    renderCard(
+      vi.fn(),
+      vi.fn(),
+      {
+        ...task,
+        title: "Card with more labels than two rows",
+        priority: 47,
+        depends_on: ["dep-1"],
+        labels: ["hooks", "memory", "overflow"],
+      },
+      false
+    );
+
+    const priorityBadge = screen.getByText("p 47");
+    const dependencyBadge = screen.getByText("deps 1");
+    const labelRow = priorityBadge.parentElement;
+
+    expect(priorityBadge.className).toContain("rounded border px-1 py-0.5 text-[10px] leading-3");
+    expect(priorityBadge.className).not.toContain("rounded-full");
+    expect(dependencyBadge.className).toContain("rounded border px-1 py-0.5 text-[10px] leading-3");
+    expect(dependencyBadge.className).not.toContain("rounded-full");
+    expect(screen.getByText("hooks")).toBeTruthy();
+    expect(screen.getByText("memory")).toBeTruthy();
+    expect(screen.queryByText("overflow")).toBeNull();
     expect(screen.getByText("+1")).toBeTruthy();
+    expect(labelRow?.className).toContain("max-h-[42px]");
   });
 
   it("clamps long titles to two lines", () => {
