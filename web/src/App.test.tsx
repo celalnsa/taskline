@@ -235,7 +235,7 @@ describe("App workspace layout", () => {
 
     await user.click(screen.getByRole("button", { name: "Kanban" }));
 
-    expect(mocks.setViewKey).toHaveBeenCalledWith("kanban");
+    expect(mocks.setViewKey).toHaveBeenCalledWith(null);
   });
 
   it("opens task search from the title bar and Cmd+P", async () => {

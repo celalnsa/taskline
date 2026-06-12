@@ -38,7 +38,7 @@ export default function App() {
     void setProjectKey(p.name);
   };
   const selectView = (next: View) => {
-    void setViewKey(next);
+    void setViewKey(next === "kanban" ? null : next);
   };
 
   return (
