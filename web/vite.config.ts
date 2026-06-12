@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // Vite directly emits to ../server/web/dist so go:embed picks it up at
-// `go build` time. Keep this in sync with server/web/embed.go.
+// `go build` time. The prebuild script removes generated assets while
+// preserving dist/.gitkeep for fresh checkout embeds.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
@@ -11,7 +12,7 @@ export default defineConfig({
   },
   build: {
     outDir: "../server/web/dist",
-    emptyOutDir: true,
+    emptyOutDir: false,
   },
   server: {
     port: 5173,

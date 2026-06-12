@@ -21,7 +21,7 @@ taskline/
 │   ├── tests/              # e2e (boots real server)
 │   └── web/                # go:embed boundary for the bundled UI
 │       ├── embed.go
-│       └── dist/.gitkeep   # placeholder; vite overwrites at build time
+│       └── dist/.gitkeep   # placeholder preserved by web build cleanup
 ├── cli/                    # Go module: cli.taskline.dev (independent)
 │   ├── main.go cmd/ client/
 ├── web/                    # React + Vite + Tailwind + dnd-kit + React Flow

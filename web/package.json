@@ -7,6 +7,7 @@
     "dev": "vite",
     "lint": "eslint .",
     "test": "vitest run",
+    "prebuild": "node ./scripts/clean-dist.mjs",
     "build": "tsc -b --noEmit && vite build",
     "preview": "vite preview"
   },
