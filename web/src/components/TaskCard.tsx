@@ -130,7 +130,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
         interactiveClass
       }
     >
-      <div className="min-w-0 pr-6">
+      <div className="min-w-0">
         <div>
           <p className="line-clamp-2 min-w-0 text-[13px] font-medium leading-snug text-slate-900">
             {task.title}

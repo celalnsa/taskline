@@ -183,7 +183,7 @@ describe("TaskCard", () => {
     expect(labelRow?.className).toContain("flex-wrap");
     expect(labelRow?.className).toContain("max-h");
     expect(labelRow?.textContent?.startsWith("p 48deps 1backend")).toBe(true);
-    expect(titleContainer?.className).toContain("pr-6");
+    expect(titleContainer?.className).not.toContain("pr-6");
     expect(titleContainer?.className).not.toContain("pt-2.5");
     expect(title.parentElement?.textContent).toBe("Blocked task with dependencies");
     expect(screen.queryByText("p=48")).toBeNull();
