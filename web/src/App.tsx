@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { Sidebar } from "./components/Sidebar";
 import { KanbanBoard } from "./components/KanbanBoard";
@@ -10,6 +11,7 @@ import type { Project } from "./lib/api";
 type View = "kanban" | "graph";
 
 export default function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   // ?project=<name|id> survives page reload and back/forward; nuqs
   // keeps the URL and state in lockstep without a router dep.
   // history: "replace" so picking a project doesn't pollute the back
@@ -32,10 +34,17 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex">
-      <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
+      {(sidebarOpen || !project) && (
+        <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
+      )}
       <main className="flex-1 flex flex-col overflow-hidden">
         {project ? (
-          <ProjectWorkspace key={project.id} project={project} />
+          <ProjectWorkspace
+            key={project.id}
+            project={project}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((open) => !open)}
+          />
         ) : (
           <Welcome
             unresolved={!!projectKey && projects.isSuccess && !project}
@@ -47,21 +56,42 @@ export default function App() {
   );
 }
 
-function ProjectWorkspace({ project }: { project: Project }) {
+function ProjectWorkspace({
+  project,
+  sidebarOpen,
+  onToggleSidebar,
+}: {
+  project: Project;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+}) {
   const [view, setView] = useState<View>("kanban");
   const tasksQ = useTasks(project.id);
   const tasks = tasksQ.data ?? [];
+  const SidebarIcon = sidebarOpen ? PanelLeftClose : PanelLeftOpen;
 
   return (
     <>
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-bold leading-tight text-slate-900">
-            {project.name}
-          </h2>
-          {project.description && (
-            <p className="mt-0.5 truncate text-xs text-slate-500">{project.description}</p>
-          )}
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            aria-expanded={sidebarOpen}
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            onClick={onToggleSidebar}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          >
+            <SidebarIcon size={16} aria-hidden="true" />
+          </button>
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-bold leading-tight text-slate-900">
+              {project.name}
+            </h2>
+            {project.description && (
+              <p className="mt-0.5 truncate text-xs text-slate-500">{project.description}</p>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
