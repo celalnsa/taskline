@@ -50,6 +50,7 @@ type MockEdge = {
   target: string;
   data?: Record<string, unknown>;
   style?: { stroke?: string };
+  zIndex?: number;
   animated?: boolean;
 };
 
@@ -125,6 +126,7 @@ vi.mock("@xyflow/react", () => ({
             data-stroke={edge.style?.stroke}
             data-selected={String(edge.data?.selected)}
             data-animated={String(edge.animated)}
+            data-z-index={String(edge.zIndex ?? "")}
             onClick={(event) => onEdgeClick?.(event, edge)}
           >
             {EdgeComponent ? (
@@ -271,6 +273,8 @@ describe("GraphView", () => {
     expect(screen.getByTestId("node-b").dataset.selected).toBe("true");
     expect(screen.getByTestId("node-c").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-d").dataset.dimmed).toBe("true");
+    expect(screen.getByTestId("edge-a->b").dataset.zIndex).toBe("20");
+    expect(screen.getByTestId("edge-b->c").dataset.zIndex).toBe("20");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(350);
     });
@@ -328,6 +332,11 @@ describe("GraphView", () => {
     expect(screen.getByTestId("node-d").dataset.dimmed).toBe("true");
     expect(screen.getByTestId("edge-b->c").dataset.selected).toBe("true");
     expect(screen.getByTestId("edge-b->c").dataset.stroke).toBe("#dc2626");
+    expect(screen.getByTestId("edge-a->b").dataset.zIndex).toBe("20");
+    expect(screen.getByTestId("edge-b->c").dataset.zIndex).toBe("30");
+    expect(screen.getByRole("button", { name: /delete dependency b to c/i }).style.zIndex).toBe(
+      "40"
+    );
 
     await user.click(screen.getByRole("button", { name: /delete dependency b to c/i }));
 

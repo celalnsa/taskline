@@ -37,6 +37,10 @@ import { TaskEditor } from "./TaskEditor";
 const ACTIVE_EDGE_COLOR = "#0f172a";
 const DIMMED_EDGE_COLOR = "#cbd5e1";
 const SELECTED_EDGE_COLOR = "#dc2626";
+const DEFAULT_EDGE_Z_INDEX = 0;
+const HIGHLIGHTED_EDGE_Z_INDEX = 20;
+const SELECTED_EDGE_Z_INDEX = 30;
+const SELECTED_EDGE_ACTION_Z_INDEX = 40;
 const NODE_SINGLE_CLICK_OPEN_DELAY_MS = 250;
 
 const STATE_COLORS: Record<TaskState, string> = {
@@ -200,6 +204,13 @@ export function GraphView({ project }: Props) {
           source: dep,
           target: t.id,
           type: "deletableEdge",
+          zIndex: hasSelection
+            ? edgeSelected
+              ? SELECTED_EDGE_Z_INDEX
+              : edgeRelated
+                ? HIGHLIGHTED_EDGE_Z_INDEX
+                : DEFAULT_EDGE_Z_INDEX
+            : DEFAULT_EDGE_Z_INDEX,
           animated: edgeRelated && hasSelection,
           data: {
             selected: edgeSelected,
@@ -351,6 +362,7 @@ function DeletableEdge({
             className="nodrag nopan absolute flex h-7 w-7 items-center justify-center rounded-full border border-red-200 bg-white text-red-600 shadow-sm hover:bg-red-50"
             style={{
               pointerEvents: "all",
+              zIndex: SELECTED_EDGE_ACTION_Z_INDEX,
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 18}px)`,
             }}
             onClick={(event) => {
