@@ -22,6 +22,10 @@ export default function App() {
   const [projectKey, setProjectKey] = useQueryState("project", {
     history: "replace",
   });
+  const [viewKey, setViewKey] = useQueryState("view", {
+    history: "replace",
+  });
+  const view = parseViewKey(viewKey);
   const projects = useProjects();
   const project: Project | null =
     projects.data?.find(
@@ -32,6 +36,9 @@ export default function App() {
   // accepts an id, so older saved links keep working.
   const selectProject = (p: Project) => {
     void setProjectKey(p.name);
+  };
+  const selectView = (next: View) => {
+    void setViewKey(next === "kanban" ? null : next);
   };
 
   return (
@@ -44,6 +51,8 @@ export default function App() {
           <ProjectWorkspace
             key={project.id}
             project={project}
+            view={view}
+            onViewChange={selectView}
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen((open) => !open)}
           />
@@ -60,14 +69,17 @@ export default function App() {
 
 function ProjectWorkspace({
   project,
+  view,
+  onViewChange,
   sidebarOpen,
   onToggleSidebar,
 }: {
   project: Project;
+  view: View;
+  onViewChange: (next: View) => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }) {
-  const [view, setView] = useState<View>("kanban");
   const [searchOpen, setSearchOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const tasksQ = useTasks(project.id);
@@ -119,7 +131,7 @@ function ProjectWorkspace({
           >
             <Search size={16} aria-hidden="true" />
           </button>
-          <ViewToggle view={view} onChange={setView} />
+          <ViewToggle view={view} onChange={onViewChange} />
           <CreateTaskButton project={project} allTasks={tasks} />
         </div>
       </header>
@@ -152,6 +164,10 @@ function ProjectWorkspace({
       )}
     </>
   );
+}
+
+function parseViewKey(value: string | null): View {
+  return value === "graph" ? "graph" : "kanban";
 }
 
 function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {

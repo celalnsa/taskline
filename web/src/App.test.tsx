@@ -6,13 +6,19 @@ import App from "./App";
 
 const mocks = vi.hoisted(() => ({
   projectKey: "taskline" as string | null,
+  viewKey: null as string | null,
   setProjectKey: vi.fn(),
+  setViewKey: vi.fn(),
   useProjects: vi.fn(),
   useTasks: vi.fn(),
 }));
 
 vi.mock("nuqs", () => ({
-  useQueryState: () => [mocks.projectKey, mocks.setProjectKey],
+  useQueryState: (key: string) => {
+    if (key === "project") return [mocks.projectKey, mocks.setProjectKey];
+    if (key === "view") return [mocks.viewKey, mocks.setViewKey];
+    return [null, vi.fn()];
+  },
 }));
 
 vi.mock("./hooks/queries", () => ({
@@ -114,6 +120,7 @@ describe("App workspace layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.projectKey = "taskline";
+    mocks.viewKey = null;
   });
 
   afterEach(() => {
@@ -184,10 +191,8 @@ describe("App workspace layout", () => {
   });
 
   it("keeps task creation available from the graph view and Cmd+K", async () => {
-    const user = userEvent.setup();
+    mocks.viewKey = "graph";
     renderApp();
-
-    await user.click(screen.getByRole("button", { name: "Graph" }));
 
     expect(screen.getByRole("region", { name: "Graph board" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "+ New" })).toBeTruthy();
@@ -195,6 +200,42 @@ describe("App workspace layout", () => {
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
     expect(screen.getByRole("dialog", { name: "Create task" })).toBeTruthy();
+  });
+
+  it("opens the graph view from the view query parameter", () => {
+    mocks.viewKey = "graph";
+
+    renderApp();
+
+    expect(screen.getByRole("region", { name: "Graph board" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Kanban board" })).toBeNull();
+  });
+
+  it("falls back to kanban for an unknown view query parameter", () => {
+    mocks.viewKey = "timeline";
+
+    renderApp();
+
+    expect(screen.getByRole("region", { name: "Kanban board" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Graph board" })).toBeNull();
+  });
+
+  it("writes the selected view into the URL query", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Graph" }));
+
+    expect(mocks.setViewKey).toHaveBeenCalledWith("graph");
+
+    cleanup();
+    vi.clearAllMocks();
+    mocks.viewKey = "graph";
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Kanban" }));
+
+    expect(mocks.setViewKey).toHaveBeenCalledWith(null);
   });
 
   it("opens task search from the title bar and Cmd+P", async () => {
@@ -222,11 +263,10 @@ describe("App workspace layout", () => {
     expect(screen.getByRole("dialog", { name: "Edit task" })).toBeTruthy();
   });
 
-  it("resets workspace-local view and editor state when the project changes", async () => {
-    const user = userEvent.setup();
+  it("resets workspace-local editor state but preserves the URL-backed view when the project changes", async () => {
+    mocks.viewKey = "graph";
     const { rerender } = renderApp();
 
-    await user.click(screen.getByRole("button", { name: "Graph" }));
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
     expect(screen.getByRole("region", { name: "Graph board" })).toBeTruthy();
@@ -236,8 +276,8 @@ describe("App workspace layout", () => {
     rerender(<App />);
 
     expect(screen.getByRole("heading", { level: 2, name: "chanwire" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Kanban board" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Graph board" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Graph board" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Kanban board" })).toBeNull();
     expect(screen.queryByRole("dialog", { name: "Create task" })).toBeNull();
   });
 });
