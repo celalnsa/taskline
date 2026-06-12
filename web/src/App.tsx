@@ -54,18 +54,22 @@ function ProjectWorkspace({ project }: { project: Project }) {
 
   return (
     <>
-      <header className="shrink-0 border-b border-slate-200 bg-white px-6 py-3">
-        <h2 className="text-lg font-bold leading-tight text-slate-900">{project.name}</h2>
-        {project.description && (
-          <p className="mt-0.5 text-xs text-slate-500">{project.description}</p>
-        )}
-      </header>
-      <section className="relative flex-1 overflow-hidden bg-slate-50">
-        <div className="absolute right-4 top-3 z-20 flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 p-1 shadow-sm backdrop-blur">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-bold leading-tight text-slate-900">
+            {project.name}
+          </h2>
+          {project.description && (
+            <p className="mt-0.5 truncate text-xs text-slate-500">{project.description}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
           <CreateTaskButton project={project} allTasks={tasks} />
         </div>
-        <div className="box-border h-full pt-14">
+      </header>
+      <section className="relative flex-1 overflow-hidden bg-slate-50">
+        <div className="box-border h-full">
           {view === "kanban" ? (
             <KanbanBoard project={project} />
           ) : (

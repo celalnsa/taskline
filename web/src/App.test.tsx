@@ -95,14 +95,25 @@ describe("App workspace layout", () => {
     cleanup();
   });
 
-  it("places the project title above the board and shows the compact board toolbar", () => {
+  it("places board controls in the project title bar", () => {
     renderApp();
 
-    expect(screen.getByRole("heading", { level: 2, name: "taskline" })).toBeTruthy();
+    const heading = screen.getByRole("heading", { level: 2, name: "taskline" });
+    const header = heading.closest("header");
+    const kanbanButton = screen.getByRole("button", { name: "Kanban" });
+    const graphButton = screen.getByRole("button", { name: "Graph" });
+    const newTaskButton = screen.getByRole("button", { name: "+ New" });
+
+    expect(heading).toBeTruthy();
+    expect(header).toBeTruthy();
+    if (!header) throw new Error("expected project header");
     expect(screen.getByText("Agent board")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Kanban" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Graph" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "+ New" })).toBeTruthy();
+    expect(header.contains(kanbanButton)).toBe(true);
+    expect(header.contains(graphButton)).toBe(true);
+    expect(header.contains(newTaskButton)).toBe(true);
+    expect(screen.getByRole("region", { name: "Kanban board" }).parentElement?.className).not.toContain(
+      "pt-14"
+    );
     expect(screen.queryByRole("button", { name: "Dependency graph" })).toBeNull();
     expect(screen.queryByRole("button", { name: "+ New task" })).toBeNull();
   });
