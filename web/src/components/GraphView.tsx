@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import {
   Background,
@@ -41,7 +41,6 @@ const DEFAULT_EDGE_Z_INDEX = 0;
 const HIGHLIGHTED_EDGE_Z_INDEX = 20;
 const SELECTED_EDGE_Z_INDEX = 30;
 const SELECTED_EDGE_ACTION_Z_INDEX = 40;
-const NODE_SINGLE_CLICK_OPEN_DELAY_MS = 250;
 
 const STATE_COLORS: Record<TaskState, string> = {
   pending: "#e2e8f0",
@@ -94,31 +93,7 @@ export function GraphView({ project }: Props) {
   const [copyDraft, setCopyDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pendingTaskOpenTimer = useRef<number | null>(null);
   const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
-
-  const clearPendingTaskOpen = useCallback(() => {
-    if (pendingTaskOpenTimer.current === null) return;
-    window.clearTimeout(pendingTaskOpenTimer.current);
-    pendingTaskOpenTimer.current = null;
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      clearPendingTaskOpen();
-    };
-  }, [clearPendingTaskOpen]);
-
-  const scheduleTaskOpen = useCallback(
-    (task: Task) => {
-      clearPendingTaskOpen();
-      pendingTaskOpenTimer.current = window.setTimeout(() => {
-        setEditing(task);
-        pendingTaskOpenTimer.current = null;
-      }, NODE_SINGLE_CLICK_OPEN_DELAY_MS);
-    },
-    [clearPendingTaskOpen]
-  );
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -251,32 +226,27 @@ export function GraphView({ project }: Props) {
         onConnect={onConnect}
         onEdgeClick={(event, edge) => {
           event.stopPropagation();
-          clearPendingTaskOpen();
           setSelectedTaskId(null);
           setSelectedEdgeId(edge.id);
         }}
         onNodeClick={(_, node) => {
           setTaskMenu(null);
-          setSelectedTaskId(null);
+          setSelectedTaskId(node.id);
           setSelectedEdgeId(null);
-          scheduleTaskOpen(node.data.task);
         }}
         onNodeDoubleClick={(event, node) => {
           event.stopPropagation();
-          clearPendingTaskOpen();
           setSelectedTaskId(node.id);
           setSelectedEdgeId(null);
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
           event.stopPropagation();
-          clearPendingTaskOpen();
           setSelectedTaskId(null);
           setSelectedEdgeId(null);
           setTaskMenu({ task: node.data.task, x: event.clientX, y: event.clientY });
         }}
         onPaneClick={() => {
-          clearPendingTaskOpen();
           setTaskMenu(null);
           setSelectedTaskId(null);
           setSelectedEdgeId(null);
@@ -309,6 +279,7 @@ export function GraphView({ project }: Props) {
           task={taskMenu.task}
           position={{ x: taskMenu.x, y: taskMenu.y }}
           onClose={() => setTaskMenu(null)}
+          onEdit={(task) => setEditing(task)}
           onCopy={(task) => setCopyDraft(createTaskCopyDraft(task))}
           onDelete={(task) => {
             deleteTask.mutate(task.id, { onError: showMutationError });
