@@ -1,4 +1,4 @@
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import type { Task } from "../lib/api";
 import { confirmTaskDelete } from "../lib/taskActions";
@@ -11,16 +11,24 @@ type MenuPosition = {
 interface Props {
   task: Task;
   position: MenuPosition;
+  onEdit?: (task: Task) => void;
   onCopy: (task: Task) => void;
   onDelete: (task: Task) => void;
   onClose: () => void;
 }
 
-export function TaskContextMenu({ task, position, onCopy, onDelete, onClose }: Props) {
+export function TaskContextMenu({
+  task,
+  position,
+  onEdit,
+  onCopy,
+  onDelete,
+  onClose,
+}: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const style = useMemo<CSSProperties>(() => {
     const width = 148;
-    const height = 84;
+    const height = onEdit ? 120 : 84;
     const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth;
     const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight;
     const left =
@@ -32,7 +40,7 @@ export function TaskContextMenu({ task, position, onCopy, onDelete, onClose }: P
         ? Math.max(8, Math.min(position.y, viewportHeight - height - 8))
         : position.y;
     return { left, top };
-  }, [position.x, position.y]);
+  }, [onEdit, position.x, position.y]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -68,6 +76,20 @@ export function TaskContextMenu({ task, position, onCopy, onDelete, onClose }: P
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      {onEdit && (
+        <button
+          type="button"
+          role="menuitem"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+          onClick={() => {
+            onClose();
+            onEdit(task);
+          }}
+        >
+          <Pencil size={14} aria-hidden="true" />
+          Edit
+        </button>
+      )}
       <button
         type="button"
         role="menuitem"

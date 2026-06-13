@@ -20,7 +20,7 @@ const task: Task = {
   images: [],
 };
 
-function renderMenu() {
+function renderMenu({ onEdit }: { onEdit?: (task: Task) => void } = {}) {
   const onCopy = vi.fn();
   const onDelete = vi.fn();
   const onClose = vi.fn();
@@ -31,6 +31,7 @@ function renderMenu() {
       position={{ x: 24, y: 32 }}
       onCopy={onCopy}
       onDelete={onDelete}
+      onEdit={onEdit}
       onClose={onClose}
     />
   );
@@ -65,5 +66,19 @@ describe("TaskContextMenu", () => {
       'Delete task "Context task"? This cascades to dependencies and images.'
     );
     expect(onDelete).toHaveBeenCalledWith(task);
+  });
+
+  it("renders an optional edit action before copy and delete", async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    const { onClose } = renderMenu({ onEdit });
+
+    const items = screen.getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Edit", "Copy", "Delete"]);
+
+    await user.click(screen.getByRole("menuitem", { name: /^edit$/i }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onEdit).toHaveBeenCalledWith(task);
   });
 });

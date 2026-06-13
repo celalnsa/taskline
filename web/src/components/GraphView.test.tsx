@@ -256,8 +256,7 @@ describe("GraphView", () => {
     expect(bX).toBeLessThan(cX);
   });
 
-  it("highlights the selected relationship chain on double-click and clears on pane click", async () => {
-    vi.useFakeTimers();
+  it("highlights the selected relationship chain on single-click and clears on pane click", () => {
     renderGraph([
       task({ id: "a", title: "A" }),
       task({ id: "b", title: "B", depends_on: ["a"] }),
@@ -266,8 +265,6 @@ describe("GraphView", () => {
     ]);
 
     fireEvent.click(screen.getByTestId("node-b"));
-    fireEvent.click(screen.getByTestId("node-b"));
-    fireEvent.doubleClick(screen.getByTestId("node-b"));
 
     expect(screen.getByTestId("node-a").dataset.dimmed).toBe("false");
     expect(screen.getByTestId("node-b").dataset.selected).toBe("true");
@@ -275,9 +272,6 @@ describe("GraphView", () => {
     expect(screen.getByTestId("node-d").dataset.dimmed).toBe("true");
     expect(screen.getByTestId("edge-a->b").dataset.zIndex).toBe("20");
     expect(screen.getByTestId("edge-b->c").dataset.zIndex).toBe("20");
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(350);
-    });
     expect(screen.queryByRole("dialog", { name: /edit task b/i })).toBeNull();
 
     fireEvent.click(screen.getByTestId("pane"));
@@ -286,29 +280,23 @@ describe("GraphView", () => {
     expect(screen.getByTestId("node-b").dataset.selected).toBe("false");
   });
 
-  it("opens the task editor on single-click without highlighting the chain", async () => {
-    vi.useFakeTimers();
+  it("opens the task editor from the graph right-click edit action", async () => {
+    const user = userEvent.setup();
     renderGraph([
       task({ id: "a", title: "A" }),
       task({ id: "b", title: "Editable task", depends_on: ["a"] }),
     ]);
 
-    fireEvent.click(screen.getByTestId("node-a"));
-    fireEvent.click(screen.getByTestId("node-a"));
-    fireEvent.doubleClick(screen.getByTestId("node-a"));
-    expect(screen.getByTestId("node-a").dataset.selected).toBe("true");
-
     fireEvent.click(screen.getByTestId("node-b"));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(350);
-    });
+    expect(screen.getByTestId("node-b").dataset.selected).toBe("true");
+    expect(screen.queryByRole("dialog", { name: /edit task editable task/i })).toBeNull();
+
+    fireEvent.contextMenu(screen.getByTestId("node-b"), { clientX: 60, clientY: 80 });
+    await user.click(screen.getByRole("menuitem", { name: /^edit$/i }));
 
     expect(
       screen.getByRole("dialog", { name: /edit task editable task/i })
     ).toBeTruthy();
-    expect(screen.getByTestId("node-a").dataset.selected).toBe("false");
-    expect(screen.getByTestId("node-a").dataset.dimmed).toBe("false");
-    expect(screen.getByTestId("node-b").dataset.selected).toBe("false");
 
     fireEvent.click(screen.getByRole("button", { name: /close editor/i }));
 
