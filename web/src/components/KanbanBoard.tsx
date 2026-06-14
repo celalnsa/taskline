@@ -9,6 +9,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useDroppable } from "@dnd-kit/core";
+import { ArrowUpDown, Check } from "lucide-react";
 import {
   STATES,
   STATE_LABELS,
@@ -42,6 +43,14 @@ type BoardPanState = {
   startX: number;
   startScrollLeft: number;
 };
+
+type ColumnSortMode = "execution" | "priority" | "created";
+
+const SORT_OPTIONS: Array<{ id: ColumnSortMode; label: string }> = [
+  { id: "execution", label: "Next execution order" },
+  { id: "priority", label: "Priority high to low" },
+  { id: "created", label: "Created oldest first" },
+];
 
 const BOARD_PAN_BLOCK_SELECTOR = [
   "[data-task-card]",
@@ -80,6 +89,10 @@ export function KanbanBoard({ project }: Props) {
   const [copyDraft, setCopyDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [columnSortModes, setColumnSortModes] = useState<Record<TaskState, ColumnSortMode>>(() =>
+    createDefaultColumnSortModes()
+  );
+  const [openSortMenu, setOpenSortMenu] = useState<TaskState | null>(null);
   const boardPan = useRef<BoardPanState | null>(null);
   // Track which task is currently being dragged so we can render it in a
   // <DragOverlay>. Without the overlay, the card stays in its source
@@ -99,8 +112,7 @@ export function KanbanBoard({ project }: Props) {
     () => new Set(tasks.filter((t) => t.state === "done").map((t) => t.id)),
     [tasks]
   );
-  const isBlocked = (t: Task) =>
-    !!t.depends_on?.length && t.depends_on.some((d) => !doneIds.has(d));
+  const isBlocked = (t: Task) => isTaskBlocked(t, doneIds);
 
   const grouped = useMemo(() => {
     const out = Object.fromEntries(STATES.map((s) => [s, [] as Task[]])) as Record<
@@ -111,19 +123,16 @@ export function KanbanBoard({ project }: Props) {
       // Tolerate states the web doesn't know about (server one rev ahead).
       if (out[t.state]) out[t.state].push(t);
     }
-    // `start` column mirrors `task next`'s ordering — agents pick from the
-    // top, so this column needs priority-first / oldest-first. Every other
-    // column is browse-mode; "what changed recently" is what the user wants
-    // to see at a glance, so sort by updated_at descending.
     for (const k of STATES) {
-      if (k === "start") {
-        out[k].sort((a, b) => b.priority - a.priority || a.created_at - b.created_at);
-      } else {
-        out[k].sort((a, b) => b.updated_at - a.updated_at);
-      }
+      out[k].sort((a, b) => compareTasksForColumn(a, b, columnSortModes[k], doneIds));
     }
     return out;
-  }, [tasks]);
+  }, [columnSortModes, doneIds, tasks]);
+
+  function updateColumnSortMode(state: TaskState, mode: ColumnSortMode) {
+    setColumnSortModes((current) => ({ ...current, [state]: mode }));
+    setOpenSortMenu(null);
+  }
 
   function onDragStart(ev: DragStartEvent) {
     const t = tasks.find((t) => t.id === String(ev.active.id));
@@ -215,7 +224,15 @@ export function KanbanBoard({ project }: Props) {
         >
           <div className="flex h-full w-fit min-w-full gap-3 p-4">
             {STATES.map((s) => (
-              <Column key={s} state={s}>
+              <Column
+                key={s}
+                state={s}
+                count={grouped[s].length}
+                sortMode={columnSortModes[s]}
+                isSortMenuOpen={openSortMenu === s}
+                onToggleSortMenu={() => setOpenSortMenu((current) => (current === s ? null : s))}
+                onSortModeChange={(mode) => updateColumnSortMode(s, mode)}
+              >
                 {grouped[s].map((t) => (
                   <TaskCard
                     key={t.id}
@@ -274,22 +291,103 @@ export function KanbanBoard({ project }: Props) {
   );
 }
 
-function Column({ state, children }: { state: TaskState; children: React.ReactNode }) {
+function Column({
+  state,
+  count,
+  sortMode,
+  isSortMenuOpen,
+  onToggleSortMenu,
+  onSortModeChange,
+  children,
+}: {
+  state: TaskState;
+  count: number;
+  sortMode: ColumnSortMode;
+  isSortMenuOpen: boolean;
+  onToggleSortMenu: () => void;
+  onSortModeChange: (mode: ColumnSortMode) => void;
+  children: React.ReactNode;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: state });
+  const stateLabel = STATE_LABELS[state];
+
   return (
     <div
       ref={setNodeRef}
+      data-testid={`column-${state}`}
       className={
         "flex-1 min-w-48 max-w-72 rounded-lg bg-slate-100 p-3 flex flex-col gap-2 transition " +
         (isOver ? "ring-2 ring-emerald-400" : "")
       }
     >
-      <div className="flex items-center justify-between mb-1">
+      <div className="relative mb-1 flex items-center justify-between gap-2">
         <h3 className="text-xs uppercase tracking-wide font-semibold text-slate-600">
-          {STATE_LABELS[state]}
+          {stateLabel} ({count})
         </h3>
+        <button
+          type="button"
+          aria-label={`Sort ${stateLabel} tasks`}
+          aria-expanded={isSortMenuOpen}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+          onClick={onToggleSortMenu}
+        >
+          <ArrowUpDown size={14} aria-hidden="true" />
+        </button>
+        {isSortMenuOpen && (
+          <div
+            role="menu"
+            aria-label={`Sort ${stateLabel} tasks`}
+            className="absolute right-0 top-8 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+          >
+            {SORT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={sortMode === option.id}
+                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+                onClick={() => onSortModeChange(option.id)}
+              >
+                <span>{option.label}</span>
+                {sortMode === option.id && <Check size={13} aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto space-y-2 pr-1">{children}</div>
     </div>
   );
+}
+
+function createDefaultColumnSortModes(): Record<TaskState, ColumnSortMode> {
+  return Object.fromEntries(STATES.map((state) => [state, "execution"])) as Record<
+    TaskState,
+    ColumnSortMode
+  >;
+}
+
+function compareTasksForColumn(
+  a: Task,
+  b: Task,
+  mode: ColumnSortMode,
+  doneIds: Set<string>
+): number {
+  if (mode === "created") return compareCreatedOldestFirst(a, b);
+  if (mode === "priority") return comparePriorityHighToLow(a, b);
+
+  const blockedDelta = Number(isTaskBlocked(a, doneIds)) - Number(isTaskBlocked(b, doneIds));
+  return blockedDelta || comparePriorityHighToLow(a, b);
+}
+
+function comparePriorityHighToLow(a: Task, b: Task): number {
+  return b.priority - a.priority || a.created_at - b.created_at || a.title.localeCompare(b.title);
+}
+
+function compareCreatedOldestFirst(a: Task, b: Task): number {
+  return a.created_at - b.created_at || b.priority - a.priority || a.title.localeCompare(b.title);
+}
+
+function isTaskBlocked(task: Task, doneIds: Set<string>) {
+  return !!task.depends_on?.length && task.depends_on.some((dep) => !doneIds.has(dep));
 }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project, Task } from "../lib/api";
@@ -64,6 +64,26 @@ const sourceTask: Task = {
   images: [],
 };
 
+function task(input: Partial<Task> & Pick<Task, "id" | "title">): Task {
+  const { id, title, ...rest } = input;
+  return {
+    ...sourceTask,
+    id,
+    title,
+    description: "",
+    type: "feature",
+    state: "start",
+    priority: 0,
+    created_at: 1780051741142,
+    updated_at: 1780051741142,
+    labels: [],
+    depends_on: [],
+    links: [],
+    images: [],
+    ...rest,
+  };
+}
+
 function renderBoard(tasks: Task[] = [sourceTask]) {
   const updateMutate = vi.fn();
   const deleteMutate = vi.fn();
@@ -76,6 +96,12 @@ function renderBoard(tasks: Task[] = [sourceTask]) {
   return { updateMutate, deleteMutate };
 }
 
+function taskTitlesInColumn(state: string) {
+  return within(screen.getByTestId(`column-${state}`))
+    .getAllByRole("button", { name: /^Open task / })
+    .map((card) => card.getAttribute("aria-label")?.replace(/^Open task /, ""));
+}
+
 describe("KanbanBoard context menu", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,6 +110,62 @@ describe("KanbanBoard context menu", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it("shows task counts in column headers and exposes sort choices", async () => {
+    const user = userEvent.setup();
+    renderBoard([
+      task({ id: "start-1", title: "Start one", state: "start" }),
+      task({ id: "start-2", title: "Start two", state: "start" }),
+      task({ id: "done-1", title: "Done one", state: "done" }),
+    ]);
+
+    expect(screen.getByRole("heading", { name: "Pending (0)" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Start (2)" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Done (1)" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /sort start tasks/i }));
+
+    const menu = screen.getByRole("menu", { name: /sort start tasks/i });
+    expect(
+      within(menu).getByRole("menuitemradio", { name: /next execution order/i })
+    ).toBeTruthy();
+    expect(
+      within(menu).getByRole("menuitemradio", { name: /priority high to low/i })
+    ).toBeTruthy();
+    expect(
+      within(menu).getByRole("menuitemradio", { name: /created oldest first/i })
+    ).toBeTruthy();
+  });
+
+  it("sorts columns by next execution order by default", () => {
+    renderBoard([
+      task({ id: "blocked", title: "Blocked high", priority: 100, depends_on: ["missing"] }),
+      task({ id: "ready-low", title: "Ready low", priority: 1, created_at: 100 }),
+      task({ id: "ready-high", title: "Ready high", priority: 3, created_at: 300 }),
+      task({ id: "done-dep", title: "Completed dependency", state: "done" }),
+    ]);
+
+    expect(taskTitlesInColumn("start")).toEqual(["Ready high", "Ready low", "Blocked high"]);
+  });
+
+  it("changes the clicked column sort mode", async () => {
+    const user = userEvent.setup();
+    renderBoard([
+      task({ id: "new-high", title: "Newest high", priority: 9, created_at: 300 }),
+      task({ id: "old-low", title: "Oldest low", priority: 1, created_at: 100 }),
+      task({ id: "middle", title: "Middle", priority: 5, created_at: 200 }),
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /sort start tasks/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /created oldest first/i }));
+
+    expect(taskTitlesInColumn("start")).toEqual(["Oldest low", "Middle", "Newest high"]);
+
+    await user.click(screen.getByRole("button", { name: /sort start tasks/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /priority high to low/i }));
+
+    expect(taskTitlesInColumn("start")).toEqual(["Newest high", "Middle", "Oldest low"]);
   });
 
   it("deletes a task from the right-click menu after confirmation", async () => {
