@@ -29,12 +29,7 @@ export function MarkdownDescriptionDialog({ value, onChange, onClose }: Props) {
         className="relative h-full w-full rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] shadow-[var(--tl-shadow-lift)] flex flex-col overflow-hidden"
         data-color-mode="light"
       >
-        <header className="flex items-center justify-between border-b border-[var(--tl-outline)] px-5 py-3">
-          <div>
-            <h3 id="markdown-description-title" className="text-sm font-semibold text-[var(--tl-ink)]">
-              Markdown description editor
-            </h3>
-          </div>
+        <header className="flex items-center gap-3 border-b border-[var(--tl-outline)] px-5 py-3">
           <button
             type="button"
             aria-label="Back to task editor"
@@ -43,6 +38,11 @@ export function MarkdownDescriptionDialog({ value, onChange, onClose }: Props) {
           >
             <ArrowLeft size={16} aria-hidden="true" />
           </button>
+          <div className="min-w-0 flex-1">
+            <h3 id="markdown-description-title" className="text-sm font-semibold text-[var(--tl-ink)]">
+              Markdown description editor
+            </h3>
+          </div>
         </header>
 
         <div className="taskline-markdown-dialog min-h-0 flex-1">
