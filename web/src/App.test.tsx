@@ -183,26 +183,35 @@ describe("App workspace layout", () => {
     expect(screen.queryByRole("button", { name: "+ New task" })).toBeNull();
   });
 
-  it("toggles the project sidebar from the project title bar", async () => {
+  it("toggles the project sidebar from the sidebar rail", async () => {
     const user = userEvent.setup();
     renderApp();
 
     const heading = screen.getByRole("heading", { level: 2, name: "taskline" });
     const header = heading.closest("header");
     const collapseButton = screen.getByRole("button", { name: "Collapse sidebar" });
+    const sidebarShell = screen.getByRole("complementary", { name: "Projects" }).parentElement;
 
     expect(header).toBeTruthy();
     if (!header) throw new Error("expected project header");
-    expect(header.contains(collapseButton)).toBe(true);
+    expect(header.contains(collapseButton)).toBe(false);
     expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
+    expect(collapseButton.className).toContain("absolute");
+    expect(collapseButton.className).toContain("left-64");
+    expect(collapseButton.className).toContain("transition-[left,background-color,border-color,box-shadow,color]");
+    expect(sidebarShell?.className).toContain("transition-[width]");
+    expect(sidebarShell?.className).toContain("w-64");
     expect(screen.getByRole("complementary", { name: "Projects" })).toBeTruthy();
 
     await user.click(collapseButton);
 
     const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
     expect(screen.queryByRole("complementary", { name: "Projects" })).toBeNull();
-    expect(header.contains(expandButton)).toBe(true);
+    expect(header.contains(expandButton)).toBe(false);
     expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(expandButton.className).toContain("left-4");
+    expect(header.className).toContain("pl-16");
+    expect(sidebarShell?.className).toContain("w-0");
 
     await user.click(expandButton);
 
@@ -255,6 +264,9 @@ describe("App workspace layout", () => {
 
     const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
     expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("heading", { level: 2, name: "taskline" }).closest("header")?.contains(expandButton)).toBe(
+      true
+    );
 
     await user.click(expandButton);
 

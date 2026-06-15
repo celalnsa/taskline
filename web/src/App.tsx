@@ -60,28 +60,53 @@ export default function App() {
       className={
         compactShell && hasProject
           ? "h-full w-72 max-w-[82vw] p-4 shadow-[var(--tl-shadow-lift)]"
-          : undefined
+          : "h-full w-64 p-4"
       }
     />
   );
-  const showSidebar = sidebarOpen || !hasProject;
+  const showDesktopSidebar = sidebarOpen || !hasProject;
+  const showMobileSidebar = compactShell && hasProject && sidebarOpen;
+  const SidebarIcon = sidebarOpen ? PanelLeftClose : PanelLeftOpen;
 
   return (
-    <div className="taskline-theme h-screen w-screen flex bg-[var(--tl-bg)] text-[var(--tl-ink)]">
-      {showSidebar &&
-        (compactShell && hasProject ? (
-          <div className="fixed inset-0 z-50 flex sm:hidden">
-            <button
-              type="button"
-              aria-label="Close sidebar"
-              className="absolute inset-0 bg-[rgba(37,34,29,0.34)]"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <div className="relative z-10 h-full">{sidebar}</div>
-          </div>
-        ) : (
-          sidebar
-        ))}
+    <div className="taskline-theme relative h-screen w-screen overflow-hidden flex bg-[var(--tl-bg)] text-[var(--tl-ink)]">
+      {!compactShell && (
+        <div
+          aria-hidden={showDesktopSidebar ? undefined : true}
+          className={
+            "shrink-0 overflow-hidden transition-[width] duration-300 ease-out " +
+            (showDesktopSidebar ? "w-64" : "w-0 pointer-events-none")
+          }
+        >
+          {sidebar}
+        </div>
+      )}
+      {hasProject && !compactShell && (
+        <button
+          type="button"
+          aria-expanded={sidebarOpen}
+          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          onClick={() => setSidebarOpen((open) => !open)}
+          className={
+            "absolute top-4 z-30 hidden h-8 w-8 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] transition-[left,background-color,border-color,box-shadow,color] duration-300 ease-out hover:border-[var(--tl-outline-strong)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)] sm:inline-flex " +
+            (sidebarOpen ? "left-64 -translate-x-1/2" : "left-4 -translate-x-1/2")
+          }
+        >
+          <SidebarIcon size={16} aria-hidden="true" />
+        </button>
+      )}
+      {showMobileSidebar && (
+        <div className="fixed inset-0 z-50 flex sm:hidden">
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            className="absolute inset-0 bg-[rgba(37,34,29,0.34)]"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="relative z-10 h-full">{sidebar}</div>
+        </div>
+      )}
       <main
         data-visual-style="wabi-sabi"
         className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[var(--tl-bg)]"
@@ -93,6 +118,7 @@ export default function App() {
             view={view}
             onViewChange={selectView}
             sidebarOpen={sidebarOpen}
+            showHeaderSidebarToggle={compactShell}
             onToggleSidebar={() => setSidebarOpen((open) => !open)}
           />
         ) : (
@@ -111,12 +137,14 @@ function ProjectWorkspace({
   view,
   onViewChange,
   sidebarOpen,
+  showHeaderSidebarToggle,
   onToggleSidebar,
 }: {
   project: Project;
   view: View;
   onViewChange: (next: View) => void;
   sidebarOpen: boolean;
+  showHeaderSidebarToggle: boolean;
   onToggleSidebar: () => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -139,18 +167,25 @@ function ProjectWorkspace({
 
   return (
     <>
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--tl-outline)] bg-[var(--tl-surface)] px-6 py-3 shadow-[0_1px_0_rgba(255,255,255,0.55)] max-sm:px-3 max-sm:py-2 sm:gap-4">
+      <header
+        className={
+          "flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--tl-outline)] bg-[var(--tl-surface)] py-3 pr-6 shadow-[0_1px_0_rgba(255,255,255,0.55)] max-sm:px-3 max-sm:py-2 sm:gap-4 " +
+          (!showHeaderSidebarToggle && !sidebarOpen ? "pl-16" : "pl-6")
+        }
+      >
         <div className="flex min-w-0 flex-1 items-center gap-3 max-sm:basis-full">
-          <button
-            type="button"
-            aria-expanded={sidebarOpen}
-            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            onClick={onToggleSidebar}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] transition hover:border-[var(--tl-outline-strong)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
-          >
-            <SidebarIcon size={16} aria-hidden="true" />
-          </button>
+          {showHeaderSidebarToggle && (
+            <button
+              type="button"
+              aria-expanded={sidebarOpen}
+              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              onClick={onToggleSidebar}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] transition hover:border-[var(--tl-outline-strong)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
+            >
+              <SidebarIcon size={16} aria-hidden="true" />
+            </button>
+          )}
           <div className="min-w-0">
             <h2 className="truncate text-lg font-bold leading-tight text-[var(--tl-ink)]">
               {project.name}
