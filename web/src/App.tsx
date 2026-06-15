@@ -42,11 +42,14 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-screen flex">
+    <div className="taskline-theme h-screen w-screen flex bg-[var(--tl-bg)] text-[var(--tl-ink)]">
       {(sidebarOpen || !project) && (
         <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
       )}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main
+        data-visual-style="wabi-sabi"
+        className="flex-1 flex flex-col overflow-hidden bg-[var(--tl-bg)]"
+      >
         {project ? (
           <ProjectWorkspace
             key={project.id}
@@ -100,34 +103,34 @@ function ProjectWorkspace({
 
   return (
     <>
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--tl-outline)] bg-[var(--tl-surface)] px-6 py-3 shadow-[0_1px_0_rgba(255,255,255,0.55)] max-sm:px-3 max-sm:py-2 sm:gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
             aria-expanded={sidebarOpen}
             aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             onClick={onToggleSidebar}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] transition hover:border-[var(--tl-outline-strong)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           >
             <SidebarIcon size={16} aria-hidden="true" />
           </button>
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold leading-tight text-slate-900">
+            <h2 className="truncate text-lg font-bold leading-tight text-[var(--tl-ink)]">
               {project.name}
             </h2>
             {project.description && (
-              <p className="mt-0.5 truncate text-xs text-slate-500">{project.description}</p>
+              <p className="mt-0.5 truncate text-xs text-[var(--tl-ink-muted)]">{project.description}</p>
             )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             aria-label="Search tasks"
             title="Search tasks"
             onClick={() => setSearchOpen(true)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] transition hover:border-[var(--tl-outline-strong)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           >
             <Search size={16} aria-hidden="true" />
           </button>
@@ -135,7 +138,7 @@ function ProjectWorkspace({
           <CreateTaskButton project={project} allTasks={tasks} />
         </div>
       </header>
-      <section className="relative flex-1 overflow-hidden bg-slate-50">
+      <section className="relative flex-1 overflow-hidden bg-[var(--tl-bg)]">
         <div className="box-border h-full">
           {view === "kanban" ? (
             <KanbanBoard project={project} />
@@ -178,17 +181,17 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
   return (
     <div
       aria-label="Board view"
-      className="inline-flex overflow-hidden rounded-md border border-slate-300 text-xs"
+      className="inline-flex overflow-hidden rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-xs shadow-[var(--tl-shadow-paper)]"
     >
       {opts.map((o) => (
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
           className={
-            "px-3 py-1.5 " +
+            "px-3 py-1.5 max-sm:px-2 " +
             (view === o.id
-              ? "bg-slate-900 text-white"
-              : "bg-white text-slate-600 hover:bg-slate-100")
+              ? "bg-[var(--tl-primary)] text-[var(--tl-surface)]"
+              : "bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)]")
           }
         >
           {o.label}
@@ -206,11 +209,11 @@ function Welcome({
   keyValue: string | null;
 }) {
   return (
-    <div className="flex-1 flex items-center justify-center text-slate-500">
+    <div className="flex-1 flex items-center justify-center bg-[var(--tl-bg)] text-[var(--tl-ink-muted)]">
       <div className="text-center max-w-md space-y-3">
-        <h2 className="text-2xl font-bold text-slate-700">taskline</h2>
+        <h2 className="text-2xl font-bold text-[var(--tl-ink)]">taskline</h2>
         {unresolved && keyValue && (
-          <p className="text-sm text-amber-700">
+          <p className="text-sm text-[var(--tl-ochre)]">
             No project matches <code className="font-mono">{keyValue}</code>{" "}
             in the URL. Pick another from the sidebar.
           </p>
@@ -218,7 +221,7 @@ function Welcome({
         <p className="text-sm">
           Pick a project from the sidebar, or create one with <kbd>+ New</kbd>.
         </p>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-[var(--tl-ink-faint)]">
           The kanban view auto-refreshes every 10 seconds — changes you
           make from the CLI in another terminal will appear here.
         </p>

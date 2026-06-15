@@ -142,6 +142,17 @@ describe("TaskCard", () => {
     expect(card.className).toContain("border-l-violet-500");
   });
 
+  it("uses the shared Wabi-Sabi paper card tokens", () => {
+    renderCard();
+
+    const card = screen.getByRole("button", { name: /open task clickable task card/i });
+
+    expect(card.getAttribute("data-visual-style")).toBe("wabi-sabi");
+    expect(card.className).toContain("bg-[var(--tl-surface-raised)]");
+    expect(card.className).toContain("border-[var(--tl-outline)]");
+    expect(card.className).toContain("shadow-[var(--tl-shadow-paper)]");
+  });
+
   it("renders priority and dependency metadata as leading label chips", () => {
     renderCard(
       vi.fn(),

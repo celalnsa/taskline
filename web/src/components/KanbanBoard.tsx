@@ -203,7 +203,7 @@ export function KanbanBoard({ project }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {error && (
-        <div className="bg-red-50 border-b border-red-200 px-6 py-2 text-sm text-red-800">
+        <div className="border-b border-[var(--tl-rust)]/35 bg-[var(--tl-rust-soft)] px-6 py-2 text-sm text-[var(--tl-rust)]">
           {error}
         </div>
       )}
@@ -316,19 +316,19 @@ function Column({
       ref={setNodeRef}
       data-testid={`column-${state}`}
       className={
-        "flex-1 min-w-48 max-w-72 rounded-lg bg-slate-100 p-3 flex flex-col gap-2 transition " +
-        (isOver ? "ring-2 ring-emerald-400" : "")
+        "flex-1 min-w-48 max-w-72 rounded-lg border border-[var(--tl-outline)] bg-[var(--tl-surface-muted)] p-3 flex flex-col gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition " +
+        (isOver ? "ring-2 ring-[var(--tl-moss)]" : "")
       }
     >
       <div className="relative mb-1 flex items-center justify-between gap-2">
-        <h3 className="text-xs uppercase tracking-wide font-semibold text-slate-600">
+        <h3 className="text-xs uppercase tracking-wide font-semibold text-[var(--tl-ink-muted)]">
           {stateLabel} ({count})
         </h3>
         <button
           type="button"
           aria-label={`Sort ${stateLabel} tasks`}
           aria-expanded={isSortMenuOpen}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] hover:border-[var(--tl-outline-strong)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           onClick={onToggleSortMenu}
         >
           <ArrowUpDown size={14} aria-hidden="true" />
@@ -337,7 +337,7 @@ function Column({
           <div
             role="menu"
             aria-label={`Sort ${stateLabel} tasks`}
-            className="absolute right-0 top-8 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+            className="absolute right-0 top-8 z-30 w-44 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] p-1 text-xs shadow-[var(--tl-shadow-lift)]"
           >
             {SORT_OPTIONS.map((option) => (
               <button
@@ -345,7 +345,7 @@ function Column({
                 type="button"
                 role="menuitemradio"
                 aria-checked={sortMode === option.id}
-                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
                 onClick={() => onSortModeChange(option.id)}
               >
                 <span>{option.label}</span>

@@ -55,7 +55,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
   // overlay clone is what the eye tracks. Without this, you'd see
   // both the source and the overlay at once.
   const dragVisualClass = overlay
-    ? " shadow-2xl ring-1 ring-slate-300 cursor-grabbing"
+    ? " shadow-[var(--tl-shadow-lift)] ring-1 ring-[var(--tl-outline-strong)] cursor-grabbing"
     : isDragging
     ? " opacity-30"
     : isBlocked
@@ -64,7 +64,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
 
   const interactiveClass = overlay
     ? ""
-    : " cursor-pointer hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400";
+    : " cursor-pointer hover:border-[var(--tl-outline-strong)] hover:shadow-[var(--tl-shadow-lift)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]";
 
   const labelChipClass =
     "max-w-full shrink-0 truncate whitespace-nowrap rounded border px-1 py-0.5 text-[10px] leading-3";
@@ -104,6 +104,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
       ref={overlay ? undefined : setNodeRef}
       style={style}
       data-task-card={overlay ? undefined : "true"}
+      data-visual-style="wabi-sabi"
       {...(overlay ? {} : attributes)}
       {...(overlay ? {} : listeners)}
       aria-label={overlay ? undefined : `Open task ${task.title}`}
@@ -124,7 +125,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
             }
       }
       className={
-        "relative group rounded-md border border-slate-200 bg-white p-2.5 shadow-sm border-l-4 transition " +
+        "relative group rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] p-2.5 shadow-[var(--tl-shadow-paper)] border-l-4 transition " +
         typeColor +
         dragVisualClass +
         interactiveClass
@@ -132,13 +133,13 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
     >
       <div className="min-w-0">
         <div>
-          <p className="line-clamp-2 min-w-0 text-[13px] font-medium leading-snug text-slate-900">
+          <p className="line-clamp-2 min-w-0 text-[13px] font-medium leading-snug text-[var(--tl-ink)]">
             {task.title}
           </p>
         </div>
         <div className="mt-1.5 flex max-h-[42px] min-w-0 flex-wrap items-start gap-1 overflow-hidden">
           <span
-            className={`${labelChipClass} border-sky-200 bg-sky-50 text-sky-700`}
+            className={`${labelChipClass} border-[var(--tl-water)]/35 bg-[var(--tl-water-soft)] text-[var(--tl-water)]`}
             title={`Priority ${task.priority}`}
           >
             p {task.priority}
@@ -147,8 +148,8 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
             <span
               className={`${labelChipClass} ${
                 isBlocked
-                  ? "border-amber-200 bg-amber-50 text-amber-800"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  ? "border-[var(--tl-ochre)]/35 bg-[var(--tl-ochre-soft)] text-[var(--tl-ochre)]"
+                  : "border-[var(--tl-moss)]/35 bg-[var(--tl-moss-soft)] text-[var(--tl-moss)]"
               }`}
               title={
                 isBlocked ? "Blocked: depends on other tasks not yet done" : "Dependencies are done"
@@ -169,7 +170,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
           ))}
           {hiddenLabelCount > 0 && (
             <span
-              className={`${labelChipClass} border-slate-200 bg-white text-slate-400`}
+              className={`${labelChipClass} border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-faint)]`}
               title={`${hiddenLabelCount} more labels`}
             >
               +{hiddenLabelCount}
@@ -179,7 +180,7 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
       </div>
       <div className="mt-1 flex items-center justify-end">
         <span
-          className="text-[10px] tabular-nums text-slate-400"
+          className="text-[10px] tabular-nums text-[var(--tl-ink-faint)]"
           title={new Date(task.updated_at).toLocaleString()}
         >
           {formatRelativeTime(task.updated_at)}

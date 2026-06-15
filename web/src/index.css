@@ -1,7 +1,90 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: light;
+  --tl-bg: #edf0e8;
+  --tl-bg-quiet: #dfe7dc;
+  --tl-surface: #fffaf0;
+  --tl-surface-muted: #e7eadf;
+  --tl-surface-raised: #fffdf6;
+  --tl-ink: #25221d;
+  --tl-ink-muted: #6f675c;
+  --tl-ink-faint: #9a8f80;
+  --tl-outline: #c9cbbd;
+  --tl-outline-strong: #9fa890;
+  --tl-primary: #6d4f2e;
+  --tl-primary-hover: #553d22;
+  --tl-moss: #526647;
+  --tl-moss-soft: #e4eadb;
+  --tl-indigo: #4a5878;
+  --tl-indigo-soft: #e3e6ef;
+  --tl-ochre: #a06d25;
+  --tl-ochre-soft: #f3e4bf;
+  --tl-rust: #a34f37;
+  --tl-rust-soft: #f2ded5;
+  --tl-water: #4d7280;
+  --tl-water-soft: #dce9e8;
+  --tl-clay: #8a6650;
+  --tl-focus: #91704a;
+  --tl-shadow-paper: 0 1px 2px rgba(57, 45, 28, 0.1), 0 8px 18px rgba(57, 45, 28, 0.06);
+  --tl-shadow-lift: 0 18px 44px rgba(57, 45, 28, 0.18), 0 3px 10px rgba(57, 45, 28, 0.1);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--tl-bg);
+  background-image:
+    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.55) 0 1px, transparent 1px),
+    radial-gradient(circle at 76% 82%, rgba(82, 102, 71, 0.09) 0 1px, transparent 1px),
+    linear-gradient(115deg, rgba(255, 250, 240, 0.74), rgba(223, 231, 220, 0.62));
+  background-size: 18px 18px, 22px 22px, 100% 100%;
+  color: var(--tl-ink);
+}
+
 /* Slim scrollbars across the app — kanban columns and the graph view get
    noisy fast otherwise. */
 * {
   scrollbar-width: thin;
+  scrollbar-color: rgba(109, 79, 46, 0.35) transparent;
+}
+
+.taskline-theme {
+  color: var(--tl-ink);
+}
+
+.taskline-theme :where(input, textarea, select) {
+  background-color: var(--tl-surface-raised);
+  border-color: var(--tl-outline);
+  color: var(--tl-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.taskline-theme :where(input, textarea, select)::placeholder {
+  color: var(--tl-ink-faint);
+}
+
+.taskline-theme :where(input, textarea, select):focus {
+  border-color: var(--tl-focus);
+  outline: 2px solid color-mix(in srgb, var(--tl-focus) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.taskline-theme .react-flow__pane {
+  background-color: var(--tl-bg);
+}
+
+.taskline-theme .react-flow__controls {
+  box-shadow: var(--tl-shadow-paper);
+}
+
+.taskline-theme .react-flow__controls-button {
+  background: var(--tl-surface-raised);
+  border-bottom-color: var(--tl-outline);
+  color: var(--tl-ink-muted);
 }

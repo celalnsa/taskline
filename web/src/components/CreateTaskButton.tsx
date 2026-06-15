@@ -21,7 +21,7 @@ export function CreateTaskButton({ project, allTasks }: { project: Project; allT
     <>
       <button
         type="button"
-        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
+        className="rounded-md bg-[var(--tl-primary)] px-3 py-1.5 text-sm text-[var(--tl-surface)] shadow-[var(--tl-shadow-paper)] hover:bg-[var(--tl-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)] max-sm:px-2 max-sm:text-xs"
         onClick={() => setOpen(true)}
       >
         + New

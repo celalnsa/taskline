@@ -34,8 +34,8 @@ import { createTaskCopyDraft } from "../lib/taskActions";
 import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskEditor } from "./TaskEditor";
 
-const ACTIVE_EDGE_COLOR = "#0f172a";
-const DIMMED_EDGE_COLOR = "#cbd5e1";
+const ACTIVE_EDGE_COLOR = "#25221d";
+const DIMMED_EDGE_COLOR = "#d7c8b2";
 const SELECTED_EDGE_COLOR = "#dc2626";
 const DEFAULT_EDGE_Z_INDEX = 0;
 const HIGHLIGHTED_EDGE_Z_INDEX = 20;
@@ -43,13 +43,13 @@ const SELECTED_EDGE_Z_INDEX = 30;
 const SELECTED_EDGE_ACTION_Z_INDEX = 40;
 
 const STATE_COLORS: Record<TaskState, string> = {
-  pending: "#e2e8f0",
-  start: "#cbd5e1",
-  spec: "#a5b4fc",
-  dev: "#86efac",
-  test: "#facc15",
-  review: "#fdba74",
-  done: "#9ca3af",
+  pending: "#bba58b",
+  start: "#4d7280",
+  spec: "#4a5878",
+  dev: "#526647",
+  test: "#a06d25",
+  review: "#8a6650",
+  done: "#9a8f80",
 };
 
 interface Props {
@@ -209,11 +209,11 @@ export function GraphView({ project }: Props) {
   }, [deleteDependency, selectedEdgeId, selectedTaskId, tasks, updateTask]);
 
   return (
-    <div className="relative flex-1 h-full">
+    <div className="relative flex-1 h-full bg-[var(--tl-bg)]">
       {error && (
         <div
           role="alert"
-          className="absolute left-4 right-4 top-4 z-20 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 shadow-sm"
+          className="absolute left-4 right-4 top-4 z-20 rounded-md border border-[var(--tl-rust)]/35 bg-[var(--tl-rust-soft)] px-3 py-2 text-sm text-[var(--tl-rust)] shadow-[var(--tl-shadow-paper)]"
         >
           {error}
         </div>
@@ -328,7 +328,7 @@ function DeletableEdge({
             type="button"
             aria-label={`Delete dependency ${sourceTitle} to ${targetTitle}`}
             title="Delete dependency"
-            className="nodrag nopan absolute flex h-7 w-7 items-center justify-center rounded-full border border-red-200 bg-white text-red-600 shadow-sm hover:bg-red-50"
+            className="nodrag nopan absolute flex h-7 w-7 items-center justify-center rounded-full border border-[var(--tl-rust)]/35 bg-[var(--tl-surface-raised)] text-[var(--tl-rust)] shadow-[var(--tl-shadow-paper)] hover:bg-[var(--tl-rust-soft)]"
             style={{
               pointerEvents: "all",
               zIndex: SELECTED_EDGE_ACTION_Z_INDEX,
@@ -355,19 +355,19 @@ function TaskNode({
   const { task, onAdvance, selected, dimmed } = data;
   return (
     <div
-      className={`rounded-md shadow-sm border border-slate-300 bg-white px-3 py-2 w-[200px] text-xs transition ${
-        selected ? "ring-2 ring-sky-400 shadow-md" : ""
+      className={`rounded-md shadow-[var(--tl-shadow-paper)] border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] px-3 py-2 w-[200px] text-xs text-[var(--tl-ink)] transition ${
+        selected ? "ring-2 ring-[var(--tl-focus)] shadow-[var(--tl-shadow-lift)]" : ""
       } ${dimmed ? "opacity-30" : "opacity-100"}`}
       style={{ borderTopColor: STATE_COLORS[task.state], borderTopWidth: 4 }}
     >
       <Handle type="target" position={Position.Left} />
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase text-slate-500">{task.type}</span>
-        <span className="text-[10px] tabular-nums text-slate-400">p={task.priority}</span>
+        <span className="text-[10px] uppercase text-[var(--tl-ink-muted)]">{task.type}</span>
+        <span className="text-[10px] tabular-nums text-[var(--tl-ink-faint)]">p={task.priority}</span>
       </div>
       <p className="font-medium leading-snug">{task.title}</p>
       <select
-        className="mt-2 w-full text-[10px] border rounded px-1 py-0.5"
+        className="mt-2 w-full text-[10px] border border-[var(--tl-outline)] rounded px-1 py-0.5"
         value={task.state}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}

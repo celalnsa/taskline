@@ -130,12 +130,15 @@ describe("App workspace layout", () => {
   it("places board controls in the project title bar", () => {
     renderApp();
 
+    const main = screen.getByRole("main");
     const heading = screen.getByRole("heading", { level: 2, name: "taskline" });
     const header = heading.closest("header");
     const kanbanButton = screen.getByRole("button", { name: "Kanban" });
     const graphButton = screen.getByRole("button", { name: "Graph" });
     const newTaskButton = screen.getByRole("button", { name: "+ New" });
 
+    expect(main.getAttribute("data-visual-style")).toBe("wabi-sabi");
+    expect(main.className).toContain("bg-[var(--tl-bg)]");
     expect(heading).toBeTruthy();
     expect(header).toBeTruthy();
     if (!header) throw new Error("expected project header");
@@ -175,6 +178,21 @@ describe("App workspace layout", () => {
 
     expect(screen.getByRole("complementary", { name: "Projects" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+  });
+
+  it("uses responsive shell classes so the title bar remains usable on narrow screens", () => {
+    renderApp();
+
+    const heading = screen.getByRole("heading", { level: 2, name: "taskline" });
+    const header = heading.closest("header");
+    const kanbanButton = screen.getByRole("button", { name: "Kanban" });
+    const newTaskButton = screen.getByRole("button", { name: "+ New" });
+
+    expect(header?.className).toContain("flex-wrap");
+    expect(header?.className).toContain("max-sm:px-3");
+    expect(header?.className).toContain("max-sm:py-2");
+    expect(kanbanButton.className).toContain("max-sm:px-2");
+    expect(newTaskButton.className).toContain("max-sm:px-2");
   });
 
   it("keeps the sidebar available on the welcome screen after collapsing it", async () => {

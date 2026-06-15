@@ -248,44 +248,44 @@ export function TaskEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center">
-      <div className="relative bg-white rounded-lg shadow-xl w-[520px] max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-40 bg-[rgba(37,34,29,0.38)] flex items-center justify-center">
+      <div className="relative w-[520px] max-h-[90vh] flex flex-col rounded-lg border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] shadow-[var(--tl-shadow-lift)]">
         <button
           type="button"
           aria-label="Close"
-          className="absolute top-2 right-2 z-10 text-slate-400 hover:text-slate-700 text-xl leading-none w-7 h-7 flex items-center justify-center rounded hover:bg-slate-100"
+          className="absolute top-2 right-2 z-10 text-[var(--tl-ink-faint)] hover:text-[var(--tl-ink)] text-xl leading-none w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--tl-bg-quiet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           onClick={onClose}
         >
           ×
         </button>
         <div className="p-6 space-y-3 overflow-y-auto">
           <div className="flex items-start justify-between pr-8">
-            <h3 className="font-bold text-base">
+            <h3 className="font-bold text-base text-[var(--tl-ink)]">
               {isCreate ? `New task in ${project.name}` : "Edit task"}
             </h3>
             {!isCreate && (
-              <code className="text-[10px] text-slate-400">
+              <code className="text-[10px] text-[var(--tl-ink-faint)]">
                 {currentTask.id.slice(0, 8)}
               </code>
             )}
           </div>
           <input
             aria-label="Title"
-            className="w-full text-sm border rounded px-2 py-1.5 font-medium"
+            className="w-full text-sm border border-[var(--tl-outline)] rounded-md px-2 py-1.5 font-medium"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus={isCreate}
           />
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <label htmlFor="task-description" className="text-xs text-slate-500">
+              <label htmlFor="task-description" className="text-xs text-[var(--tl-ink-muted)]">
                 Description
               </label>
               <button
                 ref={markdownButtonRef}
                 type="button"
                 aria-label="Open markdown editor"
-                className="h-7 w-7 rounded border border-slate-200 bg-white/75 text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-900 flex items-center justify-center"
+                className="h-7 w-7 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] backdrop-blur hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
                 onClick={() => setMarkdownOpen(true)}
               >
                 <FileCode2 size={15} aria-hidden="true" />
@@ -294,7 +294,7 @@ export function TaskEditor({
             <textarea
               id="task-description"
               aria-label="Description"
-              className="w-full text-sm border rounded px-2 py-1.5 resize-y min-h-[6rem]"
+              className="w-full text-sm border border-[var(--tl-outline)] rounded-md px-2 py-1.5 resize-y min-h-[6rem]"
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -302,10 +302,10 @@ export function TaskEditor({
           </div>
           <div className="grid grid-cols-3 gap-2">
             <label className="text-xs space-y-1">
-              <span className="text-slate-500">Type</span>
+              <span className="text-[var(--tl-ink-muted)]">Type</span>
               <select
                 aria-label="Type"
-                className="w-full border rounded px-2 py-1"
+                className="w-full border border-[var(--tl-outline)] rounded-md px-2 py-1"
                 value={type}
                 onChange={(e) => setType(e.target.value as TaskType)}
               >
@@ -315,10 +315,10 @@ export function TaskEditor({
               </select>
             </label>
             <label className="text-xs space-y-1">
-              <span className="text-slate-500">State</span>
+              <span className="text-[var(--tl-ink-muted)]">State</span>
               <select
                 aria-label="State"
-                className="w-full border rounded px-2 py-1"
+                className="w-full border border-[var(--tl-outline)] rounded-md px-2 py-1"
                 value={state}
                 onChange={(e) => {
                   setState(e.target.value as TaskState);
@@ -333,11 +333,11 @@ export function TaskEditor({
               </select>
             </label>
             <label className="text-xs space-y-1">
-              <span className="text-slate-500">Priority</span>
+              <span className="text-[var(--tl-ink-muted)]">Priority</span>
               <input
                 aria-label="Priority"
                 type="number"
-                className="w-full border rounded px-2 py-1 tabular-nums"
+                className="w-full border border-[var(--tl-outline)] rounded-md px-2 py-1 tabular-nums"
                 value={priority}
                 onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
               />
@@ -370,20 +370,20 @@ export function TaskEditor({
             setPendingDependencyIds={isCreate ? setPendingDependencyIds : undefined}
           />
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
 
-          <div className="flex justify-end pt-3 border-t">
+          <div className="flex justify-end pt-3 border-t border-[var(--tl-outline)]">
             <div className="flex gap-2">
               <button
                 type="button"
-                className="text-sm px-3 py-1.5 rounded border"
+                className="text-sm px-3 py-1.5 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
                 onClick={onClose}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="text-sm px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="text-sm px-3 py-1.5 rounded-md bg-[var(--tl-moss)] text-[var(--tl-surface)] hover:bg-[color-mix(in_srgb,var(--tl-moss)_82%,black)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
                 disabled={isSaving}
                 onClick={save}
               >
@@ -402,7 +402,7 @@ export function TaskEditor({
       {markdownOpen && (
         <Suspense
           fallback={
-            <div className="fixed inset-0 z-50 bg-black/40 p-5 flex items-center justify-center text-sm text-white">
+            <div className="fixed inset-0 z-50 bg-[rgba(37,34,29,0.44)] p-5 flex items-center justify-center text-sm text-[var(--tl-surface)]">
               Loading editor…
             </div>
           }
@@ -512,9 +512,9 @@ function LabelSection({
   };
 
   return (
-    <div className="border-t pt-3 space-y-2">
+    <div className="border-t border-[var(--tl-outline)] pt-3 space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-slate-500">Labels</p>
+        <p className="text-xs font-medium text-[var(--tl-ink-muted)]">Labels</p>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {labels.map((label) => (
@@ -522,7 +522,7 @@ function LabelSection({
             key={label}
             data-label-theme={getTaskLabelTheme(label).name}
             className={
-              "inline-flex max-w-full items-center gap-1 rounded border px-2 py-0.5 text-xs " +
+              "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-xs " +
               taskLabelChipClass(label)
             }
           >
@@ -535,7 +535,7 @@ function LabelSection({
             <button
               type="button"
               aria-label={`Remove label ${label}`}
-              className="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+              className="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--tl-ink-faint)] hover:bg-[var(--tl-rust-soft)] hover:text-[var(--tl-rust)]"
               onClick={() => removeLabel(label)}
             >
               <X size={10} aria-hidden="true" />
@@ -547,7 +547,7 @@ function LabelSection({
         <div className="flex gap-1.5">
           <input
             aria-label="New label"
-            className="min-w-0 flex-1 text-xs border rounded px-2 py-1"
+            className="min-w-0 flex-1 text-xs border border-[var(--tl-outline)] rounded-md px-2 py-1"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
@@ -566,7 +566,7 @@ function LabelSection({
             aria-controls="task-common-labels"
             title="Common labels"
             disabled={!canShowCommonLabels}
-            className="flex h-7 w-8 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            className="flex h-7 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
             onClick={() => setShowCommonLabels((open) => !open)}
           >
             <ChevronDown size={14} aria-hidden="true" />
@@ -577,7 +577,7 @@ function LabelSection({
             id="task-common-labels"
             role="menu"
             aria-label="Common labels"
-            className="absolute z-20 mt-1 grid max-h-44 w-full grid-cols-2 gap-1 overflow-y-auto rounded border border-slate-200 bg-white p-1.5 shadow-lg"
+            className="absolute z-20 mt-1 grid max-h-44 w-full grid-cols-2 gap-1 overflow-y-auto rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] p-1.5 shadow-[var(--tl-shadow-lift)]"
           >
             {availableCommonLabels.map((label) => {
               const theme = getTaskLabelTheme(label);
@@ -588,7 +588,7 @@ function LabelSection({
                   role="menuitem"
                   aria-label={`Add label ${label}`}
                   className={
-                    "min-w-0 truncate rounded border px-2 py-1 text-left text-xs " +
+                    "min-w-0 truncate rounded-md border px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)] " +
                     theme.optionClass
                   }
                   onClick={() => addCommonLabel(label)}
@@ -811,12 +811,12 @@ function ImageSection({
   };
 
   return (
-    <div className="border-t pt-3 space-y-2">
+    <div className="border-t border-[var(--tl-outline)] pt-3 space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-slate-500">Images</p>
+        <p className="text-xs font-medium text-[var(--tl-ink-muted)]">Images</p>
         <label
           className={
-            "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 " +
+            "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] " +
             (upload.isPending || disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer")
           }
         >
@@ -838,7 +838,7 @@ function ImageSection({
           {displayedImages.map((image) => (
             <li
               key={image.id}
-              className="text-xs flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1 group"
+              className="text-xs flex items-center gap-2 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] px-2 py-1 group"
             >
               <button
                 type="button"
@@ -846,20 +846,20 @@ function ImageSection({
                 className="flex flex-1 min-w-0 items-center gap-2 text-left"
                 onClick={() => setPreviewImage(image)}
               >
-                <span className="font-medium text-slate-700 truncate flex-1 min-w-0">
+                <span className="font-medium text-[var(--tl-ink)] truncate flex-1 min-w-0">
                   {image.filename}
                 </span>
-                <span className="text-slate-400 shrink-0">
+                <span className="text-[var(--tl-ink-faint)] shrink-0">
                   {image.mime_type || "unknown"}
                 </span>
-                <span className="text-slate-500 tabular-nums shrink-0">
+                <span className="text-[var(--tl-ink-muted)] tabular-nums shrink-0">
                   {formatFileSize(image.size_bytes)}
                 </span>
               </button>
               <button
                 type="button"
                 aria-label={`Delete image ${image.filename}`}
-                className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center disabled:opacity-50"
+                className="h-5 w-5 shrink-0 rounded text-[var(--tl-ink-faint)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--tl-rust-soft)] hover:text-[var(--tl-rust)] flex items-center justify-center disabled:opacity-50"
                 disabled={del.isPending}
                 onClick={() => void removeImage(image)}
               >
@@ -869,15 +869,15 @@ function ImageSection({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-slate-400">No images attached.</p>
+        <p className="text-xs text-[var(--tl-ink-faint)]">No images attached.</p>
       )}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
       {previewImage && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label="Image preview"
-          className="fixed inset-0 z-50 bg-slate-950/90 text-white flex items-center justify-center overflow-hidden"
+          className="fixed inset-0 z-50 bg-[rgba(37,34,29,0.9)] text-white flex items-center justify-center overflow-hidden"
           onClick={(event) => {
             if (event.target === event.currentTarget) setPreviewImage(null);
           }}
@@ -1007,14 +1007,14 @@ function DocSection({
   };
 
   return (
-    <div className="border-t pt-3 space-y-2">
+    <div className="border-t border-[var(--tl-outline)] pt-3 space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-slate-500">Docs</p>
+        <p className="text-xs font-medium text-[var(--tl-ink-muted)]">Docs</p>
         {!disabled && (
           <button
             type="button"
             aria-label="Add doc"
-            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
             disabled={createDoc.isPending}
             onClick={() => setDialog({ mode: "create", title: "", content: "" })}
           >
@@ -1024,13 +1024,13 @@ function DocSection({
         )}
       </div>
       {disabled ? (
-        <p className="text-xs text-slate-400">Create the task before adding docs.</p>
+        <p className="text-xs text-[var(--tl-ink-faint)]">Create the task before adding docs.</p>
       ) : docs.length > 0 ? (
         <ul className="space-y-1">
           {docs.map((doc) => (
             <li
               key={doc.id}
-              className="text-xs flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1 group"
+              className="text-xs flex items-center gap-2 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] px-2 py-1 group"
             >
               <button
                 type="button"
@@ -1038,16 +1038,16 @@ function DocSection({
                 className="flex flex-1 min-w-0 items-center gap-2 text-left"
                 onClick={() => void openDoc(doc)}
               >
-                <FileText size={14} aria-hidden="true" className="text-slate-400 shrink-0" />
-                <span className="font-medium text-slate-700 truncate flex-1 min-w-0">
+                <FileText size={14} aria-hidden="true" className="text-[var(--tl-ink-faint)] shrink-0" />
+                <span className="font-medium text-[var(--tl-ink)] truncate flex-1 min-w-0">
                   {doc.title}
                 </span>
-                <span className="text-slate-400 shrink-0">Markdown</span>
+                <span className="text-[var(--tl-ink-faint)] shrink-0">Markdown</span>
               </button>
               <button
                 type="button"
                 aria-label={`Delete doc ${doc.title}`}
-                className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center disabled:opacity-50"
+                className="h-5 w-5 shrink-0 rounded text-[var(--tl-ink-faint)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--tl-rust-soft)] hover:text-[var(--tl-rust)] flex items-center justify-center disabled:opacity-50"
                 disabled={deleteDoc.isPending}
                 onClick={() => void removeDoc(doc)}
               >
@@ -1057,13 +1057,13 @@ function DocSection({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-slate-400">No docs attached.</p>
+        <p className="text-xs text-[var(--tl-ink-faint)]">No docs attached.</p>
       )}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
       {dialog && (
         <Suspense
           fallback={
-            <div className="fixed inset-0 z-50 bg-black/40 p-5 flex items-center justify-center text-sm text-white">
+            <div className="fixed inset-0 z-50 bg-[rgba(37,34,29,0.44)] p-5 flex items-center justify-center text-sm text-[var(--tl-surface)]">
               Loading editor...
             </div>
           }
@@ -1166,8 +1166,8 @@ function LinkSection({
   };
 
   return (
-    <div className="border-t pt-3 space-y-2">
-      <p className="text-xs font-medium text-slate-500">Links</p>
+    <div className="border-t border-[var(--tl-outline)] pt-3 space-y-2">
+      <p className="text-xs font-medium text-[var(--tl-ink-muted)]">Links</p>
       {displayedLinks.length > 0 && (
         <ul className="space-y-1">
           {displayedLinks.map((l) => (
@@ -1176,7 +1176,7 @@ function LinkSection({
                 href={l.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sky-700 hover:underline truncate flex-1 min-w-0"
+                className="text-[var(--tl-water)] hover:underline truncate flex-1 min-w-0"
                 title={l.url}
               >
                 {l.label || l.url}
@@ -1184,7 +1184,7 @@ function LinkSection({
               <button
                 type="button"
                 aria-label={`Remove link ${l.label || l.url}`}
-                className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                className="h-5 w-5 shrink-0 rounded text-[var(--tl-ink-faint)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--tl-rust-soft)] hover:text-[var(--tl-rust)] flex items-center justify-center"
                 onClick={async () => {
                   try {
                     if (l.pending && setPendingLinks) {
@@ -1211,28 +1211,28 @@ function LinkSection({
       <div className="flex items-stretch gap-2">
         <input
           type="url"
-          className="flex-1 min-w-0 text-xs border rounded px-2 py-1"
+          className="flex-1 min-w-0 text-xs border border-[var(--tl-outline)] rounded-md px-2 py-1"
           placeholder="https://…"
           value={url}
           disabled={disabled}
           onChange={(e) => setUrl(e.target.value)}
         />
         <input
-          className="w-32 text-xs border rounded px-2 py-1"
+          className="w-32 text-xs border border-[var(--tl-outline)] rounded-md px-2 py-1"
           placeholder="label (optional)"
           value={label}
           disabled={disabled}
           onChange={(e) => setLabel(e.target.value)}
         />
         <button
-          className="text-xs px-3 py-1 rounded bg-slate-700 text-white disabled:opacity-50"
+          className="text-xs px-3 py-1 rounded-md bg-[var(--tl-primary)] text-[var(--tl-surface)] disabled:opacity-50 hover:bg-[var(--tl-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           disabled={!url.trim() || add.isPending || disabled}
           onClick={submit}
         >
           {add.isPending ? "Adding…" : "Add"}
         </button>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
     </div>
   );
 }
@@ -1307,8 +1307,8 @@ function DependsSection({
   };
 
   return (
-    <div className="border-t pt-3 space-y-2">
-      <p className="text-xs font-medium text-slate-500">Depends</p>
+    <div className="border-t border-[var(--tl-outline)] pt-3 space-y-2">
+      <p className="text-xs font-medium text-[var(--tl-ink-muted)]">Depends</p>
       {selectedDependencyIds.length > 0 ? (
         <ul className="space-y-1">
           {selectedDependencyIds.map((id) => {
@@ -1316,7 +1316,7 @@ function DependsSection({
             const label = dep?.title ?? id.slice(0, 8);
             return (
               <li key={id} className="text-xs flex items-center gap-2 group">
-                <code className="text-slate-400">{id.slice(0, 8)}</code>
+                <code className="text-[var(--tl-ink-faint)]">{id.slice(0, 8)}</code>
                 {dep ? (
                   <>
                     <span className="font-medium min-w-0 truncate flex-1">{dep.title}</span>
@@ -1324,20 +1324,20 @@ function DependsSection({
                       className={
                         "px-1 rounded text-[10px] shrink-0 " +
                         (dep.state === "done"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-800")
+                          ? "bg-[var(--tl-moss-soft)] text-[var(--tl-moss)]"
+                          : "bg-[var(--tl-ochre-soft)] text-[var(--tl-ochre)]")
                       }
                     >
                       {dep.state}
                     </span>
                   </>
                 ) : (
-                  <span className="text-slate-400 italic flex-1">(deleted)</span>
+                  <span className="text-[var(--tl-ink-faint)] italic flex-1">(deleted)</span>
                 )}
                 <button
                   type="button"
                   aria-label={`Remove dependency ${label}`}
-                  className="h-5 w-5 shrink-0 rounded text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                  className="h-5 w-5 shrink-0 rounded text-[var(--tl-ink-faint)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--tl-rust-soft)] hover:text-[var(--tl-rust)] flex items-center justify-center"
                   onClick={() => removeDependency(id)}
                 >
                   <X size={12} aria-hidden="true" />
@@ -1347,11 +1347,11 @@ function DependsSection({
           })}
         </ul>
       ) : (
-        <p className="text-xs text-slate-400">No dependencies.</p>
+        <p className="text-xs text-[var(--tl-ink-faint)]">No dependencies.</p>
       )}
       <select
         aria-label="Add dependency"
-        className="w-full text-xs border rounded px-2 py-1"
+        className="w-full text-xs border border-[var(--tl-outline)] rounded-md px-2 py-1"
         value={candidate}
         disabled={add.isPending || disabled}
         onChange={(e) => addDependency(e.target.value)}
@@ -1363,7 +1363,7 @@ function DependsSection({
           </option>
         ))}
       </select>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
     </div>
   );
 }

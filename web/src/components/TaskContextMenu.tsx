@@ -68,7 +68,7 @@ export function TaskContextMenu({
       ref={menuRef}
       role="menu"
       aria-label={`Task actions for ${task.title}`}
-      className="fixed z-50 w-36 rounded-md border border-slate-200 bg-white p-1 text-sm shadow-lg"
+      className="fixed z-50 w-36 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] p-1 text-sm shadow-[var(--tl-shadow-lift)]"
       style={style}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -80,7 +80,7 @@ export function TaskContextMenu({
         <button
           type="button"
           role="menuitem"
-          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           onClick={() => {
             onClose();
             onEdit(task);
@@ -93,7 +93,7 @@ export function TaskContextMenu({
       <button
         type="button"
         role="menuitem"
-        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
         onClick={() => {
           onClose();
           onCopy(task);
@@ -105,7 +105,7 @@ export function TaskContextMenu({
       <button
         type="button"
         role="menuitem"
-        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-red-600 hover:bg-red-50"
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[var(--tl-rust)] hover:bg-[var(--tl-rust-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
         onClick={() => {
           onClose();
           if (!confirmTaskDelete(task)) return;

@@ -15,6 +15,9 @@ export default defineConfig({
     emptyOutDir: false,
   },
   server: {
+    fs: {
+      allow: [".."],
+    },
     port: 5173,
     proxy: {
       // During `pnpm dev`, forward API calls to the locally-running
