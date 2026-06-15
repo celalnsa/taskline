@@ -136,6 +136,9 @@ describe("KanbanBoard context menu", () => {
     expect(
       within(menu).getByRole("menuitemradio", { name: /created oldest first/i })
     ).toBeTruthy();
+    expect(
+      within(menu).getByRole("menuitemradio", { name: /recently updated/i })
+    ).toBeTruthy();
   });
 
   it("sorts columns by next execution order by default", () => {
@@ -166,6 +169,42 @@ describe("KanbanBoard context menu", () => {
     await user.click(screen.getByRole("menuitemradio", { name: /priority high to low/i }));
 
     expect(taskTitlesInColumn("start")).toEqual(["Newest high", "Middle", "Oldest low"]);
+  });
+
+  it("sorts a column by recently updated tasks first", async () => {
+    const user = userEvent.setup();
+    renderBoard([
+      task({
+        id: "older-update",
+        title: "Older update",
+        priority: 10,
+        created_at: 100,
+        updated_at: 200,
+      }),
+      task({
+        id: "newest-update",
+        title: "Newest update",
+        priority: 1,
+        created_at: 300,
+        updated_at: 900,
+      }),
+      task({
+        id: "middle-update",
+        title: "Middle update",
+        priority: 5,
+        created_at: 200,
+        updated_at: 500,
+      }),
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /sort start tasks/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /recently updated/i }));
+
+    expect(taskTitlesInColumn("start")).toEqual([
+      "Newest update",
+      "Middle update",
+      "Older update",
+    ]);
   });
 
   it("deletes a task from the right-click menu after confirmation", async () => {

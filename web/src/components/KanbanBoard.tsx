@@ -44,12 +44,13 @@ type BoardPanState = {
   startScrollLeft: number;
 };
 
-type ColumnSortMode = "execution" | "priority" | "created";
+type ColumnSortMode = "execution" | "priority" | "created" | "updated";
 
 const SORT_OPTIONS: Array<{ id: ColumnSortMode; label: string }> = [
   { id: "execution", label: "Next execution order" },
   { id: "priority", label: "Priority high to low" },
   { id: "created", label: "Created oldest first" },
+  { id: "updated", label: "Recently updated" },
 ];
 
 const BOARD_PAN_BLOCK_SELECTOR = [
@@ -374,6 +375,7 @@ function compareTasksForColumn(
   doneIds: Set<string>
 ): number {
   if (mode === "created") return compareCreatedOldestFirst(a, b);
+  if (mode === "updated") return compareUpdatedNewestFirst(a, b);
   if (mode === "priority") return comparePriorityHighToLow(a, b);
 
   const blockedDelta = Number(isTaskBlocked(a, doneIds)) - Number(isTaskBlocked(b, doneIds));
@@ -386,6 +388,10 @@ function comparePriorityHighToLow(a: Task, b: Task): number {
 
 function compareCreatedOldestFirst(a: Task, b: Task): number {
   return a.created_at - b.created_at || b.priority - a.priority || a.title.localeCompare(b.title);
+}
+
+function compareUpdatedNewestFirst(a: Task, b: Task): number {
+  return b.updated_at - a.updated_at || comparePriorityHighToLow(a, b);
 }
 
 function isTaskBlocked(task: Task, doneIds: Set<string>) {
