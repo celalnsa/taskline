@@ -160,7 +160,7 @@ function ProjectWorkspace({
             )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1.5">
           <button
             type="button"
             aria-label="Search tasks"
@@ -239,14 +239,14 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
   return (
     <div
       aria-label="Board view"
-      className="inline-flex overflow-hidden rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-xs shadow-[var(--tl-shadow-paper)]"
+      className="inline-flex h-8 overflow-hidden rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] text-xs shadow-[var(--tl-shadow-paper)]"
     >
       {opts.map((o) => (
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
           className={
-            "px-3 py-1.5 max-sm:px-2 " +
+            "flex h-full items-center px-3 py-0 max-sm:px-2 " +
             (view === o.id
               ? "bg-[var(--tl-primary)] text-[var(--tl-surface)]"
               : "bg-[var(--tl-surface-raised)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)]")

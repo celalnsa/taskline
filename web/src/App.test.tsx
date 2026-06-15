@@ -227,6 +227,23 @@ describe("App workspace layout", () => {
     expect(newTaskButton.className).toContain("max-sm:px-2");
   });
 
+  it("aligns project header actions to a shared compact height", () => {
+    renderApp();
+
+    const searchButton = screen.getByRole("button", { name: "Search tasks" });
+    const viewToggle = screen.getByLabelText("Board view");
+    const newTaskButton = screen.getByRole("button", { name: "+ New" });
+    const actionGroup = searchButton.parentElement;
+
+    expect(actionGroup?.className).toContain("items-stretch");
+    expect(actionGroup?.className).toContain("gap-1.5");
+    expect(searchButton.className).toContain("h-8");
+    expect(searchButton.className).toContain("w-8");
+    expect(viewToggle.className).toContain("h-8");
+    expect(newTaskButton.className).toContain("h-8");
+    expect(newTaskButton.className).toContain("inline-flex");
+  });
+
   it("uses a project drawer instead of a permanent sidebar on narrow screens", async () => {
     const user = userEvent.setup();
     stubNarrowViewport(true);
