@@ -277,28 +277,29 @@ export function TaskEditor({
             autoFocus={isCreate}
           />
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label htmlFor="task-description" className="text-xs text-[var(--tl-ink-muted)]">
-                Description
-              </label>
+            <label htmlFor="task-description" className="text-xs text-[var(--tl-ink-muted)]">
+              Description
+            </label>
+            <div className="group relative">
+              <textarea
+                id="task-description"
+                aria-label="Description"
+                className="w-full text-sm border border-[var(--tl-outline)] rounded-md py-1.5 pl-2 pr-12 resize-y min-h-[6rem]"
+                rows={4}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
               <button
                 ref={markdownButtonRef}
                 type="button"
                 aria-label="Open markdown editor"
-                className="h-7 w-7 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] shadow-[var(--tl-shadow-paper)] backdrop-blur hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
+                tabIndex={-1}
+                className="pointer-events-none absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] opacity-0 shadow-[var(--tl-shadow-paper)] backdrop-blur transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
                 onClick={() => setMarkdownOpen(true)}
               >
                 <FileCode2 size={15} aria-hidden="true" />
               </button>
             </div>
-            <textarea
-              id="task-description"
-              aria-label="Description"
-              className="w-full text-sm border border-[var(--tl-outline)] rounded-md px-2 py-1.5 resize-y min-h-[6rem]"
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <label className="text-xs space-y-1">

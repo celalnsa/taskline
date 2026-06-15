@@ -89,6 +89,40 @@ describe("TaskEditor markdown description editing", () => {
     expect(await screen.findByLabelText("Markdown description")).toBeTruthy();
   });
 
+  it("keeps the markdown entry inside the description field and hidden until hover", () => {
+    renderEditor();
+
+    const descriptionInput = screen.getByLabelText("Description");
+    const openButton = screen.getByRole("button", { name: /open markdown editor/i });
+    const descriptionFrame = descriptionInput.parentElement;
+
+    expect(descriptionFrame?.className).toContain("relative");
+    expect(descriptionFrame?.className).toContain("group");
+    expect(descriptionFrame?.contains(openButton)).toBe(true);
+    expect(descriptionInput.className).toContain("pr-12");
+    expect(openButton.className).toContain("absolute");
+    expect(openButton.className).toContain("right-2");
+    expect(openButton.className).toContain("top-2");
+    expect(openButton.className).toContain("opacity-0");
+    expect(openButton.className).toContain("pointer-events-none");
+    expect(openButton.className).toContain("group-hover:opacity-100");
+    expect(openButton.className).toContain("group-hover:pointer-events-auto");
+    expect((openButton as HTMLButtonElement).tabIndex).toBe(-1);
+  });
+
+  it("tabs from title directly to description without focusing the markdown entry", async () => {
+    const user = userEvent.setup();
+    renderEditor();
+
+    const titleInput = screen.getByLabelText("Title");
+    const descriptionInput = screen.getByLabelText("Description");
+
+    titleInput.focus();
+    await user.tab();
+
+    expect(document.activeElement).toBe(descriptionInput);
+  });
+
   it("closes the markdown editor before closing the task editor on Escape", async () => {
     const user = userEvent.setup();
     const onClose = renderEditor();
