@@ -207,6 +207,22 @@ describe("KanbanBoard context menu", () => {
     ]);
   });
 
+  it("moves column scrollbars into a gutter without padding the card stack", () => {
+    renderBoard([
+      task({ id: "start-1", title: "Start one", state: "start" }),
+      task({ id: "start-2", title: "Start two", state: "start" }),
+    ]);
+
+    const scrollContainer = screen.getByTestId("column-scroll-start");
+    const cardStack = screen.getByTestId("column-card-stack-start");
+
+    expect(scrollContainer.className).toContain("overflow-y-auto");
+    expect(scrollContainer.className).toContain("-mr-2");
+    expect(scrollContainer.className).toContain("pr-2");
+    expect(cardStack.className).toContain("space-y-2");
+    expect(cardStack.className).not.toContain("pr-");
+  });
+
   it("deletes a task from the right-click menu after confirmation", async () => {
     const user = userEvent.setup();
     const confirm = vi.fn(() => true);

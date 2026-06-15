@@ -356,7 +356,16 @@ function Column({
           </div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">{children}</div>
+      <div className="min-h-0 flex-1 overflow-visible">
+        <div
+          data-testid={`column-scroll-${state}`}
+          className="-mr-2 h-full overflow-y-auto pr-2"
+        >
+          <div data-testid={`column-card-stack-${state}`} className="space-y-2">
+            {children}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
