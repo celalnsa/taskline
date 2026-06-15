@@ -25,30 +25,66 @@ export default function App() {
   const [viewKey, setViewKey] = useQueryState("view", {
     history: "replace",
   });
+  const compactShell = useMediaQuery("(max-width: 639px)");
   const view = parseViewKey(viewKey);
   const projects = useProjects();
   const project: Project | null =
     projects.data?.find(
       (p) => p.name === projectKey || p.id === projectKey
     ) ?? null;
+  const projectId = project?.id ?? null;
+  const hasProject = projectId !== null;
 
   // Prefer the human-readable name in the URL; the resolver above also
   // accepts an id, so older saved links keep working.
   const selectProject = (p: Project) => {
     void setProjectKey(p.name);
+    if (compactShell) setSidebarOpen(false);
   };
   const selectView = (next: View) => {
     void setViewKey(next === "kanban" ? null : next);
   };
 
+  useEffect(() => {
+    if (!hasProject) {
+      setSidebarOpen(true);
+      return;
+    }
+    setSidebarOpen(!compactShell);
+  }, [compactShell, hasProject, projectId]);
+
+  const sidebar = (
+    <Sidebar
+      selectedId={project?.id ?? null}
+      onSelect={selectProject}
+      className={
+        compactShell && hasProject
+          ? "h-full w-72 max-w-[82vw] p-4 shadow-[var(--tl-shadow-lift)]"
+          : undefined
+      }
+    />
+  );
+  const showSidebar = sidebarOpen || !hasProject;
+
   return (
     <div className="taskline-theme h-screen w-screen flex bg-[var(--tl-bg)] text-[var(--tl-ink)]">
-      {(sidebarOpen || !project) && (
-        <Sidebar selectedId={project?.id ?? null} onSelect={selectProject} />
-      )}
+      {showSidebar &&
+        (compactShell && hasProject ? (
+          <div className="fixed inset-0 z-50 flex sm:hidden">
+            <button
+              type="button"
+              aria-label="Close sidebar"
+              className="absolute inset-0 bg-[rgba(37,34,29,0.34)]"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <div className="relative z-10 h-full">{sidebar}</div>
+          </div>
+        ) : (
+          sidebar
+        ))}
       <main
         data-visual-style="wabi-sabi"
-        className="flex-1 flex flex-col overflow-hidden bg-[var(--tl-bg)]"
+        className="min-w-0 flex-1 flex flex-col overflow-hidden bg-[var(--tl-bg)]"
       >
         {project ? (
           <ProjectWorkspace
@@ -104,7 +140,7 @@ function ProjectWorkspace({
   return (
     <>
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--tl-outline)] bg-[var(--tl-surface)] px-6 py-3 shadow-[0_1px_0_rgba(255,255,255,0.55)] max-sm:px-3 max-sm:py-2 sm:gap-4">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3 max-sm:basis-full">
           <button
             type="button"
             aria-expanded={sidebarOpen}
@@ -171,6 +207,28 @@ function ProjectWorkspace({
 
 function parseViewKey(value: string | null): View {
   return value === "graph" ? "graph" : "kanban";
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      setMatches(false);
+      return;
+    }
+    const media = window.matchMedia(query);
+    setMatches(media.matches);
+    const onChange = (event: MediaQueryListEvent) => setMatches(event.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
 }
 
 function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {

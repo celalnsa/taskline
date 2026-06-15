@@ -5,9 +5,10 @@ import { useCreateProject, useProjects } from "../hooks/queries";
 interface Props {
   selectedId: string | null;
   onSelect: (project: Project) => void;
+  className?: string;
 }
 
-export function Sidebar({ selectedId, onSelect }: Props) {
+export function Sidebar({ selectedId, onSelect, className }: Props) {
   const projects = useProjects();
   const createProject = useCreateProject();
   const [creating, setCreating] = useState(false);
@@ -15,7 +16,13 @@ export function Sidebar({ selectedId, onSelect }: Props) {
   const [description, setDescription] = useState("");
 
   return (
-    <aside className="w-40 shrink-0 border-r border-[var(--tl-outline)] bg-[var(--tl-surface)] p-3 flex flex-col gap-3 sm:w-64 sm:p-4">
+    <aside
+      aria-label="Projects"
+      className={
+        "shrink-0 border-r border-[var(--tl-outline)] bg-[var(--tl-surface)] flex flex-col gap-3 " +
+        (className ?? "w-64 p-4")
+      }
+    >
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold tracking-tight text-[var(--tl-ink)]">taskline</h1>
         <button

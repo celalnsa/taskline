@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project, Task } from "./lib/api";
@@ -27,7 +27,20 @@ vi.mock("./hooks/queries", () => ({
 }));
 
 vi.mock("./components/Sidebar", () => ({
-  Sidebar: () => <aside aria-label="Projects">Projects</aside>,
+  Sidebar: ({
+    className,
+    onSelect,
+  }: {
+    className?: string;
+    onSelect: (project: Project) => void;
+  }) => (
+    <aside aria-label="Projects" className={className}>
+      <button type="button" onClick={() => onSelect(otherProject)}>
+        Select chanwire
+      </button>
+      Projects
+    </aside>
+  ),
 }));
 
 vi.mock("./components/KanbanBoard", () => ({
@@ -116,6 +129,22 @@ function renderApp() {
   return render(<App />);
 }
 
+function stubNarrowViewport(matches: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+  );
+}
+
 describe("App workspace layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -125,6 +154,7 @@ describe("App workspace layout", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it("places board controls in the project title bar", () => {
@@ -185,14 +215,58 @@ describe("App workspace layout", () => {
 
     const heading = screen.getByRole("heading", { level: 2, name: "taskline" });
     const header = heading.closest("header");
+    const titleGroup = heading.parentElement?.parentElement;
     const kanbanButton = screen.getByRole("button", { name: "Kanban" });
     const newTaskButton = screen.getByRole("button", { name: "+ New" });
 
     expect(header?.className).toContain("flex-wrap");
     expect(header?.className).toContain("max-sm:px-3");
     expect(header?.className).toContain("max-sm:py-2");
+    expect(titleGroup?.className).toContain("max-sm:basis-full");
     expect(kanbanButton.className).toContain("max-sm:px-2");
     expect(newTaskButton.className).toContain("max-sm:px-2");
+  });
+
+  it("uses a project drawer instead of a permanent sidebar on narrow screens", async () => {
+    const user = userEvent.setup();
+    stubNarrowViewport(true);
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Projects" })).toBeNull();
+    });
+
+    const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
+    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+
+    await user.click(expandButton);
+
+    const drawer = screen.getByRole("complementary", { name: "Projects" });
+    expect(drawer.className).toContain("w-72");
+    expect(screen.getByRole("button", { name: "Close sidebar" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Close sidebar" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Projects" })).toBeNull();
+    });
+  });
+
+  it("closes the mobile project drawer after selecting a project", async () => {
+    const user = userEvent.setup();
+    stubNarrowViewport(true);
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    await user.click(screen.getByRole("button", { name: "Select chanwire" }));
+
+    expect(mocks.setProjectKey).toHaveBeenCalledWith("chanwire");
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Projects" })).toBeNull();
+    });
   });
 
   it("keeps the sidebar available on the welcome screen after collapsing it", async () => {
