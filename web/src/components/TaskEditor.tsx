@@ -40,6 +40,17 @@ import {
   useUpdateTask,
   useUploadImage,
 } from "../hooks/queries";
+import {
+  createFilePreviewURL,
+  createPendingImage,
+  createPendingLink,
+  revokeFilePreviewURL,
+  type DisplayImage,
+  type DisplayLink,
+  type PendingImage,
+  type PendingLink,
+  useTaskResourceDrafts,
+} from "./task-editor/useTaskResourceDrafts";
 
 const MarkdownDescriptionDialog = lazy(() =>
   import("./MarkdownDescriptionDialog").then((module) => ({
@@ -80,46 +91,6 @@ function createEmptyTask(projectId: string): Task {
   };
 }
 
-type PendingImage = TaskImage & {
-  file: File;
-  pending: boolean;
-  preview_url?: string;
-};
-
-type DisplayImage = TaskImage & {
-  pending?: boolean;
-  preview_url?: string;
-};
-
-type PendingLink = TaskLink & {
-  pending: boolean;
-};
-
-type DisplayLink = TaskLink & {
-  pending?: boolean;
-};
-
-let draftId = 0;
-
-function nextDraftId(prefix: string): string {
-  draftId += 1;
-  return `${prefix}-${draftId}`;
-}
-
-function createFilePreviewURL(file: File): string | undefined {
-  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
-    return undefined;
-  }
-  return URL.createObjectURL(file);
-}
-
-function revokeFilePreviewURL(url: string | undefined) {
-  if (!url || typeof URL === "undefined" || typeof URL.revokeObjectURL !== "function") {
-    return;
-  }
-  URL.revokeObjectURL(url);
-}
-
 export function TaskEditor({
   project,
   task,
@@ -138,23 +109,12 @@ export function TaskEditor({
   const [labels, setLabels] = useState<string[]>(currentTask.labels ?? []);
   const [error, setError] = useState<string | null>(null);
   const [markdownOpen, setMarkdownOpen] = useState(false);
-  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
-  const [pendingLinks, setPendingLinks] = useState<PendingLink[]>([]);
-  const [pendingDependencyIds, setPendingDependencyIds] = useState<string[]>([]);
+  const resourceDrafts = useTaskResourceDrafts(project.id);
   const markdownButtonRef = useRef<HTMLButtonElement>(null);
 
   const create = useCreateTask(project.id);
   const update = useUpdateTask(project.id);
-  const uploadImage = useUploadImage(project.id);
-  const addLink = useAddLink(project.id);
-  const addDependency = useAddDependency(project.id);
-  const isSaving =
-    create.isPending ||
-    update.isPending ||
-    uploadImage.isPending ||
-    addLink.isPending ||
-    addDependency.isPending;
-  const createdPendingDependencyIdsRef = useRef<Set<string>>(new Set());
+  const isSaving = create.isPending || update.isPending || resourceDrafts.isResourceSaving;
 
   const closeMarkdownEditor = () => {
     setMarkdownOpen(false);
@@ -198,43 +158,7 @@ export function TaskEditor({
           activeTask = await update.mutateAsync({ id: activeTask.id, patch: { state } });
           setCreatedTask(activeTask);
         }
-        for (const image of pendingImages) {
-          if (!image.pending) continue;
-          const uploaded = await uploadImage.mutateAsync({
-            taskId: activeTask.id,
-            file: image.file,
-          });
-          setPendingImages((current) =>
-            current.map((item) =>
-              item.id === image.id
-                ? {
-                    ...uploaded,
-                    file: item.file,
-                    pending: false,
-                    preview_url: item.preview_url,
-                  }
-                : item
-            )
-          );
-        }
-        for (const link of pendingLinks) {
-          if (!link.pending) continue;
-          const createdLink = await addLink.mutateAsync({
-            taskId: activeTask.id,
-            url: link.url,
-            label: link.label,
-          });
-          setPendingLinks((current) =>
-            current.map((item) =>
-              item.id === link.id ? { ...createdLink, pending: false } : item
-            )
-          );
-        }
-        for (const dependsOn of pendingDependencyIds) {
-          if (createdPendingDependencyIdsRef.current.has(dependsOn)) continue;
-          await addDependency.mutateAsync({ taskId: activeTask.id, dependsOn });
-          createdPendingDependencyIdsRef.current.add(dependsOn);
-        }
+        await resourceDrafts.replayCreateResources(activeTask);
       } else {
         await update.mutateAsync({
           id: currentTask.id,
@@ -350,8 +274,8 @@ export function TaskEditor({
           <ImageSection
             project={project}
             task={currentTask}
-            pendingImages={isCreate ? pendingImages : undefined}
-            setPendingImages={isCreate ? setPendingImages : undefined}
+            pendingImages={isCreate ? resourceDrafts.pendingImages : undefined}
+            setPendingImages={isCreate ? resourceDrafts.setPendingImages : undefined}
           />
 
           <DocSection project={project} task={currentTask} disabled={isCreate || !currentTask.id} />
@@ -359,16 +283,16 @@ export function TaskEditor({
           <LinkSection
             project={project}
             task={currentTask}
-            pendingLinks={isCreate ? pendingLinks : undefined}
-            setPendingLinks={isCreate ? setPendingLinks : undefined}
+            pendingLinks={isCreate ? resourceDrafts.pendingLinks : undefined}
+            setPendingLinks={isCreate ? resourceDrafts.setPendingLinks : undefined}
           />
 
           <DependsSection
             project={project}
             task={currentTask}
             allTasks={allTasks}
-            pendingDependencyIds={isCreate ? pendingDependencyIds : undefined}
-            setPendingDependencyIds={isCreate ? setPendingDependencyIds : undefined}
+            pendingDependencyIds={isCreate ? resourceDrafts.pendingDependencyIds : undefined}
+            setPendingDependencyIds={isCreate ? resourceDrafts.setPendingDependencyIds : undefined}
           />
 
           {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
@@ -726,17 +650,7 @@ function ImageSection({
       if (setPendingImages) {
         const previewURL = createFilePreviewURL(file);
         if (previewURL) draftPreviewURLsRef.current.add(previewURL);
-        const image: PendingImage = {
-          id: nextDraftId("draft-image"),
-          task_id: task.id,
-          filename: file.name,
-          mime_type: file.type || "application/octet-stream",
-          size_bytes: file.size,
-          uploaded_at: 0,
-          preview_url: previewURL,
-          file,
-          pending: true,
-        };
+        const image = createPendingImage(task.id, file, previewURL);
         setPendingImages((current) => [...current, image]);
         setError(null);
         return;
@@ -1140,14 +1054,7 @@ function LinkSection({
     if (!url.trim() || add.isPending || disabled) return;
     try {
       if (setPendingLinks) {
-        const link: PendingLink = {
-          id: nextDraftId("draft-link"),
-          task_id: task.id,
-          url: url.trim(),
-          label: label.trim(),
-          created_at: 0,
-          pending: true,
-        };
+        const link = createPendingLink(task.id, url.trim(), label.trim());
         setPendingLinks((current) => [...current, link]);
         setUrl("");
         setLabel("");
