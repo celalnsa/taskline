@@ -1,0 +1,9 @@
+{
+  "id": "image-0001",
+  "task_id": "task-0001",
+  "filename": "diagram.png",
+  "mime_type": "image/png",
+  "size_bytes": 12345,
+  "url": "/api/v1/images/image-0001",
+  "uploaded_at": 1781700000003
+}

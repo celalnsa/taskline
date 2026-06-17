@@ -213,6 +213,13 @@ independent of the server module. Domain shapes are duplicated and kept
 in sync by hand — drift here is the single most likely place for bugs,
 so a CLI-side e2e test suite exercises the round-trip.
 
+Canonical JSON fixtures in `testdata/http_contract/` guard the duplicated
+HTTP shapes across server, CLI, and web tests. They are intentionally a
+test-only drift net: they do not make the CLI import server packages, do
+not introduce code generation, and do not change the runtime contract.
+When adding or renaming a public JSON field, update the fixture and the
+three local shape tests together.
+
 Output formatting is centralized in `cli/internal/output`:
 
 - `Resolve(flag)` picks JSON when stdout isn't a TTY (the default for
@@ -260,6 +267,10 @@ connection initializer.
 - **End-to-end**: `server/tests/e2e_test.go` boots a real Hertz server
   on a random port and exercises the HTTP surface, including the SPA
   fallback. This is the regression net for handler ↔ service wiring.
+- **HTTP contract drift guard**: `testdata/http_contract/` contains
+  canonical JSON fixtures round-tripped by server model tests, CLI client
+  tests, and web API-shape tests. This preserves module independence while
+  making field drift visible in normal test runs.
 - **CLI**: lives in the CLI module; uses an `httptest.Server` to fake
   the backend.
 - **Web**: Vitest component tests, ESLint, and `pnpm build`.

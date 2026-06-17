@@ -1,0 +1,49 @@
+{
+  "id": "task-0001",
+  "project_id": "project-0001",
+  "title": "Canonical task contract",
+  "description": "Fixture with every public task resource field.",
+  "type": "feature",
+  "state": "review",
+  "priority": 42,
+  "labels": [
+    "contract",
+    "drift"
+  ],
+  "depends_on": [
+    "task-0000"
+  ],
+  "images": [
+    {
+      "id": "image-0001",
+      "task_id": "task-0001",
+      "filename": "diagram.png",
+      "mime_type": "image/png",
+      "size_bytes": 12345,
+      "url": "/api/v1/images/image-0001",
+      "uploaded_at": 1781700000003
+    }
+  ],
+  "docs": [
+    {
+      "id": "doc-0001",
+      "task_id": "task-0001",
+      "title": "Spec",
+      "url": "/api/v1/docs/doc-0001/content",
+      "content": "# Spec\n\nCanonical contract fixture.",
+      "created_at": 1781700000004,
+      "updated_at": 1781700000005
+    }
+  ],
+  "links": [
+    {
+      "id": "link-0001",
+      "task_id": "task-0001",
+      "url": "https://github.com/v1v4l4v1d4/taskline/pull/1",
+      "label": "PR #1",
+      "created_at": 1781700000006
+    }
+  ],
+  "created_at": 1781700000007,
+  "updated_at": 1781700000008
+}
