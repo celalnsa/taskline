@@ -1,0 +1,9 @@
+{
+  "id": "doc-0001",
+  "task_id": "task-0001",
+  "title": "Spec",
+  "url": "/api/v1/docs/doc-0001/content",
+  "content": "# Spec\n\nCanonical contract fixture.",
+  "created_at": 1781700000004,
+  "updated_at": 1781700000005
+}
