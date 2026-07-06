@@ -77,6 +77,37 @@ describe("TaskEditor markdown description editing", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps the editor header and actions outside the scrolling body", () => {
+    renderEditor();
+
+    const dialog = screen.getByRole("dialog", { name: /edit task markdown task/i });
+    const scrollBody = dialog.querySelector("[data-task-editor-scroll-body]");
+    const footer = dialog.querySelector("footer");
+    const saveButton = screen.getByRole("button", { name: /^save$/i });
+
+    expect(dialog.className).toContain("overflow-hidden");
+    expect(scrollBody?.className).toContain("overflow-y-auto");
+    expect(scrollBody?.contains(screen.getByLabelText("Description"))).toBe(true);
+    expect(scrollBody?.contains(saveButton)).toBe(false);
+    expect(footer?.contains(saveButton)).toBe(true);
+  });
+
+  it("uses a compact description field and horizontal metadata controls", () => {
+    renderEditor();
+
+    const description = screen.getByLabelText("Description") as HTMLTextAreaElement;
+    expect(description.rows).toBe(3);
+    expect(description.className).toContain("min-h-[4.5rem]");
+
+    for (const label of ["Type", "State", "Priority"]) {
+      const field = screen.getByLabelText(label);
+      const wrapper = field.closest("label");
+      expect(wrapper?.className).toContain("flex");
+      expect(wrapper?.className).toContain("items-center");
+      expect(wrapper?.className).toContain("gap-2");
+    }
+  });
+
   it("opens a markdown editor from the description field", async () => {
     const user = userEvent.setup();
     renderEditor();
