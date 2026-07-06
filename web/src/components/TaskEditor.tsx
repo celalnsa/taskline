@@ -171,9 +171,18 @@ export function TaskEditor({
     }
   };
 
+  const dialogLabel = isCreate
+    ? `Create task in ${project.name}`
+    : `Edit task ${currentTask.title}`;
+
   return (
-    <div className="fixed inset-0 z-40 bg-[rgba(37,34,29,0.38)] flex items-center justify-center">
-      <div className="relative w-[520px] max-h-[90vh] flex flex-col rounded-lg border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] shadow-[var(--tl-shadow-lift)]">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(37,34,29,0.38)] p-3 sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={dialogLabel}
+        className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-[560px] flex-col overflow-hidden rounded-lg border border-[var(--tl-outline)] bg-[var(--tl-surface-raised)] shadow-[var(--tl-shadow-lift)]"
+      >
         <button
           type="button"
           aria-label="Close"
@@ -182,8 +191,8 @@ export function TaskEditor({
         >
           ×
         </button>
-        <div className="p-6 space-y-3 overflow-y-auto">
-          <div className="flex items-start justify-between pr-8">
+        <header className="shrink-0 border-b border-[var(--tl-outline)] px-5 py-4 pr-12">
+          <div className="flex min-w-0 items-start justify-between gap-3">
             <h3 className="font-bold text-base text-[var(--tl-ink)]">
               {isCreate ? `New task in ${project.name}` : "Edit task"}
             </h3>
@@ -193,6 +202,8 @@ export function TaskEditor({
               </code>
             )}
           </div>
+        </header>
+        <div data-task-editor-scroll-body className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
           <input
             aria-label="Title"
             className="w-full text-sm border border-[var(--tl-outline)] rounded-md px-2 py-1.5 font-medium"
@@ -208,8 +219,8 @@ export function TaskEditor({
               <textarea
                 id="task-description"
                 aria-label="Description"
-                className="w-full text-sm border border-[var(--tl-outline)] rounded-md py-1.5 pl-2 pr-12 resize-y min-h-[6rem]"
-                rows={4}
+                className="w-full text-sm border border-[var(--tl-outline)] rounded-md py-1.5 pl-2 pr-12 resize-y min-h-[4.5rem]"
+                rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -225,12 +236,12 @@ export function TaskEditor({
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="text-xs space-y-1">
-              <span className="text-[var(--tl-ink-muted)]">Type</span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="flex min-w-0 items-center gap-2 text-xs">
+              <span className="shrink-0 text-[var(--tl-ink-muted)]">Type</span>
               <select
                 aria-label="Type"
-                className="w-full border border-[var(--tl-outline)] rounded-md px-2 py-1"
+                className="min-w-0 flex-1 border border-[var(--tl-outline)] rounded-md px-2 py-1"
                 value={type}
                 onChange={(e) => setType(e.target.value as TaskType)}
               >
@@ -239,11 +250,11 @@ export function TaskEditor({
                 <option value="docs">docs</option>
               </select>
             </label>
-            <label className="text-xs space-y-1">
-              <span className="text-[var(--tl-ink-muted)]">State</span>
+            <label className="flex min-w-0 items-center gap-2 text-xs">
+              <span className="shrink-0 text-[var(--tl-ink-muted)]">State</span>
               <select
                 aria-label="State"
-                className="w-full border border-[var(--tl-outline)] rounded-md px-2 py-1"
+                className="min-w-0 flex-1 border border-[var(--tl-outline)] rounded-md px-2 py-1"
                 value={state}
                 onChange={(e) => {
                   setState(e.target.value as TaskState);
@@ -257,12 +268,12 @@ export function TaskEditor({
                 ))}
               </select>
             </label>
-            <label className="text-xs space-y-1">
-              <span className="text-[var(--tl-ink-muted)]">Priority</span>
+            <label className="flex min-w-0 items-center gap-2 text-xs">
+              <span className="shrink-0 text-[var(--tl-ink-muted)]">Priority</span>
               <input
                 aria-label="Priority"
                 type="number"
-                className="w-full border border-[var(--tl-outline)] rounded-md px-2 py-1 tabular-nums"
+                className="min-w-0 flex-1 border border-[var(--tl-outline)] rounded-md px-2 py-1 tabular-nums"
                 value={priority}
                 onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
               />
@@ -296,33 +307,32 @@ export function TaskEditor({
           />
 
           {error && <p className="text-xs text-[var(--tl-rust)]">{error}</p>}
-
-          <div className="flex justify-end pt-3 border-t border-[var(--tl-outline)]">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="text-sm px-3 py-1.5 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
-                onClick={onClose}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="text-sm px-3 py-1.5 rounded-md bg-[var(--tl-moss)] text-[var(--tl-surface)] hover:bg-[color-mix(in_srgb,var(--tl-moss)_82%,black)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
-                disabled={isSaving}
-                onClick={save}
-              >
-                {isSaving
-                  ? isCreate
-                    ? "Creating…"
-                    : "Saving…"
-                  : isCreate
-                    ? "Create"
-                    : "Save"}
-              </button>
-            </div>
-          </div>
         </div>
+        <footer className="shrink-0 border-t border-[var(--tl-outline)] px-5 py-3">
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="text-sm px-3 py-1.5 rounded-md border border-[var(--tl-outline)] bg-[var(--tl-surface)] text-[var(--tl-ink-muted)] hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="text-sm px-3 py-1.5 rounded-md bg-[var(--tl-moss)] text-[var(--tl-surface)] hover:bg-[color-mix(in_srgb,var(--tl-moss)_82%,black)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
+              disabled={isSaving}
+              onClick={save}
+            >
+              {isSaving
+                ? isCreate
+                  ? "Creating…"
+                  : "Saving…"
+                : isCreate
+                  ? "Create"
+                  : "Save"}
+            </button>
+          </div>
+        </footer>
       </div>
       {markdownOpen && (
         <Suspense
