@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -272,6 +274,71 @@ func TestListTasksFilteredByState(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, testOnly, 1)
 	require.Equal(t, t2.ID, testOnly[0].ID)
+}
+
+func TestListTasksWithAttachmentsAvoidsPerTaskQueryFanout(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+
+	const taskCount = 2000
+	baseDir := t.TempDir()
+	var rootID string
+	for i := range taskCount {
+		tk, err := st.CreateTask(
+			ctx,
+			p.ID,
+			fmt.Sprintf("task-%03d", i),
+			"",
+			model.TaskTypeFeature,
+			i%10,
+			model.StateStart,
+			[]string{fmt.Sprintf("label-%02d", i%5)},
+		)
+		require.NoError(t, err)
+		if i == 0 {
+			rootID = tk.ID
+		} else {
+			require.NoError(t, st.AddDependency(ctx, tk.ID, rootID))
+		}
+		require.NoError(t, st.AddLink(ctx, &model.Link{
+			TaskID: tk.ID,
+			URL:    fmt.Sprintf("https://example.com/%03d", i),
+			Label:  fmt.Sprintf("link-%03d", i),
+		}))
+		require.NoError(t, st.AddDoc(ctx, &model.Doc{
+			TaskID:      tk.ID,
+			Title:       fmt.Sprintf("doc-%03d", i),
+			StoragePath: filepath.Join(baseDir, fmt.Sprintf("doc-%03d.md", i)),
+		}))
+		require.NoError(t, st.AddImage(ctx, &model.Image{
+			TaskID:      tk.ID,
+			Filename:    fmt.Sprintf("image-%03d.png", i),
+			MimeType:    "image/png",
+			SizeBytes:   int64(i + 1),
+			StoragePath: filepath.Join(baseDir, fmt.Sprintf("image-%03d.png", i)),
+		}))
+	}
+
+	start := time.Now()
+	listed, err := st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID})
+	elapsed := time.Since(start)
+	t.Logf("ListTasks loaded %d tasks with attachments in %s", taskCount, elapsed)
+	require.NoError(t, err)
+	require.Len(t, listed, taskCount)
+	require.Less(t, elapsed, 75*time.Millisecond, "ListTasks should batch-load attachments instead of querying once per task")
+
+	for _, task := range listed {
+		require.Len(t, task.Links, 1)
+		require.Len(t, task.Docs, 1)
+		require.Len(t, task.Images, 1)
+		if task.ID == rootID {
+			require.Empty(t, task.DependsOn)
+		} else {
+			require.Equal(t, []string{rootID}, task.DependsOn)
+		}
+	}
 }
 
 func TestLinkCRUD(t *testing.T) {
