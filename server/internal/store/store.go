@@ -393,19 +393,8 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for _, t := range out {
-		if err := s.attachDeps(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := s.attachImages(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := s.attachDocs(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := s.attachLinks(ctx, t); err != nil {
-			return nil, err
-		}
+	if err := s.attachTaskDetails(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -441,19 +430,8 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*mod
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for _, t := range out {
-		if err := s.attachDeps(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := s.attachImages(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := s.attachDocs(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := s.attachLinks(ctx, t); err != nil {
-			return nil, err
-		}
+	if err := s.attachTaskDetails(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -924,6 +902,157 @@ func (s *Store) attachImages(ctx context.Context, t *model.Task) error {
 		t.Images = append(t.Images, *img)
 	}
 	return rows.Err()
+}
+
+const taskDetailsBatchSize = 500
+
+func (s *Store) attachTaskDetails(ctx context.Context, tasks []*model.Task) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	if err := s.attachDepsForTasks(ctx, tasks); err != nil {
+		return err
+	}
+	if err := s.attachImagesForTasks(ctx, tasks); err != nil {
+		return err
+	}
+	if err := s.attachDocsForTasks(ctx, tasks); err != nil {
+		return err
+	}
+	return s.attachLinksForTasks(ctx, tasks)
+}
+
+func (s *Store) attachDepsForTasks(ctx context.Context, tasks []*model.Task) error {
+	return forTaskDetailsBatch(tasks, func(placeholders string, args []any, byID map[string]*model.Task) error {
+		rows, err := s.db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT task_id,depends_on_task_id
+			   FROM task_deps
+			  WHERE task_id IN (%s)
+			  ORDER BY task_id ASC, created_at ASC`, placeholders),
+			args...,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var taskID, dependsOn string
+			if err := rows.Scan(&taskID, &dependsOn); err != nil {
+				return err
+			}
+			if t := byID[taskID]; t != nil {
+				t.DependsOn = append(t.DependsOn, dependsOn)
+			}
+		}
+		return rows.Err()
+	})
+}
+
+func (s *Store) attachLinksForTasks(ctx context.Context, tasks []*model.Task) error {
+	return forTaskDetailsBatch(tasks, func(placeholders string, args []any, byID map[string]*model.Task) error {
+		rows, err := s.db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT id,task_id,url,label,created_at
+			   FROM task_links
+			  WHERE task_id IN (%s)
+			  ORDER BY task_id ASC, created_at ASC`, placeholders),
+			args...,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var l model.Link
+			if err := rows.Scan(&l.ID, &l.TaskID, &l.URL, &l.Label, &l.CreatedAt); err != nil {
+				return err
+			}
+			if t := byID[l.TaskID]; t != nil {
+				t.Links = append(t.Links, l)
+			}
+		}
+		return rows.Err()
+	})
+}
+
+func (s *Store) attachDocsForTasks(ctx context.Context, tasks []*model.Task) error {
+	return forTaskDetailsBatch(tasks, func(placeholders string, args []any, byID map[string]*model.Task) error {
+		rows, err := s.db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT id,task_id,title,storage_path,created_at,updated_at
+			   FROM task_docs
+			  WHERE task_id IN (%s)
+			  ORDER BY task_id ASC, created_at ASC`, placeholders),
+			args...,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			doc, err := scanDoc(rows)
+			if err != nil {
+				return err
+			}
+			if t := byID[doc.TaskID]; t != nil {
+				t.Docs = append(t.Docs, *doc)
+			}
+		}
+		return rows.Err()
+	})
+}
+
+func (s *Store) attachImagesForTasks(ctx context.Context, tasks []*model.Task) error {
+	return forTaskDetailsBatch(tasks, func(placeholders string, args []any, byID map[string]*model.Task) error {
+		rows, err := s.db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT id,task_id,filename,mime_type,size_bytes,storage_path,uploaded_at
+			   FROM task_images
+			  WHERE task_id IN (%s)
+			  ORDER BY task_id ASC, uploaded_at ASC`, placeholders),
+			args...,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			img, err := scanImage(rows)
+			if err != nil {
+				return err
+			}
+			if t := byID[img.TaskID]; t != nil {
+				t.Images = append(t.Images, *img)
+			}
+		}
+		return rows.Err()
+	})
+}
+
+func forTaskDetailsBatch(tasks []*model.Task, fn func(placeholders string, args []any, byID map[string]*model.Task) error) error {
+	for start := 0; start < len(tasks); start += taskDetailsBatchSize {
+		end := start + taskDetailsBatchSize
+		if end > len(tasks) {
+			end = len(tasks)
+		}
+		placeholders, args, byID := taskBatchQueryArgs(tasks[start:end])
+		if err := fn(placeholders, args, byID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func taskBatchQueryArgs(tasks []*model.Task) (string, []any, map[string]*model.Task) {
+	args := make([]any, 0, len(tasks))
+	byID := make(map[string]*model.Task, len(tasks))
+	var placeholders strings.Builder
+	for i, task := range tasks {
+		if i > 0 {
+			placeholders.WriteByte(',')
+		}
+		placeholders.WriteByte('?')
+		args = append(args, task.ID)
+		byID[task.ID] = task
+	}
+	return placeholders.String(), args, byID
 }
 
 func isUniqueErr(err error) bool {
