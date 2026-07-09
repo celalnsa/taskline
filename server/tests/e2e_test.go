@@ -527,8 +527,11 @@ func TestTaskClaimLeaseAtAPI(t *testing.T) {
 		require.Equal(t, http.StatusCreated, st)
 	}
 
+	st := jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true", nil, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
 	var a nextResp
-	st := jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true&owner=agent-a&lease=1h", nil, &a)
+	st = jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true&owner=agent-a&lease=1h", nil, &a)
 	require.Equal(t, http.StatusOK, st)
 	require.NotNil(t, a.Task)
 	require.Equal(t, "agent-a", a.Task.Owner)

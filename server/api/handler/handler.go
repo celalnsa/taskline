@@ -271,9 +271,9 @@ func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 	}
 	var t *model.Task
 	if claim {
-		lease, err := parseLease(strings.TrimSpace(string(c.Query("lease"))))
-		if err != nil {
-			writeError(c, http.StatusBadRequest, err)
+		lease, parseErr := parseLease(strings.TrimSpace(string(c.Query("lease"))))
+		if parseErr != nil {
+			writeError(c, http.StatusBadRequest, parseErr)
 			return
 		}
 		t, err = h.svc.ClaimNextTask(ctx, project, service.ClaimOptions{
