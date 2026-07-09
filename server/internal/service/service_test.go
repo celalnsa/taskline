@@ -22,6 +22,33 @@ func newSvc(t *testing.T) *service.Service {
 	return service.New(st)
 }
 
+func TestRegisterAgentAndResolveToken(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+
+	reg, err := s.RegisterAgent(ctx, "agent-a")
+	require.NoError(t, err)
+	require.Equal(t, "agent-a", reg.Agent.Name)
+	require.NotEmpty(t, reg.Agent.ID)
+	require.True(t, strings.HasPrefix(reg.Token, "tl_agent_"), "unexpected token prefix: %q", reg.Token)
+
+	resolved, err := s.ResolveAgentToken(ctx, reg.Token)
+	require.NoError(t, err)
+	require.Equal(t, reg.Agent.ID, resolved.ID)
+
+	rotated, err := s.RegisterAgent(ctx, "agent-a")
+	require.NoError(t, err)
+	require.Equal(t, reg.Agent.ID, rotated.Agent.ID)
+	require.NotEqual(t, reg.Token, rotated.Token)
+
+	_, err = s.ResolveAgentToken(ctx, reg.Token)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	resolved, err = s.ResolveAgentToken(ctx, rotated.Token)
+	require.NoError(t, err)
+	require.Equal(t, reg.Agent.ID, resolved.ID)
+}
+
 func TestResolveProjectByIdOrName(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)

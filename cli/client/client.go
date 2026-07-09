@@ -19,6 +19,7 @@ import (
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
+	Token   string
 }
 
 // New constructs a Client targeting baseURL.
@@ -27,6 +28,14 @@ func New(baseURL string) *Client {
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		HTTP:    &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// Agent mirrors the server-side agent identity shape.
+type Agent struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 // Project mirrors the server-side project shape.
@@ -88,6 +97,25 @@ type Doc struct {
 	Content   string `json:"content,omitempty"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
+}
+
+// ─── Agent endpoints ────────────────────────────────────────────────────
+
+type RegisterAgentInput struct {
+	Name string `json:"name"`
+}
+
+type RegisterAgentOutput struct {
+	Agent Agent  `json:"agent"`
+	Token string `json:"token"`
+}
+
+func (c *Client) RegisterAgent(in RegisterAgentInput) (*RegisterAgentOutput, error) {
+	var out RegisterAgentOutput
+	if err := c.do("POST", "/api/v1/agents/register", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ─── Project endpoints ──────────────────────────────────────────────────
@@ -219,7 +247,6 @@ type nextTaskResp struct {
 
 type NextTaskOptions struct {
 	Claim  bool
-	Owner  string
 	Lease  string
 	Labels []string
 }
@@ -231,9 +258,6 @@ func (c *Client) NextRunnableTask(projectIDOrName string, opts ...NextTaskOption
 		q := url.Values{}
 		if opts[0].Claim {
 			q.Set("claim", "true")
-		}
-		if opts[0].Owner != "" {
-			q.Set("owner", opts[0].Owner)
 		}
 		if opts[0].Lease != "" {
 			q.Set("lease", opts[0].Lease)
@@ -271,7 +295,6 @@ type UpdateTaskInput struct {
 	Labels            *[]string `json:"labels,omitempty"`
 	LabelOps          *LabelOps `json:"label_ops,omitempty"`
 	IfState           *string   `json:"if_state,omitempty"`
-	Owner             string    `json:"owner,omitempty"`
 	Force             bool      `json:"force,omitempty"`
 }
 
@@ -295,7 +318,6 @@ func (c *Client) DeleteTask(id string) error {
 }
 
 type ClaimTaskInput struct {
-	Owner string `json:"owner,omitempty"`
 	Lease string `json:"lease,omitempty"`
 }
 
@@ -309,7 +331,6 @@ func (c *Client) ClaimTask(id string, in ClaimTaskInput) (*Task, error) {
 }
 
 type HeartbeatTaskInput struct {
-	Owner string `json:"owner,omitempty"`
 	Lease string `json:"lease,omitempty"`
 }
 
@@ -323,8 +344,7 @@ func (c *Client) HeartbeatTask(id string, in HeartbeatTaskInput) (*Task, error) 
 }
 
 type ReleaseTaskInput struct {
-	Owner string `json:"owner,omitempty"`
-	Force bool   `json:"force,omitempty"`
+	Force bool `json:"force,omitempty"`
 }
 
 func (c *Client) ReleaseTask(id string, in ReleaseTaskInput) (*Task, error) {
@@ -441,6 +461,9 @@ func (c *Client) UploadImage(taskID, filePath string) (*Image, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -473,6 +496,9 @@ func (c *Client) do(method, path string, in any, out any) error {
 	}
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {

@@ -78,6 +78,14 @@ type Project struct {
 	UpdatedAt   int64  `json:"updated_at"`
 }
 
+// Agent is a local worker identity used to derive task claim ownership.
+type Agent struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
 // Task is the unit of work tracked under a project.
 type Task struct {
 	ID             string    `json:"id"`

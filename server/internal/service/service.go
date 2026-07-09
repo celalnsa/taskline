@@ -2,6 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -21,6 +25,69 @@ type Service struct {
 func New(st *store.Store) *Service { return &Service{st: st} }
 
 const DefaultLeaseDuration = 6 * time.Hour
+
+const (
+	agentTokenPrefix = "tl_agent_"
+	maxAgentNameLen  = 64
+)
+
+type AgentRegistration struct {
+	Agent *model.Agent
+	Token string
+}
+
+// RegisterAgent creates or rotates a local agent identity token.
+func (s *Service) RegisterAgent(ctx context.Context, name string) (*AgentRegistration, error) {
+	name, err := normalizeAgentName(name)
+	if err != nil {
+		return nil, err
+	}
+	token, err := generateAgentToken()
+	if err != nil {
+		return nil, err
+	}
+	agent, err := s.st.RegisterAgent(ctx, name, hashAgentToken(token))
+	if err != nil {
+		return nil, err
+	}
+	return &AgentRegistration{Agent: agent, Token: token}, nil
+}
+
+// ResolveAgentToken resolves a bearer token to its registered agent.
+func (s *Service) ResolveAgentToken(ctx context.Context, token string) (*model.Agent, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, errors.New("agent token required: run taskline register --name <agent>")
+	}
+	return s.st.GetAgentByTokenHash(ctx, hashAgentToken(token))
+}
+
+func normalizeAgentName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", errors.New("agent name required")
+	}
+	if len([]rune(name)) > maxAgentNameLen {
+		return "", fmt.Errorf("agent name too long: max %d characters", maxAgentNameLen)
+	}
+	if strings.ContainsAny(name, "\t\n\r") {
+		return "", errors.New("agent name cannot contain tabs or newlines")
+	}
+	return name, nil
+}
+
+func generateAgentToken() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+	return agentTokenPrefix + base64.RawURLEncoding.EncodeToString(raw[:]), nil
+}
+
+func hashAgentToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
 
 // CreateProject inserts a new project. name is required and unique.
 func (s *Service) CreateProject(ctx context.Context, name, description string) (*model.Project, error) {
@@ -133,10 +200,16 @@ func (s *Service) SearchTasks(ctx context.Context, projectIDOrName, query string
 	return newTaskSearchRanker().Rank(tasks, query, limit), nil
 }
 
-// NextRunnableTask returns the highest-priority task whose deps are all done.
+type RunnableOptions struct {
+	Owner  string
+	Labels []string
+}
+
+// NextRunnableTask returns the highest-priority task whose deps are all done
+// and whose claim is available to the requested owner.
 // Returns (nil, nil) if no task is runnable.
-func (s *Service) NextRunnableTask(ctx context.Context, projectIDOrName string, labelSets ...[]string) (*model.Task, error) {
-	tasks, err := s.ListRunnableTasks(ctx, projectIDOrName, labelSets...)
+func (s *Service) NextRunnableTask(ctx context.Context, projectIDOrName string, opts ...RunnableOptions) (*model.Task, error) {
+	tasks, err := s.ListRunnableTasks(ctx, projectIDOrName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -195,18 +268,26 @@ func (s *Service) HeartbeatTask(ctx context.Context, id string, opts ClaimOption
 func (s *Service) ReleaseTask(ctx context.Context, id string, opts ReleaseOptions) (*model.Task, error) {
 	owner := strings.TrimSpace(opts.Owner)
 	if owner == "" && !opts.Force {
-		return nil, errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+		return nil, errors.New("agent identity required: run taskline register --name <agent>")
 	}
 	return s.st.ReleaseTask(ctx, id, store.ReleaseOptions{Owner: owner, Force: opts.Force, Now: nowMillis()})
 }
 
-// ListRunnableTasks returns all currently-runnable tasks.
-func (s *Service) ListRunnableTasks(ctx context.Context, projectIDOrName string, labelSets ...[]string) ([]*model.Task, error) {
+// ListRunnableTasks returns all currently-runnable tasks claimable by owner.
+func (s *Service) ListRunnableTasks(ctx context.Context, projectIDOrName string, opts ...RunnableOptions) ([]*model.Task, error) {
 	p, err := s.ResolveProject(ctx, projectIDOrName)
 	if err != nil {
 		return nil, err
 	}
-	return s.st.ListRunnableTasks(ctx, p.ID, labelSets...)
+	var opt RunnableOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	return s.st.ListRunnableTasks(ctx, p.ID, store.RunnableFilter{
+		Owner:  opt.Owner,
+		Now:    nowMillis(),
+		Labels: opt.Labels,
+	})
 }
 
 // UpdateTask applies partial updates with state-machine validation.
@@ -235,7 +316,7 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 func normalizeClaimInput(owner string, lease time.Duration) (string, time.Duration, error) {
 	owner = strings.TrimSpace(owner)
 	if owner == "" {
-		return "", 0, errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+		return "", 0, errors.New("agent identity required: run taskline register --name <agent>")
 	}
 	if lease == 0 {
 		lease = DefaultLeaseDuration

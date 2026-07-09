@@ -50,6 +50,33 @@ func TestProjectCRUD(t *testing.T) {
 	require.Len(t, all, 1)
 }
 
+func TestAgentRegistrationRotatesTokenHash(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	agent, err := st.RegisterAgent(ctx, "agent-a", "hash-one")
+	require.NoError(t, err)
+	require.NotEmpty(t, agent.ID)
+	require.Equal(t, "agent-a", agent.Name)
+
+	byToken, err := st.GetAgentByTokenHash(ctx, "hash-one")
+	require.NoError(t, err)
+	require.Equal(t, agent.ID, byToken.ID)
+
+	rotated, err := st.RegisterAgent(ctx, "agent-a", "hash-two")
+	require.NoError(t, err)
+	require.Equal(t, agent.ID, rotated.ID)
+	require.Equal(t, agent.CreatedAt, rotated.CreatedAt)
+	require.GreaterOrEqual(t, rotated.UpdatedAt, agent.UpdatedAt)
+
+	_, err = st.GetAgentByTokenHash(ctx, "hash-one")
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	byNewToken, err := st.GetAgentByTokenHash(ctx, "hash-two")
+	require.NoError(t, err)
+	require.Equal(t, agent.ID, byNewToken.ID)
+}
+
 func TestTaskCreateAndState(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
@@ -285,7 +312,7 @@ func TestRunnableAndClaimFiltersByAllLabels(t *testing.T) {
 	require.Len(t, listed, 1)
 	require.Equal(t, urgentBackend.ID, listed[0].ID)
 
-	runnable, err := st.ListRunnableTasks(ctx, p.ID, []string{"urgent"})
+	runnable, err := st.ListRunnableTasks(ctx, p.ID, store.RunnableFilter{Labels: []string{"urgent"}})
 	require.NoError(t, err)
 	require.Len(t, runnable, 2)
 	require.Equal(t, []string{urgentBackend.ID, urgentFrontend.ID}, []string{runnable[0].ID, runnable[1].ID})
@@ -533,6 +560,7 @@ func TestClaimLeaseLifecycleAndOwnerGuards(t *testing.T) {
 
 	_, err = st.ClaimTask(ctx, tk.ID, store.ClaimOptions{Owner: "agent-b", Now: 2_000, LeaseExpiresAt: 12_000})
 	require.ErrorIs(t, err, store.ErrConflict)
+	require.Contains(t, err.Error(), "claimed by agent-a")
 
 	reclaimed, err := st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: "agent-a", Now: 3_000, LeaseExpiresAt: 13_000})
 	require.NoError(t, err)
@@ -563,6 +591,40 @@ func TestClaimLeaseLifecycleAndOwnerGuards(t *testing.T) {
 	require.Empty(t, released.Owner)
 	require.Zero(t, released.ClaimedAt)
 	require.Zero(t, released.LeaseExpiresAt)
+}
+
+func TestListRunnableTasksSkipsLiveClaimsForOtherOwners(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	claimedHigh, err := st.CreateTask(ctx, p.ID, "claimed high", "", model.TaskTypeFeature, 10, model.StateStart)
+	require.NoError(t, err)
+	openLow, err := st.CreateTask(ctx, p.ID, "open low", "", model.TaskTypeFeature, 1, model.StateStart)
+	require.NoError(t, err)
+
+	_, err = st.ClaimTask(ctx, claimedHigh.ID, store.ClaimOptions{Owner: "agent-a", Now: 1_000, LeaseExpiresAt: 11_000})
+	require.NoError(t, err)
+
+	noOwner, err := st.ListRunnableTasks(ctx, p.ID, store.RunnableFilter{Now: 2_000})
+	require.NoError(t, err)
+	require.Len(t, noOwner, 1)
+	require.Equal(t, openLow.ID, noOwner[0].ID)
+
+	otherOwner, err := st.ListRunnableTasks(ctx, p.ID, store.RunnableFilter{Owner: "agent-b", Now: 2_000})
+	require.NoError(t, err)
+	require.Len(t, otherOwner, 1)
+	require.Equal(t, openLow.ID, otherOwner[0].ID)
+
+	sameOwner, err := st.ListRunnableTasks(ctx, p.ID, store.RunnableFilter{Owner: "agent-a", Now: 2_000})
+	require.NoError(t, err)
+	require.Len(t, sameOwner, 2)
+	require.Equal(t, claimedHigh.ID, sameOwner[0].ID)
+
+	expired, err := st.ListRunnableTasks(ctx, p.ID, store.RunnableFilter{Owner: "agent-b", Now: 12_000})
+	require.NoError(t, err)
+	require.Len(t, expired, 2)
+	require.Equal(t, claimedHigh.ID, expired[0].ID)
 }
 
 func TestUpdateTaskIfStateRejectsStaleState(t *testing.T) {
@@ -790,7 +852,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v1, 10, "first open should advance to >=10")
+	require.Equal(t, 11, v1, "first open should advance to latest schema version")
 
 	require.NoError(t, st1.Close())
 
@@ -876,7 +938,7 @@ func TestMigrationAddsDocsTypeWithoutDroppingTaskChildren(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v, 10)
+	require.Equal(t, 11, v)
 
 	got, err := st.GetTask(ctx, "b")
 	require.NoError(t, err)
@@ -950,7 +1012,7 @@ func TestMigrationUpgradesCreatedAndDesignRows(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v, 10, "migration should have run at least through 0010")
+	require.Equal(t, 11, v, "migration should have run through latest schema version")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")

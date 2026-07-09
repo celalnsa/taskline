@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.12.0
+version: 0.13.0
 ---
 
 # taskline — task management for AI agents
@@ -61,10 +61,15 @@ runnable queue": resolve the project from `--project`, `$TASKLINE_PROJECT`,
 or the current repository name when it is unambiguous. If the project
 cannot be resolved, ask only for the project name. Once a project is
 known, export `TASKLINE_PROJECT` for the session or pass `--project`
-on every project-scoped command, then keep pulling
-`taskline task next --format json` after each completed task until it
-returns the literal `null`. Do not stop after one task or one PR unless
-the runnable queue is exhausted or a real blocker prevents progress.
+on every project-scoped command. Before doing queue work, make sure
+the current working directory has an agent identity:
+`taskline register --name <unique-agent-name>`. Then keep pulling
+`taskline task next --claim --format json` after each completed task
+until it returns the literal `null`. A task is not yours until that
+claim command succeeds and the returned `owner` equals the agent name
+registered in this directory. Do not stop after one task or one PR
+unless the runnable queue is exhausted or a real blocker prevents
+progress.
 
 Skip taskline when the user just wants a one-line note, a scratch
 todo, or an answer that doesn't survive past this turn — reply
@@ -75,7 +80,7 @@ follow-up.
 
 ```bash
 export TASKLINE_PROJECT="demo"   # default project so you can omit --project
-export TASKLINE_OWNER="agent-a"   # default owner for multi-agent claim flows
+taskline register --name "agent-a"
 ```
 
 `--project` overrides `$TASKLINE_PROJECT`. A project is referenced by
@@ -83,10 +88,13 @@ export TASKLINE_OWNER="agent-a"   # default owner for multi-agent claim flows
 Export `TASKLINE_PROJECT` once at the start of a session that's
 focused on a single project.
 
-`--owner` overrides `$TASKLINE_OWNER`. Set `TASKLINE_OWNER` once per
-agent/session when multiple agents consume the same project queue. Claiming
-commands require an owner and fail with
-`owner required: pass --owner or set TASKLINE_OWNER` when neither source is set.
+`taskline register --name <agent>` writes `.config/taskline/agent.json`
+in the current working directory. That file contains the bearer token
+used by claim, heartbeat, release, and normal update flows; it is
+intentionally not global because multiple agents may share one machine.
+If a claiming command fails with `agent identity required`, register
+the current directory first. Do not pass or invent owner strings; the
+server derives owner from the registered token.
 
 ## Domain model
 
@@ -125,12 +133,17 @@ further along) when it's ready to be worked.
 
 **Runnable.** A task is runnable when its state is neither `done` nor
 `pending` AND every task it depends on has state `done`. Runnable
-tasks are returned sorted by `priority DESC`, then `created_at ASC`.
-Use `taskline task next` for the single highest-priority runnable
-task. Add repeated `--label` filters to `task next` or
-`task list --runnable` to pull from a labeled subset; labels use AND semantics,
-so `--label backend --label ui` returns tasks that have both labels. Matching
-is case-insensitive, like label deduplication.
+queue-preview commands hide live claims owned by other agents by
+default. A registered agent sees its own live claims first, plus
+unclaimed or lease-expired tasks. Tasks are returned with same-owner
+claims first, then by `priority DESC`, then `created_at ASC`.
+Use `taskline task next --claim` to reserve the single highest-priority
+claimable task before doing any work. Plain `taskline task next` is
+only a preview and must not be treated as permission to start. Add
+repeated `--label` filters to `task next` or `task list --runnable` to
+pull from a labeled subset; labels use AND semantics, so
+`--label backend --label ui` returns tasks that have both labels.
+Matching is case-insensitive, like label deduplication.
 
 **Dependency DAG.** Adding an edge that would close a cycle is
 rejected. Self-deps are rejected. Re-adding an existing edge is a
@@ -161,14 +174,14 @@ taskline task create --project demo --title "later idea" --auto-start=false
 taskline task list --project demo
 taskline task list --project demo --state start,dev,test
 taskline task list --project demo --mine
-taskline task list --project demo --owner agent-a
 taskline task list --project demo --unclaimed
 taskline task list --project demo --runnable --label backend
+taskline task list --project demo --runnable --mine
 
 # Pick / inspect
-taskline task next --project demo            # highest-priority runnable, or null
-taskline task next --project demo --claim --owner agent-a --lease 6h
-taskline task next --project demo --claim --owner agent-a --label backend
+taskline task next --project demo            # preview only; does not reserve work
+taskline task next --project demo --claim --lease 6h
+taskline task next --project demo --claim --label backend
 taskline task search --project demo fc7a0732 # short id / full id / text matches
 taskline task search --project demo "historical context" --limit 10
 taskline task get <id>
@@ -180,14 +193,14 @@ taskline task update <id> --label review --label frontend   # replace labels
 taskline task update <id> --add-label review --remove-label triage
 taskline task update <id> --append-description "new note"
 taskline task update <id> --clear-labels                    # remove labels
-taskline task update <id> --state done --if-state review --owner agent-a
+taskline task update <id> --state done --if-state review
 taskline task update <id> --state pending --force            # manual correction
 taskline task delete <id>                    # cascades deps + attachments
 
 # Multi-agent ownership
-taskline task claim <id> --owner agent-a --lease 2h
-taskline task heartbeat <id> --owner agent-a --lease 6h
-taskline task release <id> --owner agent-a
+taskline task claim <id> --lease 2h
+taskline task heartbeat <id> --lease 6h
+taskline task release <id>
 taskline task release <id> --force           # manual recovery
 
 # Dependencies
@@ -216,27 +229,35 @@ Delete returns `{"deleted": true, "id": ...}`; depend returns
 ### Multi-agent claim flow
 
 Use `task next --claim` when more than one agent may pull from the same
-project. Plain `task next` is intentionally unchanged: it is a read-only
-preview and does **not** reserve work.
+project. Plain `task next` is a read-only preview and does **not**
+reserve work. Never begin implementation from a plain `task next`
+result; claim first.
 
 `task next --claim` atomically selects the highest-priority runnable task,
 sets `owner`, `claimed_at`, and `lease_expires_at`, and returns the claimed
-task. Claimable means runnable and either unclaimed, owned by the same owner, or
-lease-expired. Same-owner claims are preferred so a restarted agent can pick up
-its own unfinished work first.
+task. Claimable means runnable and either unclaimed, owned by the registered
+agent in this directory, or lease-expired. Same-owner claims are preferred so a
+restarted agent can pick up its own unfinished work first.
 
-The default lease is 6h. Use a shorter `--lease` for short tasks. Owner updates
-renew the lease; `task heartbeat <id>` renews without changing task content.
-`task release <id>` gives work back immediately. Expired leases are reclaimed
-without a background worker; the next successful claim/update observes the
-current owner and rejects stale non-owner writes.
+The default lease is 6h. Use a shorter `--lease` for short tasks. Normal
+`task update` commands from a registered directory renew the lease;
+`task heartbeat <id>` renews without changing task content. `task release <id>`
+gives work back immediately. Expired leases are reclaimed without a background
+worker; the next successful claim/update observes the current owner and rejects
+stale non-owner writes.
+
+Do not infer your identity from a returned task's `owner` field. That
+field says who currently owns the task; your identity is the agent
+registered in `.config/taskline/agent.json` under the current working
+directory. If a task is claimed by a different live owner, pull a
+different task with `task next --claim` instead of trying to act as
+that owner.
 
 Use repeated `--label` flags when agents should consume different labeled
 subsets inside one project. Example:
-`task next --claim --owner agent-a --label backend`
-atomically claims only runnable tasks tagged `backend`; adding more
-labels narrows the filter with AND semantics. The same label filter is
-available on `task list --runnable` for previews.
+`task next --claim --label backend` atomically claims only runnable tasks
+tagged `backend`; adding more labels narrows the filter with AND semantics.
+The same label filter is available on `task list --runnable` for previews.
 
 ### Task docs and links
 
@@ -281,11 +302,13 @@ When the user says "work the queue" / "do the next task" / "keep
 going through the backlog", or explicitly invokes this skill without
 more instructions:
 
-1. Run `taskline task next --project <p> --format json`.
+1. Run `taskline task next --project <p> --claim --format json`.
 2. The CLI emits the bare task object (`id`, `title`, `state`, … as
-   top-level fields) on success, or the literal `null` when nothing is
-   runnable. If you see `null`, report there's nothing runnable and
-   stop.
+   top-level fields) on successful claim, or the literal `null` when
+   nothing is currently claimable. If you see `null`, report there's
+   nothing runnable/claimable and stop. If the returned task has an
+   `owner` different from the agent registered in this working
+   directory, stop; that is not your task.
 3. Read `title`, `description`, any `docs`, and any `images`. Each doc
    includes a raw Markdown `url` under `/api/v1/docs/<doc-id>/content`;
    each image includes a `url` under `/api/v1/images/<image-id>`. Fetch
@@ -307,7 +330,7 @@ installed.
 
 ### start → spec
 
-- **Trigger:** you just picked the task off the queue.
+- **Trigger:** you just successfully claimed the task from the queue.
 - **Actions:**
   1. `git checkout main && git pull`
   2. `git checkout -b feature/<short-kebab-slug>` (slug from the title;
@@ -497,9 +520,10 @@ one-line message. The state machine still records what happened.
   existing project (likely what you wanted) or pick a new name.
 - **`error: project required`** — neither `--project` nor
   `$TASKLINE_PROJECT` is set.
-- **`task next` returned `null`** — nothing runnable. Either the
-  project is empty, every non-done task is blocked, or everything
-  left is parked in `pending`. Run
+- **`task next --claim` returned `null`** — nothing is claimable for
+  this registered agent. Either the project is empty, every non-done task is
+  blocked, every available task is claimed by another live owner, or
+  everything left is parked in `pending`. Run
   `taskline task list --project <p> --state pending,start,spec,dev,test,review`
   to see what's stuck and why. Do not automatically move `pending`
   tasks into `start`; promote them only when the task description,

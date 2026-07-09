@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
+	"cli.taskline.dev/client"
 	"github.com/spf13/pflag"
 )
 
@@ -116,10 +118,8 @@ func TestTaskClaimCommandsAndFlagsRegistered(t *testing.T) {
 		flag string
 	}{
 		{name: "next", cmd: taskNextCmd, flag: "claim"},
-		{name: "next", cmd: taskNextCmd, flag: "owner"},
 		{name: "next", cmd: taskNextCmd, flag: "lease"},
 		{name: "update", cmd: taskUpdateCmd, flag: "if-state"},
-		{name: "update", cmd: taskUpdateCmd, flag: "owner"},
 		{name: "update", cmd: taskUpdateCmd, flag: "force"},
 	} {
 		if tc.cmd.Flag(tc.flag) == nil {
@@ -141,12 +141,57 @@ func TestTaskClaimCommandsAndFlagsRegistered(t *testing.T) {
 	}
 }
 
-func TestResolveOwnerPrefersFlagThenEnvironment(t *testing.T) {
-	t.Setenv("TASKLINE_OWNER", "env-owner")
-	if got := resolveOwner("flag-owner"); got != "flag-owner" {
-		t.Fatalf("flag owner should win, got %q", got)
+func TestTaskClaimCommandsDoNotExposeOwnerFlag(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  interface{ Flag(string) *pflag.Flag }
+	}{
+		{name: "next", cmd: taskNextCmd},
+		{name: "update", cmd: taskUpdateCmd},
+		{name: "claim", cmd: taskClaimCmd},
+		{name: "release", cmd: taskReleaseCmd},
+		{name: "heartbeat", cmd: taskHeartbeatCmd},
+	} {
+		if tc.cmd.Flag("owner") != nil {
+			t.Fatalf("task %s should not expose --owner", tc.name)
+		}
 	}
-	if got := resolveOwner(""); got != "env-owner" {
-		t.Fatalf("env owner should be used, got %q", got)
+}
+
+func TestRegisterCommandRegistered(t *testing.T) {
+	found := false
+	for _, cmd := range rootCmd.Commands() {
+		if cmd.Name() == "register" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("register command not registered")
+	}
+	if registerCmd.Flag("name") == nil {
+		t.Fatal("register should expose --name")
+	}
+}
+
+func TestRenderTaskTableShowsOwner(t *testing.T) {
+	var buf bytes.Buffer
+	renderTaskTable(&buf, []client.Task{
+		{
+			ID:       "12345678-1234-1234-1234-123456789abc",
+			State:    "start",
+			Type:     "feature",
+			Priority: 7,
+			Owner:    "juex_main",
+			Title:    "claimed task",
+		},
+	})
+
+	out := buf.String()
+	if !strings.Contains(out, "OWNER") {
+		t.Fatalf("task table should expose OWNER column, got:\n%s", out)
+	}
+	if !strings.Contains(out, "juex_main") {
+		t.Fatalf("task table should show current owner, got:\n%s", out)
 	}
 }

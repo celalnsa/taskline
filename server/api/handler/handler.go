@@ -45,6 +45,8 @@ func (h *Handler) Register(s *server.Hertz) {
 	s.GET("/healthz", h.health)
 
 	v1 := s.Group("/api/v1")
+	v1.POST("/agents/register", h.registerAgent)
+
 	v1.POST("/projects", h.createProject)
 	v1.GET("/projects", h.listProjects)
 
@@ -126,6 +128,29 @@ func (h *Handler) serveUI(_ context.Context, c *app.RequestContext) {
 		return
 	}
 	c.SetStatusCode(http.StatusNotFound)
+}
+
+// ─── Agent handlers ─────────────────────────────────────────────────────
+
+type registerAgentReq struct {
+	Name string `json:"name"`
+}
+
+func (h *Handler) registerAgent(ctx context.Context, c *app.RequestContext) {
+	var req registerAgentReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	reg, err := h.svc.RegisterAgent(ctx, req.Name)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	writeJSON(c, http.StatusCreated, map[string]any{
+		"agent": reg.Agent,
+		"token": reg.Token,
+	})
 }
 
 // ─── Project handlers ───────────────────────────────────────────────────
@@ -252,7 +277,18 @@ func (h *Handler) searchTasks(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) {
 	project := c.Param("project")
-	ts, err := h.svc.ListRunnableTasks(ctx, project, queryLabels(c))
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return
+	}
+	owner := ""
+	if agent != nil {
+		owner = agent.Name
+	}
+	ts, err := h.svc.ListRunnableTasks(ctx, project, service.RunnableOptions{
+		Owner:  owner,
+		Labels: queryLabels(c),
+	})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -265,6 +301,10 @@ func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) 
 func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 	project := c.Param("project")
 	labels := queryLabels(c)
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return
+	}
 	claim, err := parseBoolQueryDefaultFalse(strings.TrimSpace(string(c.Query("claim"))))
 	if err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -272,18 +312,29 @@ func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 	}
 	var t *model.Task
 	if claim {
+		if agent == nil {
+			writeError(c, http.StatusUnauthorized, errors.New("agent token required: run taskline register --name <agent>"))
+			return
+		}
 		lease, parseErr := parseLease(strings.TrimSpace(string(c.Query("lease"))))
 		if parseErr != nil {
 			writeError(c, http.StatusBadRequest, parseErr)
 			return
 		}
 		t, err = h.svc.ClaimNextTask(ctx, project, service.ClaimOptions{
-			Owner:  string(c.Query("owner")),
+			Owner:  agent.Name,
 			Lease:  lease,
 			Labels: labels,
 		})
 	} else {
-		t, err = h.svc.NextRunnableTask(ctx, project, labels)
+		owner := ""
+		if agent != nil {
+			owner = agent.Name
+		}
+		t, err = h.svc.NextRunnableTask(ctx, project, service.RunnableOptions{
+			Owner:  owner,
+			Labels: labels,
+		})
 	}
 	if err != nil {
 		writeServiceError(c, err)
@@ -320,7 +371,6 @@ type updateTaskReq struct {
 	Labels            *[]string    `json:"labels,omitempty"`
 	LabelOps          *labelOpsReq `json:"label_ops,omitempty"`
 	IfState           *string      `json:"if_state,omitempty"`
-	Owner             string       `json:"owner,omitempty"`
 	Force             bool         `json:"force,omitempty"`
 }
 
@@ -380,7 +430,11 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 		st := model.TaskState(*req.IfState)
 		u.IfState = &st
 	}
-	u.Owner = req.Owner
+	if agent, ok := h.optionalAgent(ctx, c); !ok {
+		return
+	} else if agent != nil {
+		u.Owner = agent.Name
+	}
 	u.Force = req.Force
 	t, err := h.svc.UpdateTask(ctx, id, u)
 	if err != nil {
@@ -393,17 +447,19 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 }
 
 type claimTaskReq struct {
-	Owner string `json:"owner,omitempty"`
 	Lease string `json:"lease,omitempty"`
 }
 
 type releaseTaskReq struct {
-	Owner string `json:"owner,omitempty"`
-	Force bool   `json:"force,omitempty"`
+	Force bool `json:"force,omitempty"`
 }
 
 func (h *Handler) claimTask(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	agent, ok := h.requireAgent(ctx, c)
+	if !ok {
+		return
+	}
 	var req claimTaskReq
 	if err := decodeJSON(c, &req); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -414,7 +470,7 @@ func (h *Handler) claimTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
-	t, err := h.svc.ClaimTask(ctx, id, service.ClaimOptions{Owner: req.Owner, Lease: lease})
+	t, err := h.svc.ClaimTask(ctx, id, service.ClaimOptions{Owner: agent.Name, Lease: lease})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -426,6 +482,10 @@ func (h *Handler) claimTask(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) heartbeatTask(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	agent, ok := h.requireAgent(ctx, c)
+	if !ok {
+		return
+	}
 	var req claimTaskReq
 	if err := decodeJSON(c, &req); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -436,7 +496,7 @@ func (h *Handler) heartbeatTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
-	t, err := h.svc.HeartbeatTask(ctx, id, service.ClaimOptions{Owner: req.Owner, Lease: lease})
+	t, err := h.svc.HeartbeatTask(ctx, id, service.ClaimOptions{Owner: agent.Name, Lease: lease})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -453,7 +513,15 @@ func (h *Handler) releaseTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
-	t, err := h.svc.ReleaseTask(ctx, id, service.ReleaseOptions{Owner: req.Owner, Force: req.Force})
+	owner := ""
+	if !req.Force {
+		agent, ok := h.requireAgent(ctx, c)
+		if !ok {
+			return
+		}
+		owner = agent.Name
+	}
+	t, err := h.svc.ReleaseTask(ctx, id, service.ReleaseOptions{Owner: owner, Force: req.Force})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -745,6 +813,48 @@ func (h *Handler) deleteImage(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) health(_ context.Context, c *app.RequestContext) {
 	writeJSON(c, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *Handler) optionalAgent(ctx context.Context, c *app.RequestContext) (*model.Agent, bool) {
+	raw := strings.TrimSpace(string(c.Request.Header.Peek("Authorization")))
+	if raw == "" {
+		return nil, true
+	}
+	token, err := parseBearerToken(raw)
+	if err != nil {
+		writeError(c, http.StatusUnauthorized, err)
+		return nil, false
+	}
+	agent, err := h.svc.ResolveAgentToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(c, http.StatusUnauthorized, errors.New("invalid agent token"))
+			return nil, false
+		}
+		writeServiceError(c, err)
+		return nil, false
+	}
+	return agent, true
+}
+
+func (h *Handler) requireAgent(ctx context.Context, c *app.RequestContext) (*model.Agent, bool) {
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return nil, false
+	}
+	if agent == nil {
+		writeError(c, http.StatusUnauthorized, errors.New("agent token required: run taskline register --name <agent>"))
+		return nil, false
+	}
+	return agent, true
+}
+
+func parseBearerToken(raw string) (string, error) {
+	parts := strings.Fields(raw)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", errors.New("invalid authorization header: expected Bearer token")
+	}
+	return parts[1], nil
 }
 
 func decodeJSON(c *app.RequestContext, dst any) error {

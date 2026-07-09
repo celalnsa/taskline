@@ -48,6 +48,9 @@ var schemaDocsTaskType string
 //go:embed schema/0010_task_claims.sql
 var schemaTaskClaims string
 
+//go:embed schema/0011_task_agents.sql
+var schemaTaskAgents string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -70,6 +73,7 @@ var schemaMigrations = []migration{
 	{version: 8, sql: schemaTaskLabels},
 	{version: 9, sql: schemaDocsTaskType},
 	{version: 10, sql: schemaTaskClaims},
+	{version: 11, sql: schemaTaskAgents},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -340,6 +344,44 @@ func (s *Store) ListProjects(ctx context.Context) ([]*model.Project, error) {
 	return out, rows.Err()
 }
 
+// ─── Agents ─────────────────────────────────────────────────────────────
+
+// RegisterAgent creates a local agent identity or rotates the token hash for
+// an existing agent name. tokenHash must be a one-way hash of the secret token.
+func (s *Store) RegisterAgent(ctx context.Context, name, tokenHash string) (*model.Agent, error) {
+	id := newID()
+	nowMs := now()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO task_agents(id,name,token_hash,created_at,updated_at)
+		VALUES(?,?,?,?,?)
+		ON CONFLICT(name) DO UPDATE SET
+		  token_hash = excluded.token_hash,
+		  updated_at = excluded.updated_at`,
+		id, name, tokenHash, nowMs, nowMs,
+	)
+	if err != nil {
+		if isUniqueErr(err) {
+			return nil, fmt.Errorf("%w: token already registered", ErrConflict)
+		}
+		return nil, err
+	}
+	return s.GetAgentByName(ctx, name)
+}
+
+// GetAgentByName returns an agent by unique name.
+func (s *Store) GetAgentByName(ctx context.Context, name string) (*model.Agent, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id,name,created_at,updated_at FROM task_agents WHERE name = ?`, name)
+	return scanAgent(row)
+}
+
+// GetAgentByTokenHash returns an agent by token hash.
+func (s *Store) GetAgentByTokenHash(ctx context.Context, tokenHash string) (*model.Agent, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id,name,created_at,updated_at FROM task_agents WHERE token_hash = ?`, tokenHash)
+	return scanAgent(row)
+}
+
 // ─── Tasks ──────────────────────────────────────────────────────────────
 
 // CreateTask inserts a new task with the given initial state.
@@ -475,10 +517,21 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	return out, nil
 }
 
-// ListRunnableTasks returns tasks whose state is neither `done` nor
-// `pending` and whose every declared dependency is in state `done`.
-// Sorted priority DESC, created_at ASC.
-func (s *Store) ListRunnableTasks(ctx context.Context, projectID string, labelSets ...[]string) ([]*model.Task, error) {
+// RunnableFilter controls queue-preview reads. Owner narrows results to tasks
+// claimable by that owner: unclaimed, lease-expired, or already claimed by the
+// same owner. With no owner, live claims are hidden.
+type RunnableFilter struct {
+	Owner  string
+	Now    int64
+	Labels []string
+}
+
+// ListRunnableTasks returns tasks whose state is neither `done` nor `pending`,
+// whose every declared dependency is in state `done`, and whose current claim is
+// claimable by the requested owner. Sorted same-owner first, then priority DESC,
+// created_at ASC.
+func (s *Store) ListRunnableTasks(ctx context.Context, projectID string, filters ...RunnableFilter) ([]*model.Task, error) {
+	filter := normalizeRunnableFilter(filters)
 	q := `
 		SELECT ` + taskSelectColumnsT + `
 		  FROM tasks t
@@ -488,14 +541,25 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string, labelSe
 		         SELECT 1 FROM task_deps d
 		           JOIN tasks dt ON dt.id = d.depends_on_task_id
 		          WHERE d.task_id = t.id AND dt.state <> 'done'
-		   )`
-	args := []any{projectID}
+		   )
+		   AND (t.owner = '' OR t.lease_expires_at <= ?`
+	args := []any{projectID, filter.Now}
+	if filter.Owner != "" {
+		q += ` OR t.owner = ?`
+		args = append(args, filter.Owner)
+	}
+	q += `)`
 	var err error
-	q, args, err = appendLabelFilters(q, args, "t.labels", optionalLabels(labelSets))
+	q, args, err = appendLabelFilters(q, args, "t.labels", filter.Labels)
 	if err != nil {
 		return nil, err
 	}
-	q += ` ORDER BY t.priority DESC, t.created_at ASC`
+	if filter.Owner != "" {
+		q += ` ORDER BY CASE WHEN t.owner = ? THEN 0 ELSE 1 END, t.priority DESC, t.created_at ASC`
+		args = append(args, filter.Owner)
+	} else {
+		q += ` ORDER BY t.priority DESC, t.created_at ASC`
+	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -516,6 +580,18 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string, labelSe
 		return nil, err
 	}
 	return out, nil
+}
+
+func normalizeRunnableFilter(filters []RunnableFilter) RunnableFilter {
+	var filter RunnableFilter
+	if len(filters) > 0 {
+		filter = filters[0]
+	}
+	filter.Owner = strings.TrimSpace(filter.Owner)
+	if filter.Now == 0 {
+		filter.Now = now()
+	}
+	return filter
 }
 
 // ClaimOptions controls explicit and next-task claim operations.
@@ -652,7 +728,7 @@ func (s *Store) ClaimTask(ctx context.Context, id string, opts ClaimOptions) (*m
 	if err != nil {
 		return nil, err
 	}
-	return s.updatedTaskOrClaimConflict(ctx, id, res, "task is not claimable")
+	return s.claimTaskOrConflict(ctx, id, res, opts.Now)
 }
 
 // HeartbeatTask renews the lease for the current owner without changing task
@@ -697,6 +773,24 @@ func (s *Store) updatedTaskOrClaimConflict(ctx context.Context, id string, res s
 		return nil, fmt.Errorf("%w: %s", ErrConflict, msg)
 	}
 	return s.GetTask(ctx, id)
+}
+
+func (s *Store) claimTaskOrConflict(ctx context.Context, id string, res sql.Result, nowMs int64) (*model.Task, error) {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		return s.GetTask(ctx, id)
+	}
+	cur, err := s.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if cur.Owner != "" && cur.LeaseExpiresAt > nowMs {
+		return nil, fmt.Errorf("%w: task is already claimed by %s until %d", ErrConflict, cur.Owner, cur.LeaseExpiresAt)
+	}
+	return nil, fmt.Errorf("%w: task is not claimable", ErrConflict)
 }
 
 func normalizeClaimOptions(opts ClaimOptions) ClaimOptions {
@@ -1200,6 +1294,17 @@ func scanProject(r rowScanner) (*model.Project, error) {
 		return nil, err
 	}
 	return &p, nil
+}
+
+func scanAgent(r rowScanner) (*model.Agent, error) {
+	var a model.Agent
+	if err := r.Scan(&a.ID, &a.Name, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &a, nil
 }
 
 func scanTask(r rowScanner) (*model.Task, error) {

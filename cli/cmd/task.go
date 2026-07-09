@@ -57,14 +57,12 @@ func init() {
 	_ = taskCreateCmd.MarkFlagRequired("title")
 
 	taskListCmd.Flags().String("state", "", "comma-separated states to include (default: all)")
-	taskListCmd.Flags().String("owner", "", "filter tasks by owner (or $TASKLINE_OWNER with --mine)")
-	taskListCmd.Flags().Bool("mine", false, "filter tasks owned by $TASKLINE_OWNER")
+	taskListCmd.Flags().Bool("mine", false, "filter tasks owned by the registered agent in this directory")
 	taskListCmd.Flags().Bool("unclaimed", false, "filter tasks with no owner")
 	taskListCmd.Flags().Bool("runnable", false, "list only currently runnable tasks")
 	taskListCmd.Flags().StringArray("label", nil, "filter tasks by label; repeat for AND semantics")
 	taskSearchCmd.Flags().Int("limit", 20, "maximum number of matching tasks")
 	taskNextCmd.Flags().Bool("claim", false, "atomically claim the next runnable task")
-	taskNextCmd.Flags().String("owner", "", "claim owner (or $TASKLINE_OWNER)")
 	taskNextCmd.Flags().String("lease", "", "claim lease duration, e.g. 30m, 2h, 6h (default: server policy)")
 	taskNextCmd.Flags().StringArray("label", nil, "filter by label; repeat for AND semantics")
 
@@ -79,12 +77,8 @@ func init() {
 	taskUpdateCmd.Flags().StringArray("remove-label", nil, "remove task label without replacing other labels (repeatable)")
 	taskUpdateCmd.Flags().Bool("clear-labels", false, "clear all task labels")
 	taskUpdateCmd.Flags().String("if-state", "", "only update if current state still matches")
-	taskUpdateCmd.Flags().String("owner", "", "task owner for claimed-task updates (or $TASKLINE_OWNER)")
 	taskUpdateCmd.Flags().Bool("force", false, "bypass owner guard for manual correction")
 
-	for _, cmd := range []*cobra.Command{taskClaimCmd, taskReleaseCmd, taskHeartbeatCmd} {
-		cmd.Flags().String("owner", "", "task owner (or $TASKLINE_OWNER)")
-	}
 	for _, cmd := range []*cobra.Command{taskClaimCmd, taskHeartbeatCmd} {
 		cmd.Flags().String("lease", "", "lease duration, e.g. 30m, 2h, 6h (default: server policy)")
 	}
@@ -163,23 +157,20 @@ var taskListCmd = &cobra.Command{
 				states = append(states, s)
 			}
 		}
-		ownerFlag, _ := cmd.Flags().GetString("owner")
 		mine, _ := cmd.Flags().GetBool("mine")
 		unclaimed, _ := cmd.Flags().GetBool("unclaimed")
 		runnable, _ := cmd.Flags().GetBool("runnable")
 		labels, _ := cmd.Flags().GetStringArray("label")
-		if ownerFlag != "" && mine {
-			return errors.New("--owner and --mine cannot be used together")
-		}
-		owner := ownerFlag
+		owner := ""
 		if mine {
-			owner = resolveOwner("")
-			if owner == "" {
-				return errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+			id, err := requireIdentity()
+			if err != nil {
+				return err
 			}
+			owner = id.Agent.Name
 		}
 		if owner != "" && unclaimed {
-			return errors.New("--owner/--mine and --unclaimed cannot be used together")
+			return errors.New("--mine and --unclaimed cannot be used together")
 		}
 		c := newClient()
 		var (
@@ -187,10 +178,13 @@ var taskListCmd = &cobra.Command{
 			err error
 		)
 		if runnable {
-			if stateRaw != "" || owner != "" || unclaimed {
-				return errors.New("--runnable cannot be combined with --state, --owner, --mine, or --unclaimed")
+			if stateRaw != "" || unclaimed {
+				return errors.New("--runnable cannot be combined with --state or --unclaimed")
 			}
 			ts, err = c.ListRunnableTasks(project, client.ListRunnableOptions{Labels: labels})
+			if err == nil && owner != "" {
+				ts = filterTasksByOwner(ts, owner)
+			}
 		} else {
 			ts, err = c.ListTasks(project, states, client.ListTaskOptions{Owner: owner, Unclaimed: unclaimed, Labels: labels})
 		}
@@ -234,7 +228,7 @@ var taskSearchCmd = &cobra.Command{
 
 var taskNextCmd = &cobra.Command{
 	Use:   "next",
-	Short: "Return the highest-priority task whose dependencies are all done",
+	Short: "Preview or claim the next task available to this agent",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flagVal, _ := cmd.Flags().GetString("project")
 		project := resolveProject(flagVal)
@@ -242,20 +236,21 @@ var taskNextCmd = &cobra.Command{
 			return errors.New("project required (--project or $TASKLINE_PROJECT)")
 		}
 		claim, _ := cmd.Flags().GetBool("claim")
-		ownerFlag, _ := cmd.Flags().GetString("owner")
 		lease, _ := cmd.Flags().GetString("lease")
 		labels, _ := cmd.Flags().GetStringArray("label")
+		if !claim && lease != "" {
+			return errors.New("--lease requires --claim")
+		}
 		c := newClient()
 		var (
 			t   *client.Task
 			err error
 		)
 		if claim {
-			owner := resolveOwner(ownerFlag)
-			if owner == "" {
-				return errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+			if _, err := requireIdentity(); err != nil {
+				return err
 			}
-			t, err = c.NextRunnableTask(project, client.NextTaskOptions{Claim: true, Owner: owner, Lease: lease, Labels: labels})
+			t, err = c.NextRunnableTask(project, client.NextTaskOptions{Claim: true, Lease: lease, Labels: labels})
 		} else {
 			t, err = c.NextRunnableTask(project, client.NextTaskOptions{Labels: labels})
 		}
@@ -348,14 +343,13 @@ var taskUpdateCmd = &cobra.Command{
 			v, _ := cmd.Flags().GetString("if-state")
 			in.IfState = &v
 		}
-		if cmd.Flags().Changed("owner") {
-			v, _ := cmd.Flags().GetString("owner")
-			in.Owner = resolveOwner(v)
-		} else if envOwner := resolveOwner(""); envOwner != "" {
-			in.Owner = envOwner
-		}
 		force, _ := cmd.Flags().GetBool("force")
 		in.Force = force
+		if !force {
+			if _, err := requireIdentity(); err != nil {
+				return err
+			}
+		}
 		c := newClient()
 		t, err := c.UpdateTask(args[0], in)
 		if err != nil {
@@ -382,17 +376,15 @@ var taskDeleteCmd = &cobra.Command{
 
 var taskClaimCmd = &cobra.Command{
 	Use:   "claim <id>",
-	Short: "Claim a runnable task for this owner",
+	Short: "Claim a runnable task for the registered agent",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ownerFlag, _ := cmd.Flags().GetString("owner")
-		owner := resolveOwner(ownerFlag)
-		if owner == "" {
-			return errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+		if _, err := requireIdentity(); err != nil {
+			return err
 		}
 		lease, _ := cmd.Flags().GetString("lease")
 		c := newClient()
-		t, err := c.ClaimTask(args[0], client.ClaimTaskInput{Owner: owner, Lease: lease})
+		t, err := c.ClaimTask(args[0], client.ClaimTaskInput{Lease: lease})
 		if err != nil {
 			return err
 		}
@@ -407,14 +399,14 @@ var taskReleaseCmd = &cobra.Command{
 	Short: "Release a claimed task",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ownerFlag, _ := cmd.Flags().GetString("owner")
 		force, _ := cmd.Flags().GetBool("force")
-		owner := resolveOwner(ownerFlag)
-		if owner == "" && !force {
-			return errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+		if !force {
+			if _, err := requireIdentity(); err != nil {
+				return err
+			}
 		}
 		c := newClient()
-		t, err := c.ReleaseTask(args[0], client.ReleaseTaskInput{Owner: owner, Force: force})
+		t, err := c.ReleaseTask(args[0], client.ReleaseTaskInput{Force: force})
 		if err != nil {
 			return err
 		}
@@ -429,14 +421,12 @@ var taskHeartbeatCmd = &cobra.Command{
 	Short: "Renew a task claim lease",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ownerFlag, _ := cmd.Flags().GetString("owner")
-		owner := resolveOwner(ownerFlag)
-		if owner == "" {
-			return errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+		if _, err := requireIdentity(); err != nil {
+			return err
 		}
 		lease, _ := cmd.Flags().GetString("lease")
 		c := newClient()
-		t, err := c.HeartbeatTask(args[0], client.HeartbeatTaskInput{Owner: owner, Lease: lease})
+		t, err := c.HeartbeatTask(args[0], client.HeartbeatTaskInput{Lease: lease})
 		if err != nil {
 			return err
 		}
@@ -616,7 +606,7 @@ var taskUnlinkCmd = &cobra.Command{
 
 func renderTaskTable(w io.Writer, ts []client.Task) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tSTATE\tTYPE\tPRIO\tLABELS\tTITLE\tDEPS")
+	fmt.Fprintln(tw, "ID\tSTATE\tTYPE\tPRIO\tOWNER\tLABELS\tTITLE\tDEPS")
 	for _, t := range ts {
 		deps := "-"
 		if len(t.DependsOn) > 0 {
@@ -626,10 +616,31 @@ func renderTaskTable(w io.Writer, ts []client.Task) {
 			}
 			deps = strings.Join(short, ",")
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
-			shortID(t.ID), t.State, t.Type, t.Priority, renderLabels(t.Labels), trimRune(t.Title, 50), deps)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
+			shortID(t.ID), t.State, t.Type, t.Priority, renderOwner(t.Owner), renderLabels(t.Labels), trimRune(t.Title, 50), deps)
 	}
 	tw.Flush()
+}
+
+func filterTasksByOwner(ts []client.Task, owner string) []client.Task {
+	if owner == "" {
+		return ts
+	}
+	filtered := make([]client.Task, 0, len(ts))
+	for _, t := range ts {
+		if t.Owner == owner {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered
+}
+
+func renderOwner(owner string) string {
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return "-"
+	}
+	return trimRune(owner, 24)
 }
 
 func renderLabels(labels []string) string {

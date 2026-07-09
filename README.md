@@ -55,12 +55,13 @@ cp .env.example .env       # only needed first time
 # In another shell — drive via CLI
 export TASKLINE_PROJECT=demo
 ./dist/taskline project create --name demo --description "first one"
+./dist/taskline register --name agent-a
 ./dist/taskline task create --title "first task" --type feature --priority 1 --label onboarding
 # --type accepts feature, bug, or docs
 ./dist/taskline task doc create <task-id> --title Spec --file ./spec.md
 ./dist/taskline task list
-./dist/taskline task next
-./dist/taskline task next --claim --owner agent-a --label onboarding
+./dist/taskline task next                 # preview only; does not reserve work
+./dist/taskline task next --claim --label onboarding
 ./dist/taskline task update <task-id> --add-label review --append-description "checked locally"
 ```
 
@@ -141,12 +142,23 @@ TASKLINE_DOCS_DIR=./.cache/data/docs
 ```bash
 export TASKLINE_SERVER=http://127.0.0.1:8787   # default if unset
 export TASKLINE_PROJECT=demo                   # default --project for task subcommands
-export TASKLINE_OWNER=agent-a                  # default --owner for claim/lease flows
+```
+
+Agent identity is stored per working directory, not globally:
+
+```bash
+taskline register --name agent-a
+# writes .config/taskline/agent.json in the current directory
 ```
 
 `task next` and `task list --runnable` accept repeated `--label` filters with
 AND semantics so multiple agents can consume different labeled subsets from one
-project. Label matching is case-insensitive.
+project. Label matching is case-insensitive. Queue-preview commands hide live
+claims owned by other agents by default; a registered agent also sees its own
+claimed task first so it can resume work after a restart. Use
+`task next --claim` before starting work; plain `task next` is only a preview.
+Claim, heartbeat, release, and normal update flows derive owner from the
+registered token and do not accept an owner flag.
 
 `task update` also supports incremental edits for common agent workflows:
 `--add-label`, `--remove-label`, and `--append-description` avoid replacing the

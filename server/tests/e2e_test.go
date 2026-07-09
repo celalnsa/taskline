@@ -76,6 +76,11 @@ func startServer(t *testing.T) (string, func()) {
 // Returns the HTTP status so callers can assert on it.
 func jsonReq(t *testing.T, method, url string, body any, out any) int {
 	t.Helper()
+	return jsonReqWithToken(t, method, url, body, out, "")
+}
+
+func jsonReqWithToken(t *testing.T, method, url string, body any, out any, token string) int {
+	t.Helper()
 	var rdr io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -87,6 +92,9 @@ func jsonReq(t *testing.T, method, url string, body any, out any) int {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -97,8 +105,28 @@ func jsonReq(t *testing.T, method, url string, body any, out any) int {
 	return resp.StatusCode
 }
 
+func registerAgent(t *testing.T, base, name string) string {
+	t.Helper()
+	var out struct {
+		Agent agent  `json:"agent"`
+		Token string `json:"token"`
+	}
+	st := jsonReq(t, "POST", base+"/api/v1/agents/register", map[string]any{"name": name}, &out)
+	require.Equal(t, http.StatusCreated, st)
+	require.Equal(t, name, out.Agent.Name)
+	require.NotEmpty(t, out.Token)
+	return out.Token
+}
+
 type project struct {
 	ID, Name, Description string
+}
+
+type agent struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 type task struct {
@@ -519,6 +547,8 @@ func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
 func TestTaskClaimLeaseAtAPI(t *testing.T) {
 	base, stop := startServer(t)
 	defer stop()
+	agentAToken := registerAgent(t, base, "agent-a")
+	agentBToken := registerAgent(t, base, "agent-b")
 	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "claims"}, &project{})
 	for _, title := range []string{"first", "second"} {
 		var created task
@@ -528,46 +558,69 @@ func TestTaskClaimLeaseAtAPI(t *testing.T) {
 	}
 
 	st := jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true", nil, nil)
-	require.Equal(t, http.StatusBadRequest, st)
+	require.Equal(t, http.StatusUnauthorized, st)
 
 	var a nextResp
-	st = jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true&owner=agent-a&lease=1h", nil, &a)
+	st = jsonReqWithToken(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true&lease=1h", nil, &a, agentAToken)
 	require.Equal(t, http.StatusOK, st)
 	require.NotNil(t, a.Task)
 	require.Equal(t, "agent-a", a.Task.Owner)
 	require.NotZero(t, a.Task.ClaimedAt)
 	require.NotZero(t, a.Task.LeaseExpiresAt)
 
+	var preview nextResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next", nil, &preview)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, preview.Task)
+	require.NotEqual(t, a.Task.ID, preview.Task.ID)
+	require.Empty(t, preview.Task.Owner)
+
+	st = jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?owner=agent-a", nil, &preview)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, preview.Task)
+	require.NotEqual(t, a.Task.ID, preview.Task.ID)
+	require.Empty(t, preview.Task.Owner)
+
+	st = jsonReqWithToken(t, "GET", base+"/api/v1/projects/claims/tasks/next", nil, &preview, agentAToken)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, preview.Task)
+	require.Equal(t, a.Task.ID, preview.Task.ID)
+	require.Equal(t, "agent-a", preview.Task.Owner)
+
 	var b nextResp
-	st = jsonReq(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true&owner=agent-b&lease=1h", nil, &b)
+	st = jsonReqWithToken(t, "GET", base+"/api/v1/projects/claims/tasks/next?claim=true&lease=1h", nil, &b, agentBToken)
 	require.Equal(t, http.StatusOK, st)
 	require.NotNil(t, b.Task)
 	require.NotEqual(t, a.Task.ID, b.Task.ID)
 	require.Equal(t, "agent-b", b.Task.Owner)
 
-	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
-		map[string]any{"title": "stolen", "owner": "agent-b"}, nil)
+	st = jsonReqWithToken(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
+		map[string]any{"title": "stolen"}, nil, agentBToken)
+	require.Equal(t, http.StatusConflict, st)
+
+	st = jsonReqWithToken(t, "POST", base+"/api/v1/tasks/"+a.Task.ID+"/claim",
+		map[string]any{"lease": "1h"}, nil, agentBToken)
 	require.Equal(t, http.StatusConflict, st)
 
 	var heartbeat task
-	st = jsonReq(t, "POST", base+"/api/v1/tasks/"+a.Task.ID+"/heartbeat",
-		map[string]any{"owner": "agent-a", "lease": "2h"}, &heartbeat)
+	st = jsonReqWithToken(t, "POST", base+"/api/v1/tasks/"+a.Task.ID+"/heartbeat",
+		map[string]any{"lease": "2h"}, &heartbeat, agentAToken)
 	require.Equal(t, http.StatusOK, st)
 	require.Equal(t, "agent-a", heartbeat.Owner)
 	require.Greater(t, heartbeat.LeaseExpiresAt, a.Task.LeaseExpiresAt)
 
 	var updated task
-	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
-		map[string]any{"state": "done", "if_state": "start", "owner": "agent-a"}, &updated)
+	st = jsonReqWithToken(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
+		map[string]any{"state": "done", "if_state": "start"}, &updated, agentAToken)
 	require.Equal(t, http.StatusOK, st)
 	require.Equal(t, "done", updated.State)
 
-	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+b.Task.ID,
-		map[string]any{"state": "done", "if_state": "review", "owner": "agent-b"}, nil)
+	st = jsonReqWithToken(t, "PATCH", base+"/api/v1/tasks/"+b.Task.ID,
+		map[string]any{"state": "done", "if_state": "review"}, nil, agentBToken)
 	require.Equal(t, http.StatusConflict, st)
 
-	st = jsonReq(t, "POST", base+"/api/v1/tasks/"+b.Task.ID+"/release",
-		map[string]any{"owner": "agent-a"}, nil)
+	st = jsonReqWithToken(t, "POST", base+"/api/v1/tasks/"+b.Task.ID+"/release",
+		map[string]any{}, nil, agentAToken)
 	require.Equal(t, http.StatusConflict, st)
 
 	var released task
@@ -594,6 +647,8 @@ func TestTaskClaimLeaseAtAPI(t *testing.T) {
 func TestLabelFilteredRunnableTasksAtAPI(t *testing.T) {
 	base, stop := startServer(t)
 	defer stop()
+	agentAToken := registerAgent(t, base, "agent-a")
+	agentBToken := registerAgent(t, base, "agent-b")
 	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "label-filters"}, &project{})
 
 	var backendOnly, urgentBackend, urgentFrontend, blocked task
@@ -623,22 +678,22 @@ func TestLabelFilteredRunnableTasksAtAPI(t *testing.T) {
 	require.Equal(t, urgentBackend.ID, runnable.Tasks[0].ID)
 
 	var a nextResp
-	st = jsonReq(t, "GET", base+"/api/v1/projects/label-filters/tasks/next?claim=true&owner=agent-a&label=backend&label=urgent", nil, &a)
+	st = jsonReqWithToken(t, "GET", base+"/api/v1/projects/label-filters/tasks/next?claim=true&label=backend&label=urgent", nil, &a, agentAToken)
 	require.Equal(t, http.StatusOK, st)
 	require.NotNil(t, a.Task)
 	require.Equal(t, urgentBackend.ID, a.Task.ID)
 	require.Equal(t, "agent-a", a.Task.Owner)
 
 	var b nextResp
-	st = jsonReq(t, "GET", base+"/api/v1/projects/label-filters/tasks/next?claim=true&owner=agent-b&label=frontend&label=urgent", nil, &b)
+	st = jsonReqWithToken(t, "GET", base+"/api/v1/projects/label-filters/tasks/next?claim=true&label=frontend&label=urgent", nil, &b, agentBToken)
 	require.Equal(t, http.StatusOK, st)
 	require.NotNil(t, b.Task)
 	require.Equal(t, urgentFrontend.ID, b.Task.ID)
 	require.Equal(t, "agent-b", b.Task.Owner)
 
 	var done task
-	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
-		map[string]any{"state": "done", "owner": "agent-a"}, &done)
+	st = jsonReqWithToken(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
+		map[string]any{"state": "done"}, &done, agentAToken)
 	require.Equal(t, http.StatusOK, st)
 
 	var withEdge task

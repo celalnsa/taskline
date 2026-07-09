@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"cli.taskline.dev/client"
+	"cli.taskline.dev/internal/identity"
 )
 
 var (
@@ -32,9 +33,10 @@ a TTY, exit codes are stable, stderr is reserved for diagnostics.
 Environment:
   TASKLINE_SERVER   — base URL of taskline-server (default http://127.0.0.1:8787)
   TASKLINE_PROJECT  — default project (id or name); --project flag overrides
-  TASKLINE_OWNER    — default multi-agent owner; --owner flag overrides
+  Agent identity is loaded from .config/taskline/agent.json in the current directory
 
 Examples:
+  taskline register --name agent-a
   taskline project create --name demo
   taskline task create --project demo --title "first task" --type feature
   taskline task list --project demo --state start,dev,test
@@ -61,6 +63,15 @@ func Execute() {
 
 // newClient resolves --server flag → $TASKLINE_SERVER → default.
 func newClient() *client.Client {
+	url := resolveServer()
+	c := client.New(url)
+	if id, ok, err := identity.Load(url); err == nil && ok {
+		c.Token = id.Token
+	}
+	return c
+}
+
+func resolveServer() string {
 	url := serverFlag
 	if url == "" {
 		url = os.Getenv("TASKLINE_SERVER")
@@ -68,7 +79,19 @@ func newClient() *client.Client {
 	if url == "" {
 		url = "http://127.0.0.1:8787"
 	}
-	return client.New(url)
+	return url
+}
+
+func requireIdentity() (*identity.Identity, error) {
+	url := resolveServer()
+	id, ok, err := identity.Load(url)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("agent identity required: run taskline register --name <agent> in this directory")
+	}
+	return id, nil
 }
 
 // resolveProject returns --project flag → $TASKLINE_PROJECT → "".
@@ -78,13 +101,4 @@ func resolveProject(flagVal string) string {
 		return flagVal
 	}
 	return os.Getenv("TASKLINE_PROJECT")
-}
-
-// resolveOwner returns --owner flag → $TASKLINE_OWNER → "".
-// Caller errors when an owner is required.
-func resolveOwner(flagVal string) string {
-	if flagVal != "" {
-		return flagVal
-	}
-	return os.Getenv("TASKLINE_OWNER")
 }

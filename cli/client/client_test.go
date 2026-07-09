@@ -219,15 +219,49 @@ func TestSearchTasksClientEncodesQueryAndLimit(t *testing.T) {
 	}
 }
 
+func TestRegisterAgentClientPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/agents/register" {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
+			return
+		}
+		var in client.RegisterAgentInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			t.Fatalf("decode register input: %v", err)
+		}
+		if in.Name != "agent-a" {
+			t.Fatalf("unexpected register input: %#v", in)
+		}
+		_ = json.NewEncoder(w).Encode(client.RegisterAgentOutput{
+			Agent: client.Agent{ID: "agent-id", Name: in.Name},
+			Token: "tl_agent_token",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	out, err := c.RegisterAgent(client.RegisterAgentInput{Name: "agent-a"})
+	if err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+	if out.Agent.Name != "agent-a" || out.Token != "tl_agent_token" {
+		t.Fatalf("unexpected register output: %#v", out)
+	}
+}
+
 func TestTaskClaimClientPayloads(t *testing.T) {
 	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = append(seen, r.Method+" "+r.URL.String())
 		w.Header().Set("Content-Type", "application/json")
+		if got := r.Header.Get("Authorization"); got != "Bearer agent-token" {
+			t.Fatalf("Authorization = %q", got)
+		}
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/demo/tasks/next":
 			q := r.URL.Query()
-			if q.Get("claim") != "true" || q.Get("owner") != "agent-a" || q.Get("lease") != "30m" {
+			if q.Get("claim") != "true" || q.Get("owner") != "" || q.Get("lease") != "30m" {
 				t.Fatalf("unexpected next claim query: %s", r.URL.RawQuery)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"task": client.Task{
@@ -239,25 +273,25 @@ func TestTaskClaimClientPayloads(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 				t.Fatalf("decode claim input: %v", err)
 			}
-			if in.Owner != "agent-b" || in.Lease != "2h" {
+			if in.Lease != "2h" {
 				t.Fatalf("unexpected claim input: %#v", in)
 			}
-			_ = json.NewEncoder(w).Encode(client.Task{ID: "task-one", Owner: in.Owner})
+			_ = json.NewEncoder(w).Encode(client.Task{ID: "task-one", Owner: "agent-b"})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/task-one/heartbeat":
 			var in client.HeartbeatTaskInput
 			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 				t.Fatalf("decode heartbeat input: %v", err)
 			}
-			if in.Owner != "agent-b" || in.Lease != "3h" {
+			if in.Lease != "3h" {
 				t.Fatalf("unexpected heartbeat input: %#v", in)
 			}
-			_ = json.NewEncoder(w).Encode(client.Task{ID: "task-one", Owner: in.Owner})
+			_ = json.NewEncoder(w).Encode(client.Task{ID: "task-one", Owner: "agent-b"})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/task-one/release":
 			var in client.ReleaseTaskInput
 			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 				t.Fatalf("decode release input: %v", err)
 			}
-			if in.Owner != "agent-b" || !in.Force {
+			if !in.Force {
 				t.Fatalf("unexpected release input: %#v", in)
 			}
 			_ = json.NewEncoder(w).Encode(client.Task{ID: "task-one"})
@@ -266,7 +300,7 @@ func TestTaskClaimClientPayloads(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 				t.Fatalf("decode update input: %v", err)
 			}
-			if in.IfState == nil || *in.IfState != "start" || in.Owner != "agent-b" || !in.Force {
+			if in.IfState == nil || *in.IfState != "start" || !in.Force {
 				t.Fatalf("unexpected update input: %#v", in)
 			}
 			_ = json.NewEncoder(w).Encode(client.Task{ID: "task-one", State: "done"})
@@ -277,29 +311,30 @@ func TestTaskClaimClientPayloads(t *testing.T) {
 	defer srv.Close()
 
 	c := client.New(srv.URL)
-	next, err := c.NextRunnableTask("demo", client.NextTaskOptions{Claim: true, Owner: "agent-a", Lease: "30m"})
+	c.Token = "agent-token"
+	next, err := c.NextRunnableTask("demo", client.NextTaskOptions{Claim: true, Lease: "30m"})
 	if err != nil {
 		t.Fatalf("NextRunnableTask claim: %v", err)
 	}
 	if next == nil || next.Owner != "agent-a" || next.ClaimedAt != 1000 || next.LeaseExpiresAt != 2000 {
 		t.Fatalf("unexpected next claim task: %#v", next)
 	}
-	if _, err := c.ClaimTask("task-one", client.ClaimTaskInput{Owner: "agent-b", Lease: "2h"}); err != nil {
+	if _, err := c.ClaimTask("task-one", client.ClaimTaskInput{Lease: "2h"}); err != nil {
 		t.Fatalf("ClaimTask: %v", err)
 	}
-	if _, err := c.HeartbeatTask("task-one", client.HeartbeatTaskInput{Owner: "agent-b", Lease: "3h"}); err != nil {
+	if _, err := c.HeartbeatTask("task-one", client.HeartbeatTaskInput{Lease: "3h"}); err != nil {
 		t.Fatalf("HeartbeatTask: %v", err)
 	}
-	if _, err := c.ReleaseTask("task-one", client.ReleaseTaskInput{Owner: "agent-b", Force: true}); err != nil {
+	if _, err := c.ReleaseTask("task-one", client.ReleaseTaskInput{Force: true}); err != nil {
 		t.Fatalf("ReleaseTask: %v", err)
 	}
 	ifState := "start"
-	if _, err := c.UpdateTask("task-one", client.UpdateTaskInput{IfState: &ifState, Owner: "agent-b", Force: true}); err != nil {
+	if _, err := c.UpdateTask("task-one", client.UpdateTaskInput{IfState: &ifState, Force: true}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 
 	want := []string{
-		"GET /api/v1/projects/demo/tasks/next?claim=true&lease=30m&owner=agent-a",
+		"GET /api/v1/projects/demo/tasks/next?claim=true&lease=30m",
 		"POST /api/v1/tasks/task-one/claim",
 		"POST /api/v1/tasks/task-one/heartbeat",
 		"POST /api/v1/tasks/task-one/release",
@@ -329,13 +364,13 @@ func TestLabelFilteredClientPayloads(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"tasks": []client.Task{{ID: "task-one"}}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/demo/tasks/runnable":
 			q := r.URL.Query()
-			if q["label"][0] != "backend" || q["label"][1] != "urgent" {
+			if q["label"][0] != "backend" || q["label"][1] != "urgent" || q.Get("owner") != "" {
 				t.Fatalf("unexpected runnable labels: %s", r.URL.RawQuery)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"tasks": []client.Task{{ID: "task-one"}}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/demo/tasks/next":
 			q := r.URL.Query()
-			if q.Get("claim") != "true" || q.Get("owner") != "agent-a" || q["label"][0] != "backend" || q["label"][1] != "urgent" {
+			if q.Get("claim") != "true" || q.Get("owner") != "" || q["label"][0] != "backend" || q["label"][1] != "urgent" {
 				t.Fatalf("unexpected next labels: %s", r.URL.RawQuery)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"task": client.Task{ID: "task-one"}})
@@ -363,7 +398,7 @@ func TestLabelFilteredClientPayloads(t *testing.T) {
 	if _, err := c.ListRunnableTasks("demo", client.ListRunnableOptions{Labels: []string{"backend", "urgent"}}); err != nil {
 		t.Fatalf("ListRunnableTasks: %v", err)
 	}
-	if _, err := c.NextRunnableTask("demo", client.NextTaskOptions{Claim: true, Owner: "agent-a", Labels: []string{"backend", "urgent"}}); err != nil {
+	if _, err := c.NextRunnableTask("demo", client.NextTaskOptions{Claim: true, Labels: []string{"backend", "urgent"}}); err != nil {
 		t.Fatalf("NextRunnableTask: %v", err)
 	}
 	if err := c.AddDependency("task-one", "dep-one"); err != nil {
@@ -373,7 +408,7 @@ func TestLabelFilteredClientPayloads(t *testing.T) {
 	want := []string{
 		"GET /api/v1/projects/demo/tasks?label=backend&label=urgent",
 		"GET /api/v1/projects/demo/tasks/runnable?label=backend&label=urgent",
-		"GET /api/v1/projects/demo/tasks/next?claim=true&label=backend&label=urgent&owner=agent-a",
+		"GET /api/v1/projects/demo/tasks/next?claim=true&label=backend&label=urgent",
 		"POST /api/v1/tasks/task-one/deps",
 	}
 	if len(seen) != len(want) {
