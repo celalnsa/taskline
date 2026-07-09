@@ -687,6 +687,28 @@ func TestTaskLabelsAtAPI(t *testing.T) {
 	require.NotNil(t, next.Task)
 	require.Equal(t, []string{"backend", "UI"}, next.Task.Labels)
 
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{
+			"label_ops":          map[string]any{"add": []string{"review", "backend"}, "remove": []string{"UI"}},
+			"description_append": "first note",
+		}, &tk)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, []string{"backend", "review"}, tk.Labels)
+	require.Equal(t, "first note", tk.Description)
+
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"description_append": "second note"}, &tk)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, "first note\n\nsecond note", tk.Description)
+
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"labels": []string{"replace"}, "label_ops": map[string]any{"add": []string{"extra"}}}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
+		map[string]any{"description": "replace", "description_append": "append"}, nil)
+	require.Equal(t, http.StatusBadRequest, st)
+
 	var updated task
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
 		map[string]any{"labels": []string{" review ", "Frontend"}}, &updated)

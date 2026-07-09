@@ -76,8 +76,17 @@ func TestTaskLabelFlagsRegistered(t *testing.T) {
 	if taskUpdateCmd.Flag("label") == nil {
 		t.Fatal("task update should expose repeatable --label flag")
 	}
+	if taskUpdateCmd.Flag("add-label") == nil {
+		t.Fatal("task update should expose repeatable --add-label flag")
+	}
+	if taskUpdateCmd.Flag("remove-label") == nil {
+		t.Fatal("task update should expose repeatable --remove-label flag")
+	}
 	if taskUpdateCmd.Flag("clear-labels") == nil {
 		t.Fatal("task update should expose --clear-labels flag")
+	}
+	if taskUpdateCmd.Flag("append-description") == nil {
+		t.Fatal("task update should expose --append-description flag")
 	}
 }
 

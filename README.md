@@ -61,6 +61,7 @@ export TASKLINE_PROJECT=demo
 ./dist/taskline task list
 ./dist/taskline task next
 ./dist/taskline task next --claim --owner agent-a --label onboarding
+./dist/taskline task update <task-id> --add-label review --append-description "checked locally"
 ```
 
 ## Web UI
@@ -146,6 +147,10 @@ export TASKLINE_OWNER=agent-a                  # default --owner for claim/lease
 `task next` and `task list --runnable` accept repeated `--label` filters with
 AND semantics so multiple agents can consume different labeled subsets from one
 project. Label matching is case-insensitive.
+
+`task update` also supports incremental edits for common agent workflows:
+`--add-label`, `--remove-label`, and `--append-description` avoid replacing the
+entire label set or description.
 
 ## Tests
 
