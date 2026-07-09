@@ -75,12 +75,18 @@ follow-up.
 
 ```bash
 export TASKLINE_PROJECT="demo"   # default project so you can omit --project
+export TASKLINE_OWNER="agent-a"   # default owner for multi-agent claim flows
 ```
 
 `--project` overrides `$TASKLINE_PROJECT`. A project is referenced by
 **name** (`demo`) or **id** (`9b…uuid`) — both work everywhere.
 Export `TASKLINE_PROJECT` once at the start of a session that's
 focused on a single project.
+
+`--owner` overrides `$TASKLINE_OWNER`. Set `TASKLINE_OWNER` once per
+agent/session when multiple agents consume the same project queue. Claiming
+commands require an owner and fail with
+`owner required: pass --owner or set TASKLINE_OWNER` when neither source is set.
 
 ## Domain model
 
@@ -94,6 +100,9 @@ focused on a single project.
 | `state`       | `pending`, `start`, `spec`, `dev`, `test`, `review`, `done`                |
 | `priority`    | integer; **higher = runs sooner** (default 0)                              |
 | `labels`      | task-local GitHub-style text labels, ordered and deduped by the server     |
+| `owner`       | optional multi-agent owner; empty means unclaimed                          |
+| `claimed_at`  | unix milliseconds when the current owner claimed the task                  |
+| `lease_expires_at` | unix milliseconds when the current owner lease expires              |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
 | `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |
@@ -148,9 +157,13 @@ taskline task create --project demo --title "later idea" --auto-start=false
 # List (filter by state with comma-separated names)
 taskline task list --project demo
 taskline task list --project demo --state start,dev,test
+taskline task list --project demo --mine
+taskline task list --project demo --owner agent-a
+taskline task list --project demo --unclaimed
 
 # Pick / inspect
 taskline task next --project demo            # highest-priority runnable, or null
+taskline task next --project demo --claim --owner agent-a --lease 6h
 taskline task search --project demo fc7a0732 # short id / full id / text matches
 taskline task search --project demo "historical context" --limit 10
 taskline task get <id>
@@ -160,7 +173,15 @@ taskline task update <id> --state test
 taskline task update <id> --priority 5 --description "new prose"
 taskline task update <id> --label review --label frontend   # replace labels
 taskline task update <id> --clear-labels                    # remove labels
+taskline task update <id> --state done --if-state review --owner agent-a
+taskline task update <id> --state pending --force            # manual correction
 taskline task delete <id>                    # cascades deps + attachments
+
+# Multi-agent ownership
+taskline task claim <id> --owner agent-a --lease 2h
+taskline task heartbeat <id> --owner agent-a --lease 6h
+taskline task release <id> --owner agent-a
+taskline task release <id> --force           # manual recovery
 
 # Dependencies
 taskline task depend <id> --on <other-id>
@@ -184,6 +205,24 @@ taskline task unlink <link-id>
 
 Delete returns `{"deleted": true, "id": ...}`; depend returns
 `{"task_id": ..., "depends_on": [...]}`. Pipe to `jq` freely.
+
+### Multi-agent claim flow
+
+Use `task next --claim` when more than one agent may pull from the same
+project. Plain `task next` is intentionally unchanged: it is a read-only
+preview and does **not** reserve work.
+
+`task next --claim` atomically selects the highest-priority runnable task,
+sets `owner`, `claimed_at`, and `lease_expires_at`, and returns the claimed
+task. Claimable means runnable and either unclaimed, owned by the same owner, or
+lease-expired. Same-owner claims are preferred so a restarted agent can pick up
+its own unfinished work first.
+
+The default lease is 6h. Use a shorter `--lease` for short tasks. Owner updates
+renew the lease; `task heartbeat <id>` renews without changing task content.
+`task release <id>` gives work back immediately. Expired leases are reclaimed
+without a background worker; the next successful claim/update observes the
+current owner and rejects stale non-owner writes.
 
 ### Task docs and links
 

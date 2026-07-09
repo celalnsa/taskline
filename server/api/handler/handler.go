@@ -11,6 +11,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
@@ -56,6 +57,9 @@ func (h *Handler) Register(s *server.Hertz) {
 	v1.GET("/tasks/:id", h.getTask)
 	v1.PATCH("/tasks/:id", h.updateTask)
 	v1.DELETE("/tasks/:id", h.deleteTask)
+	v1.POST("/tasks/:id/claim", h.claimTask)
+	v1.POST("/tasks/:id/release", h.releaseTask)
+	v1.POST("/tasks/:id/heartbeat", h.heartbeatTask)
 	v1.POST("/tasks/:id/deps", h.addDependency)
 	v1.DELETE("/tasks/:id/deps/:dependsOn", h.deleteDependency)
 	v1.POST("/tasks/:id/images", h.uploadImage)
@@ -198,7 +202,19 @@ func (h *Handler) listTasks(ctx context.Context, c *app.RequestContext) {
 			}
 		}
 	}
-	ts, err := h.svc.ListTasks(ctx, project, states)
+	opts := service.TaskListOptions{States: states}
+	if raw := strings.TrimSpace(string(c.Query("owner"))); raw != "" {
+		opts.Owner = &raw
+	}
+	if raw := strings.TrimSpace(string(c.Query("unclaimed"))); raw != "" {
+		unclaimed, err := parseBoolQuery(raw)
+		if err != nil {
+			writeError(c, http.StatusBadRequest, err)
+			return
+		}
+		opts.Unclaimed = unclaimed
+	}
+	ts, err := h.svc.ListTasksFiltered(ctx, project, opts)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -248,7 +264,25 @@ func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) 
 
 func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 	project := c.Param("project")
-	t, err := h.svc.NextRunnableTask(ctx, project)
+	claim, err := parseBoolQueryDefaultFalse(strings.TrimSpace(string(c.Query("claim"))))
+	if err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	var t *model.Task
+	if claim {
+		lease, parseErr := parseLease(strings.TrimSpace(string(c.Query("lease"))))
+		if parseErr != nil {
+			writeError(c, http.StatusBadRequest, parseErr)
+			return
+		}
+		t, err = h.svc.ClaimNextTask(ctx, project, service.ClaimOptions{
+			Owner: string(c.Query("owner")),
+			Lease: lease,
+		})
+	} else {
+		t, err = h.svc.NextRunnableTask(ctx, project)
+	}
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -281,6 +315,9 @@ type updateTaskReq struct {
 	State       *string   `json:"state,omitempty"`
 	Priority    *int      `json:"priority,omitempty"`
 	Labels      *[]string `json:"labels,omitempty"`
+	IfState     *string   `json:"if_state,omitempty"`
+	Owner       string    `json:"owner,omitempty"`
+	Force       bool      `json:"force,omitempty"`
 }
 
 func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
@@ -311,7 +348,84 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 	if req.Labels != nil {
 		u.Labels = req.Labels
 	}
+	if req.IfState != nil {
+		st := model.TaskState(*req.IfState)
+		u.IfState = &st
+	}
+	u.Owner = req.Owner
+	u.Force = req.Force
 	t, err := h.svc.UpdateTask(ctx, id, u)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	h.attachments.AttachTaskImageURLs(t)
+	h.attachments.AttachTaskDocURLs(t)
+	writeJSON(c, http.StatusOK, t)
+}
+
+type claimTaskReq struct {
+	Owner string `json:"owner,omitempty"`
+	Lease string `json:"lease,omitempty"`
+}
+
+type releaseTaskReq struct {
+	Owner string `json:"owner,omitempty"`
+	Force bool   `json:"force,omitempty"`
+}
+
+func (h *Handler) claimTask(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	var req claimTaskReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	lease, err := parseLease(req.Lease)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	t, err := h.svc.ClaimTask(ctx, id, service.ClaimOptions{Owner: req.Owner, Lease: lease})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	h.attachments.AttachTaskImageURLs(t)
+	h.attachments.AttachTaskDocURLs(t)
+	writeJSON(c, http.StatusOK, t)
+}
+
+func (h *Handler) heartbeatTask(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	var req claimTaskReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	lease, err := parseLease(req.Lease)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	t, err := h.svc.HeartbeatTask(ctx, id, service.ClaimOptions{Owner: req.Owner, Lease: lease})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	h.attachments.AttachTaskImageURLs(t)
+	h.attachments.AttachTaskDocURLs(t)
+	writeJSON(c, http.StatusOK, t)
+}
+
+func (h *Handler) releaseTask(ctx context.Context, c *app.RequestContext) {
+	id := c.Param("id")
+	var req releaseTaskReq
+	if err := decodeJSON(c, &req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	t, err := h.svc.ReleaseTask(ctx, id, service.ReleaseOptions{Owner: req.Owner, Force: req.Force})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -627,6 +741,39 @@ func writeJSON(c *app.RequestContext, status int, body any) {
 
 func writeError(c *app.RequestContext, status int, err error) {
 	writeJSON(c, status, map[string]any{"error": err.Error()})
+}
+
+func parseBoolQueryDefaultFalse(raw string) (bool, error) {
+	if raw == "" {
+		return false, nil
+	}
+	return parseBoolQuery(raw)
+}
+
+func parseBoolQuery(raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean query value %q", raw)
+	}
+}
+
+func parseLease(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid lease duration %q", raw)
+	}
+	if d < time.Millisecond {
+		return 0, errors.New("lease must be positive")
+	}
+	return d, nil
 }
 
 // writeServiceError maps service-layer errors to HTTP statuses.

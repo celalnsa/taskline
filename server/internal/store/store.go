@@ -45,6 +45,9 @@ var schemaTaskLabels string
 //go:embed schema/0009_docs_task_type.sql
 var schemaDocsTaskType string
 
+//go:embed schema/0010_task_claims.sql
+var schemaTaskClaims string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -66,6 +69,7 @@ var schemaMigrations = []migration{
 	{version: 7, sql: schemaTaskDocs},
 	{version: 8, sql: schemaTaskLabels},
 	{version: 9, sql: schemaDocsTaskType},
+	{version: 10, sql: schemaTaskClaims},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -167,6 +171,11 @@ const (
 	maxTaskLabels      = 20
 	maxTaskLabelRunes  = 64
 	emptyTaskLabelsRaw = "[]"
+)
+
+const (
+	taskSelectColumns  = `id,project_id,title,description,type,state,priority,labels,owner,claimed_at,lease_expires_at,created_at,updated_at`
+	taskSelectColumnsT = `t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.labels,t.owner,t.claimed_at,t.lease_expires_at,t.created_at,t.updated_at`
 )
 
 func optionalLabels(labels [][]string) []string {
@@ -328,7 +337,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 // GetTask returns a single task with its dependencies and attachments.
 func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id,project_id,title,description,type,state,priority,labels,created_at,updated_at
+		`SELECT `+taskSelectColumns+`
 		   FROM tasks WHERE id = ?`, id)
 	t, err := scanTask(row)
 	if err != nil {
@@ -353,6 +362,8 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 type TaskFilter struct {
 	ProjectID string            // required
 	States    []model.TaskState // empty = all states
+	Owner     *string           // nil = any owner
+	Unclaimed bool              // true = owner is empty
 }
 
 // ListTasks returns tasks for a project, optionally filtered by state.
@@ -361,7 +372,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	if f.ProjectID == "" {
 		return nil, errors.New("ListTasks: ProjectID required")
 	}
-	q := `SELECT id,project_id,title,description,type,state,priority,labels,created_at,updated_at
+	if f.Owner != nil && f.Unclaimed {
+		return nil, errors.New("ListTasks: Owner and Unclaimed are mutually exclusive")
+	}
+	q := `SELECT ` + taskSelectColumns + `
 	        FROM tasks WHERE project_id = ?`
 	args := []any{f.ProjectID}
 	if len(f.States) > 0 {
@@ -374,6 +388,13 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 			args = append(args, st)
 		}
 		q += ")"
+	}
+	if f.Owner != nil {
+		q += " AND owner = ?"
+		args = append(args, *f.Owner)
+	}
+	if f.Unclaimed {
+		q += " AND owner = ''"
 	}
 	q += " ORDER BY priority DESC, created_at ASC"
 
@@ -404,7 +425,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 // Sorted priority DESC, created_at ASC.
 func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*model.Task, error) {
 	q := `
-		SELECT t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.labels,t.created_at,t.updated_at
+		SELECT ` + taskSelectColumnsT + `
 		  FROM tasks t
 		 WHERE t.project_id = ?
 		   AND t.state NOT IN ('done','pending')
@@ -436,14 +457,210 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*mod
 	return out, nil
 }
 
+// ClaimOptions controls explicit and next-task claim operations.
+type ClaimOptions struct {
+	Owner          string
+	Now            int64
+	LeaseExpiresAt int64
+}
+
+// HeartbeatOptions controls no-op lease renewal.
+type HeartbeatOptions struct {
+	Owner          string
+	Now            int64
+	LeaseExpiresAt int64
+}
+
+// ReleaseOptions controls claim release.
+type ReleaseOptions struct {
+	Owner string
+	Force bool
+	Now   int64
+}
+
+// ClaimNextTask atomically claims the highest-priority runnable task available
+// to opts.Owner. Existing read-only NextRunnableTask behavior is intentionally
+// separate.
+func (s *Store) ClaimNextTask(ctx context.Context, projectID string, opts ClaimOptions) (*model.Task, error) {
+	if projectID == "" {
+		return nil, errors.New("ClaimNextTask: ProjectID required")
+	}
+	opts = normalizeClaimOptions(opts)
+	for attempts := 0; attempts < 3; attempts++ {
+		id, err := s.claimNextTaskID(ctx, projectID, opts)
+		if err != nil {
+			if errors.Is(err, ErrConflict) {
+				continue
+			}
+			return nil, err
+		}
+		if id == "" {
+			return nil, nil
+		}
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return task, nil
+	}
+	return nil, fmt.Errorf("%w: could not claim runnable task", ErrConflict)
+}
+
+func (s *Store) claimNextTaskID(ctx context.Context, projectID string, opts ClaimOptions) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var id string
+	err = tx.QueryRowContext(ctx, `
+		SELECT t.id
+		  FROM tasks t
+		 WHERE t.project_id = ?
+		   AND t.state NOT IN ('done','pending')
+		   AND NOT EXISTS (
+		         SELECT 1 FROM task_deps d
+		           JOIN tasks dt ON dt.id = d.depends_on_task_id
+		          WHERE d.task_id = t.id AND dt.state <> 'done'
+		   )
+		   AND (t.owner = '' OR t.owner = ? OR t.lease_expires_at <= ?)
+		 ORDER BY CASE WHEN t.owner = ? THEN 0 ELSE 1 END, t.priority DESC, t.created_at ASC
+		 LIMIT 1`,
+		projectID, opts.Owner, opts.Now, opts.Owner,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE tasks
+		   SET owner = ?, claimed_at = ?, lease_expires_at = ?, updated_at = ?
+		 WHERE id = ?
+		   AND (owner = '' OR owner = ? OR lease_expires_at <= ?)`,
+		opts.Owner, opts.Now, opts.LeaseExpiresAt, opts.Now,
+		id, opts.Owner, opts.Now,
+	)
+	if err != nil {
+		return "", err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", fmt.Errorf("%w: selected task was claimed concurrently", ErrConflict)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// ClaimTask explicitly claims one runnable task for opts.Owner.
+func (s *Store) ClaimTask(ctx context.Context, id string, opts ClaimOptions) (*model.Task, error) {
+	opts = normalizeClaimOptions(opts)
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE tasks
+		   SET owner = ?, claimed_at = ?, lease_expires_at = ?, updated_at = ?
+		 WHERE id = ?
+		   AND state NOT IN ('done','pending')
+		   AND NOT EXISTS (
+		         SELECT 1 FROM task_deps d
+		           JOIN tasks dt ON dt.id = d.depends_on_task_id
+		          WHERE d.task_id = tasks.id AND dt.state <> 'done'
+		   )
+		   AND (owner = '' OR owner = ? OR lease_expires_at <= ?)`,
+		opts.Owner, opts.Now, opts.LeaseExpiresAt, opts.Now,
+		id, opts.Owner, opts.Now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s.updatedTaskOrClaimConflict(ctx, id, res, "task is not claimable")
+}
+
+// HeartbeatTask renews the lease for the current owner without changing task
+// content.
+func (s *Store) HeartbeatTask(ctx context.Context, id string, opts HeartbeatOptions) (*model.Task, error) {
+	opts = normalizeHeartbeatOptions(opts)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE tasks SET lease_expires_at=?, updated_at=? WHERE id=? AND owner=?`,
+		opts.LeaseExpiresAt, opts.Now, id, opts.Owner,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s.updatedTaskOrClaimConflict(ctx, id, res, "task is not claimed by owner")
+}
+
+// ReleaseTask clears claim metadata. Without Force, opts.Owner must match.
+func (s *Store) ReleaseTask(ctx context.Context, id string, opts ReleaseOptions) (*model.Task, error) {
+	opts = normalizeReleaseOptions(opts)
+	q := `UPDATE tasks SET owner='', claimed_at=0, lease_expires_at=0, updated_at=? WHERE id=?`
+	args := []any{opts.Now, id}
+	if !opts.Force {
+		q += " AND owner=?"
+		args = append(args, opts.Owner)
+	}
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return s.updatedTaskOrClaimConflict(ctx, id, res, "task is not claimed by owner")
+}
+
+func (s *Store) updatedTaskOrClaimConflict(ctx context.Context, id string, res sql.Result, msg string) (*model.Task, error) {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		if _, err := s.GetTask(ctx, id); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %s", ErrConflict, msg)
+	}
+	return s.GetTask(ctx, id)
+}
+
+func normalizeClaimOptions(opts ClaimOptions) ClaimOptions {
+	if opts.Now == 0 {
+		opts.Now = now()
+	}
+	return opts
+}
+
+func normalizeHeartbeatOptions(opts HeartbeatOptions) HeartbeatOptions {
+	if opts.Now == 0 {
+		opts.Now = now()
+	}
+	return opts
+}
+
+func normalizeReleaseOptions(opts ReleaseOptions) ReleaseOptions {
+	if opts.Now == 0 {
+		opts.Now = now()
+	}
+	return opts
+}
+
 // TaskUpdate carries optional field updates. Nil pointers mean "unchanged".
 type TaskUpdate struct {
-	Title       *string
-	Description *string
-	Type        *model.TaskType
-	State       *model.TaskState
-	Priority    *int
-	Labels      *[]string
+	Title          *string
+	Description    *string
+	Type           *model.TaskType
+	State          *model.TaskState
+	Priority       *int
+	Labels         *[]string
+	IfState        *model.TaskState
+	Owner          string
+	Force          bool
+	Now            int64
+	LeaseExpiresAt int64
 }
 
 // UpdateTask applies the update. State transitions are validated by the caller
@@ -452,6 +669,21 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	cur, err := s.GetTask(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	originalOwner := cur.Owner
+	if u.Now == 0 {
+		u.Now = now()
+	}
+	if u.IfState != nil && cur.State != *u.IfState {
+		return nil, fmt.Errorf("%w: state conflict: expected %s, current state %s", ErrConflict, *u.IfState, cur.State)
+	}
+	if !u.Force && cur.Owner != "" {
+		if u.Owner == "" {
+			return nil, fmt.Errorf("%w: task is claimed by %s; pass owner or force", ErrConflict, cur.Owner)
+		}
+		if u.Owner != cur.Owner {
+			return nil, fmt.Errorf("%w: task is claimed by %s", ErrConflict, cur.Owner)
+		}
 	}
 	if u.Title != nil {
 		cur.Title = *u.Title
@@ -481,19 +713,60 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 		}
 		cur.Labels = labels
 	}
+	if u.Owner != "" && cur.Owner == u.Owner && u.LeaseExpiresAt > 0 {
+		cur.LeaseExpiresAt = u.LeaseExpiresAt
+	}
+	renewLease := u.Owner != "" && cur.Owner == u.Owner && u.LeaseExpiresAt > 0
 	labelsJSON, err := encodeLabels(cur.Labels)
 	if err != nil {
 		return nil, err
 	}
-	cur.UpdatedAt = now()
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,updated_at=? WHERE id=?`,
-		cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.UpdatedAt, cur.ID,
-	)
+	cur.UpdatedAt = u.Now
+	q := `UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,updated_at=?`
+	args := []any{cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.UpdatedAt}
+	if renewLease {
+		q += `,lease_expires_at=?`
+		args = append(args, cur.LeaseExpiresAt)
+	}
+	q += ` WHERE id=?`
+	args = append(args, cur.ID)
+	if u.IfState != nil {
+		q += ` AND state=?`
+		args = append(args, *u.IfState)
+	}
+	if !u.Force {
+		q += ` AND owner=?`
+		args = append(args, originalOwner)
+	}
+	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
-	return cur, nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, s.updateTaskConflict(ctx, id, u, originalOwner)
+	}
+	return s.GetTask(ctx, id)
+}
+
+func (s *Store) updateTaskConflict(ctx context.Context, id string, u TaskUpdate, originalOwner string) error {
+	latest, err := s.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if u.IfState != nil && latest.State != *u.IfState {
+		return fmt.Errorf("%w: state conflict: expected %s, current state %s", ErrConflict, *u.IfState, latest.State)
+	}
+	if !u.Force && latest.Owner != originalOwner {
+		if latest.Owner != "" {
+			return fmt.Errorf("%w: task is claimed by %s", ErrConflict, latest.Owner)
+		}
+		return fmt.Errorf("%w: task claim changed concurrently", ErrConflict)
+	}
+	return fmt.Errorf("%w: task changed concurrently", ErrConflict)
 }
 
 // DeleteTask removes a task (cascades to deps and attachment rows via FK).
@@ -797,7 +1070,21 @@ func scanProject(r rowScanner) (*model.Project, error) {
 func scanTask(r rowScanner) (*model.Task, error) {
 	var t model.Task
 	var labelsRaw string
-	if err := r.Scan(&t.ID, &t.ProjectID, &t.Title, &t.Description, &t.Type, &t.State, &t.Priority, &labelsRaw, &t.CreatedAt, &t.UpdatedAt); err != nil {
+	if err := r.Scan(
+		&t.ID,
+		&t.ProjectID,
+		&t.Title,
+		&t.Description,
+		&t.Type,
+		&t.State,
+		&t.Priority,
+		&labelsRaw,
+		&t.Owner,
+		&t.ClaimedAt,
+		&t.LeaseExpiresAt,
+		&t.CreatedAt,
+		&t.UpdatedAt,
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
