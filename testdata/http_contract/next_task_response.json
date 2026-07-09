@@ -11,6 +11,9 @@
       "contract",
       "drift"
     ],
+    "owner": "",
+    "claimed_at": 0,
+    "lease_expires_at": 0,
     "depends_on": [
       "task-0000"
     ],

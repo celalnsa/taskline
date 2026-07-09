@@ -90,3 +90,45 @@ func TestTaskSearchCommandRegistered(t *testing.T) {
 		t.Fatal("task search should expose --limit")
 	}
 }
+
+func TestTaskClaimCommandsAndFlagsRegistered(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  interface{ Flag(string) *pflag.Flag }
+		flag string
+	}{
+		{name: "next", cmd: taskNextCmd, flag: "claim"},
+		{name: "next", cmd: taskNextCmd, flag: "owner"},
+		{name: "next", cmd: taskNextCmd, flag: "lease"},
+		{name: "update", cmd: taskUpdateCmd, flag: "if-state"},
+		{name: "update", cmd: taskUpdateCmd, flag: "owner"},
+		{name: "update", cmd: taskUpdateCmd, flag: "force"},
+	} {
+		if tc.cmd.Flag(tc.flag) == nil {
+			t.Fatalf("task %s should expose --%s", tc.name, tc.flag)
+		}
+	}
+
+	for _, name := range []string{"claim", "release", "heartbeat"} {
+		found := false
+		for _, cmd := range taskCmd.Commands() {
+			if cmd.Name() == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("task %s command not registered", name)
+		}
+	}
+}
+
+func TestResolveOwnerPrefersFlagThenEnvironment(t *testing.T) {
+	t.Setenv("TASKLINE_OWNER", "env-owner")
+	if got := resolveOwner("flag-owner"); got != "flag-owner" {
+		t.Fatalf("flag owner should win, got %q", got)
+	}
+	if got := resolveOwner(""); got != "env-owner" {
+		t.Fatalf("env owner should be used, got %q", got)
+	}
+}

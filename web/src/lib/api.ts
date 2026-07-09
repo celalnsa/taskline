@@ -49,6 +49,9 @@ export interface Task {
   state: TaskState;
   priority: number;
   labels: string[];
+  owner?: string;
+  claimed_at?: number;
+  lease_expires_at?: number;
   depends_on?: string[];
   images?: TaskImage[];
   docs?: TaskDoc[];

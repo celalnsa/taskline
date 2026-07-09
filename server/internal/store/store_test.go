@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -341,6 +342,124 @@ func TestListTasksWithAttachmentsAvoidsPerTaskQueryFanout(t *testing.T) {
 	}
 }
 
+func TestClaimNextTaskAssignsUniqueOwnersConcurrently(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+
+	const taskCount = 12
+	for i := range taskCount {
+		_, err := st.CreateTask(ctx, p.ID, fmt.Sprintf("task-%02d", i), "", model.TaskTypeFeature, taskCount-i, model.StateStart)
+		require.NoError(t, err)
+	}
+
+	var wg sync.WaitGroup
+	claimed := make(chan string, taskCount)
+	errs := make(chan error, taskCount)
+	for i := range taskCount {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			task, err := st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{
+				Owner:          fmt.Sprintf("agent-%02d", i),
+				Now:            10_000 + int64(i),
+				LeaseExpiresAt: 20_000 + int64(i),
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			if task == nil {
+				errs <- errors.New("expected claimed task, got nil")
+				return
+			}
+			claimed <- task.ID
+		}(i)
+	}
+	wg.Wait()
+	close(claimed)
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	seen := map[string]bool{}
+	for id := range claimed {
+		require.False(t, seen[id], "duplicate claim for task %s", id)
+		seen[id] = true
+	}
+	require.Len(t, seen, taskCount)
+}
+
+func TestClaimLeaseLifecycleAndOwnerGuards(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	tk, err := st.CreateTask(ctx, p.ID, "claim me", "", model.TaskTypeFeature, 0, model.StateStart)
+	require.NoError(t, err)
+
+	claimed, err := st.ClaimTask(ctx, tk.ID, store.ClaimOptions{Owner: "agent-a", Now: 1_000, LeaseExpiresAt: 11_000})
+	require.NoError(t, err)
+	require.Equal(t, "agent-a", claimed.Owner)
+	require.Equal(t, int64(1_000), claimed.ClaimedAt)
+	require.Equal(t, int64(11_000), claimed.LeaseExpiresAt)
+
+	_, err = st.ClaimTask(ctx, tk.ID, store.ClaimOptions{Owner: "agent-b", Now: 2_000, LeaseExpiresAt: 12_000})
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	reclaimed, err := st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: "agent-a", Now: 3_000, LeaseExpiresAt: 13_000})
+	require.NoError(t, err)
+	require.NotNil(t, reclaimed)
+	require.Equal(t, tk.ID, reclaimed.ID)
+	require.Equal(t, "agent-a", reclaimed.Owner)
+	require.Equal(t, int64(13_000), reclaimed.LeaseExpiresAt)
+
+	heartbeat, err := st.HeartbeatTask(ctx, tk.ID, store.HeartbeatOptions{Owner: "agent-a", Now: 4_000, LeaseExpiresAt: 14_000})
+	require.NoError(t, err)
+	require.Equal(t, int64(14_000), heartbeat.LeaseExpiresAt)
+
+	newTitle := "updated by non-owner"
+	_, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Title: &newTitle, Owner: "agent-b", Now: 5_000, LeaseExpiresAt: 15_000})
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	newTitle = "updated by owner"
+	updated, err := st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Title: &newTitle, Owner: "agent-a", Now: 6_000, LeaseExpiresAt: 16_000})
+	require.NoError(t, err)
+	require.Equal(t, newTitle, updated.Title)
+	require.Equal(t, int64(16_000), updated.LeaseExpiresAt)
+
+	_, err = st.ReleaseTask(ctx, tk.ID, store.ReleaseOptions{Owner: "agent-b", Now: 7_000})
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	released, err := st.ReleaseTask(ctx, tk.ID, store.ReleaseOptions{Owner: "agent-b", Force: true, Now: 8_000})
+	require.NoError(t, err)
+	require.Empty(t, released.Owner)
+	require.Zero(t, released.ClaimedAt)
+	require.Zero(t, released.LeaseExpiresAt)
+}
+
+func TestUpdateTaskIfStateRejectsStaleState(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	tk, err := st.CreateTask(ctx, p.ID, "cas", "", model.TaskTypeFeature, 0, model.StateStart)
+	require.NoError(t, err)
+
+	expectedReview := model.StateReview
+	nextDev := model.StateDev
+	_, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{IfState: &expectedReview, State: &nextDev})
+	require.ErrorIs(t, err, store.ErrConflict)
+	require.Contains(t, err.Error(), "current state start")
+
+	expectedStart := model.StateStart
+	updated, err := st.UpdateTask(ctx, tk.ID, store.TaskUpdate{IfState: &expectedStart, State: &nextDev})
+	require.NoError(t, err)
+	require.Equal(t, model.StateDev, updated.State)
+}
+
 func TestLinkCRUD(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
@@ -483,7 +602,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v1, 9, "first open should advance to >=9")
+	require.GreaterOrEqual(t, v1, 10, "first open should advance to >=10")
 
 	require.NoError(t, st1.Close())
 
@@ -569,7 +688,7 @@ func TestMigrationAddsDocsTypeWithoutDroppingTaskChildren(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v, 9)
+	require.GreaterOrEqual(t, v, 10)
 
 	got, err := st.GetTask(ctx, "b")
 	require.NoError(t, err)
@@ -643,7 +762,7 @@ func TestMigrationUpgradesCreatedAndDesignRows(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, v, 9, "migration should have run at least through 0009")
+	require.GreaterOrEqual(t, v, 10, "migration should have run at least through 0010")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")

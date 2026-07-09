@@ -80,20 +80,23 @@ type Project struct {
 
 // Task is the unit of work tracked under a project.
 type Task struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"project_id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Type        TaskType  `json:"type"`
-	State       TaskState `json:"state"`
-	Priority    int       `json:"priority"`
-	Labels      []string  `json:"labels"`
-	DependsOn   []string  `json:"depends_on,omitempty"`
-	Images      []Image   `json:"images,omitempty"`
-	Docs        []Doc     `json:"docs,omitempty"`
-	Links       []Link    `json:"links,omitempty"`
-	CreatedAt   int64     `json:"created_at"`
-	UpdatedAt   int64     `json:"updated_at"`
+	ID             string    `json:"id"`
+	ProjectID      string    `json:"project_id"`
+	Title          string    `json:"title"`
+	Description    string    `json:"description"`
+	Type           TaskType  `json:"type"`
+	State          TaskState `json:"state"`
+	Priority       int       `json:"priority"`
+	Labels         []string  `json:"labels"`
+	Owner          string    `json:"owner"`
+	ClaimedAt      int64     `json:"claimed_at"`
+	LeaseExpiresAt int64     `json:"lease_expires_at"`
+	DependsOn      []string  `json:"depends_on,omitempty"`
+	Images         []Image   `json:"images,omitempty"`
+	Docs           []Doc     `json:"docs,omitempty"`
+	Links          []Link    `json:"links,omitempty"`
+	CreatedAt      int64     `json:"created_at"`
+	UpdatedAt      int64     `json:"updated_at"`
 }
 
 // Link is a URL attached to a task — typically a spec doc, PR, technical

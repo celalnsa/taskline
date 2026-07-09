@@ -139,6 +139,7 @@ TASKLINE_DOCS_DIR=./.cache/data/docs
 ```bash
 export TASKLINE_SERVER=http://127.0.0.1:8787   # default if unset
 export TASKLINE_PROJECT=demo                   # default --project for task subcommands
+export TASKLINE_OWNER=agent-a                  # default --owner for claim/lease flows
 ```
 
 ## Tests

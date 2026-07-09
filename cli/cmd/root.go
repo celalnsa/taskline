@@ -32,6 +32,7 @@ a TTY, exit codes are stable, stderr is reserved for diagnostics.
 Environment:
   TASKLINE_SERVER   — base URL of taskline-server (default http://127.0.0.1:8787)
   TASKLINE_PROJECT  — default project (id or name); --project flag overrides
+  TASKLINE_OWNER    — default multi-agent owner; --owner flag overrides
 
 Examples:
   taskline project create --name demo
@@ -77,4 +78,13 @@ func resolveProject(flagVal string) string {
 		return flagVal
 	}
 	return os.Getenv("TASKLINE_PROJECT")
+}
+
+// resolveOwner returns --owner flag → $TASKLINE_OWNER → "".
+// Caller errors when an owner is required.
+func resolveOwner(flagVal string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	return os.Getenv("TASKLINE_OWNER")
 }

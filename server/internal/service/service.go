@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"taskline_server/api/model"
 	"taskline_server/internal/store"
@@ -18,6 +19,8 @@ type Service struct {
 }
 
 func New(st *store.Store) *Service { return &Service{st: st} }
+
+const DefaultLeaseDuration = 6 * time.Hour
 
 // CreateProject inserts a new project. name is required and unique.
 func (s *Service) CreateProject(ctx context.Context, name, description string) (*model.Project, error) {
@@ -73,16 +76,32 @@ func (s *Service) GetTask(ctx context.Context, id string) (*model.Task, error) {
 
 // ListTasks returns tasks under a project, optionally filtered by state.
 func (s *Service) ListTasks(ctx context.Context, projectIDOrName string, states []model.TaskState) ([]*model.Task, error) {
+	return s.ListTasksFiltered(ctx, projectIDOrName, TaskListOptions{States: states})
+}
+
+type TaskListOptions struct {
+	States    []model.TaskState
+	Owner     *string
+	Unclaimed bool
+}
+
+// ListTasksFiltered returns tasks under a project, optionally filtered by state
+// and claim metadata.
+func (s *Service) ListTasksFiltered(ctx context.Context, projectIDOrName string, opts TaskListOptions) ([]*model.Task, error) {
 	p, err := s.ResolveProject(ctx, projectIDOrName)
 	if err != nil {
 		return nil, err
 	}
-	for _, st := range states {
+	for _, st := range opts.States {
 		if !st.Valid() {
 			return nil, fmt.Errorf("invalid state %q", st)
 		}
 	}
-	return s.st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, States: states})
+	if opts.Owner != nil {
+		owner := strings.TrimSpace(*opts.Owner)
+		opts.Owner = &owner
+	}
+	return s.st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, States: opts.States, Owner: opts.Owner, Unclaimed: opts.Unclaimed})
 }
 
 const (
@@ -126,6 +145,59 @@ func (s *Service) NextRunnableTask(ctx context.Context, projectIDOrName string) 
 	return tasks[0], nil
 }
 
+type ClaimOptions struct {
+	Owner string
+	Lease time.Duration
+}
+
+type ReleaseOptions struct {
+	Owner string
+	Force bool
+}
+
+// ClaimNextTask atomically reserves the next runnable task for an owner.
+func (s *Service) ClaimNextTask(ctx context.Context, projectIDOrName string, opts ClaimOptions) (*model.Task, error) {
+	owner, lease, err := normalizeClaimInput(opts.Owner, opts.Lease)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.ResolveProject(ctx, projectIDOrName)
+	if err != nil {
+		return nil, err
+	}
+	nowMs := nowMillis()
+	return s.st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+}
+
+// ClaimTask explicitly reserves one task for an owner.
+func (s *Service) ClaimTask(ctx context.Context, id string, opts ClaimOptions) (*model.Task, error) {
+	owner, lease, err := normalizeClaimInput(opts.Owner, opts.Lease)
+	if err != nil {
+		return nil, err
+	}
+	nowMs := nowMillis()
+	return s.st.ClaimTask(ctx, id, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+}
+
+// HeartbeatTask renews a task lease for the current owner.
+func (s *Service) HeartbeatTask(ctx context.Context, id string, opts ClaimOptions) (*model.Task, error) {
+	owner, lease, err := normalizeClaimInput(opts.Owner, opts.Lease)
+	if err != nil {
+		return nil, err
+	}
+	nowMs := nowMillis()
+	return s.st.HeartbeatTask(ctx, id, store.HeartbeatOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+}
+
+// ReleaseTask clears a claim. Without Force, owner must match.
+func (s *Service) ReleaseTask(ctx context.Context, id string, opts ReleaseOptions) (*model.Task, error) {
+	owner := strings.TrimSpace(opts.Owner)
+	if owner == "" && !opts.Force {
+		return nil, errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+	}
+	return s.st.ReleaseTask(ctx, id, store.ReleaseOptions{Owner: owner, Force: opts.Force, Now: nowMillis()})
+}
+
 // ListRunnableTasks returns all currently-runnable tasks.
 func (s *Service) ListRunnableTasks(ctx context.Context, projectIDOrName string) ([]*model.Task, error) {
 	p, err := s.ResolveProject(ctx, projectIDOrName)
@@ -137,6 +209,9 @@ func (s *Service) ListRunnableTasks(ctx context.Context, projectIDOrName string)
 
 // UpdateTask applies partial updates with state-machine validation.
 func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate) (*model.Task, error) {
+	if u.IfState != nil && !u.IfState.Valid() {
+		return nil, fmt.Errorf("invalid if-state %q", *u.IfState)
+	}
 	if u.State != nil {
 		cur, err := s.st.GetTask(ctx, id)
 		if err != nil {
@@ -146,8 +221,32 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 			return nil, fmt.Errorf("invalid transition %s -> %s: %w", cur.State, *u.State, err)
 		}
 	}
+	u.Owner = strings.TrimSpace(u.Owner)
+	if u.Owner != "" {
+		nowMs := nowMillis()
+		u.Now = nowMs
+		u.LeaseExpiresAt = nowMs + durationMillis(DefaultLeaseDuration)
+	}
 	return s.st.UpdateTask(ctx, id, u)
 }
+
+func normalizeClaimInput(owner string, lease time.Duration) (string, time.Duration, error) {
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return "", 0, errors.New("owner required: pass --owner or set TASKLINE_OWNER")
+	}
+	if lease == 0 {
+		lease = DefaultLeaseDuration
+	}
+	if lease < time.Millisecond {
+		return "", 0, errors.New("lease must be positive")
+	}
+	return owner, lease, nil
+}
+
+func nowMillis() int64 { return time.Now().UnixMilli() }
+
+func durationMillis(d time.Duration) int64 { return int64(d / time.Millisecond) }
 
 // DeleteTask removes a task and its dependency / attachment rows via FK cascade.
 func (s *Service) DeleteTask(ctx context.Context, id string) error {

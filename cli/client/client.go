@@ -40,20 +40,23 @@ type Project struct {
 
 // Task mirrors the server-side task shape.
 type Task struct {
-	ID          string   `json:"id"`
-	ProjectID   string   `json:"project_id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Type        string   `json:"type"`
-	State       string   `json:"state"`
-	Priority    int      `json:"priority"`
-	Labels      []string `json:"labels"`
-	DependsOn   []string `json:"depends_on,omitempty"`
-	Images      []Image  `json:"images,omitempty"`
-	Docs        []Doc    `json:"docs,omitempty"`
-	Links       []Link   `json:"links,omitempty"`
-	CreatedAt   int64    `json:"created_at"`
-	UpdatedAt   int64    `json:"updated_at"`
+	ID             string   `json:"id"`
+	ProjectID      string   `json:"project_id"`
+	Title          string   `json:"title"`
+	Description    string   `json:"description"`
+	Type           string   `json:"type"`
+	State          string   `json:"state"`
+	Priority       int      `json:"priority"`
+	Labels         []string `json:"labels"`
+	Owner          string   `json:"owner"`
+	ClaimedAt      int64    `json:"claimed_at"`
+	LeaseExpiresAt int64    `json:"lease_expires_at"`
+	DependsOn      []string `json:"depends_on,omitempty"`
+	Images         []Image  `json:"images,omitempty"`
+	Docs           []Doc    `json:"docs,omitempty"`
+	Links          []Link   `json:"links,omitempty"`
+	CreatedAt      int64    `json:"created_at"`
+	UpdatedAt      int64    `json:"updated_at"`
 }
 
 // Link is a URL attached to a task.
@@ -140,12 +143,27 @@ type listTasksResp struct {
 	Tasks []Task `json:"tasks"`
 }
 
-func (c *Client) ListTasks(projectIDOrName string, states []string) ([]Task, error) {
+type ListTaskOptions struct {
+	Owner     string
+	Unclaimed bool
+}
+
+func (c *Client) ListTasks(projectIDOrName string, states []string, opts ...ListTaskOptions) ([]Task, error) {
 	path := fmt.Sprintf("/api/v1/projects/%s/tasks", url.PathEscape(projectIDOrName))
+	q := url.Values{}
 	if len(states) > 0 {
-		q := url.Values{}
 		q.Set("state", strings.Join(states, ","))
-		path += "?" + q.Encode()
+	}
+	if len(opts) > 0 {
+		if opts[0].Owner != "" {
+			q.Set("owner", opts[0].Owner)
+		}
+		if opts[0].Unclaimed {
+			q.Set("unclaimed", "true")
+		}
+	}
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
 	}
 	var out listTasksResp
 	if err := c.do("GET", path, nil, &out); err != nil {
@@ -182,9 +200,30 @@ type nextTaskResp struct {
 	Task *Task `json:"task"`
 }
 
+type NextTaskOptions struct {
+	Claim bool
+	Owner string
+	Lease string
+}
+
 // NextRunnableTask returns the highest-priority runnable task or nil if none.
-func (c *Client) NextRunnableTask(projectIDOrName string) (*Task, error) {
+func (c *Client) NextRunnableTask(projectIDOrName string, opts ...NextTaskOptions) (*Task, error) {
 	path := fmt.Sprintf("/api/v1/projects/%s/tasks/next", url.PathEscape(projectIDOrName))
+	if len(opts) > 0 {
+		q := url.Values{}
+		if opts[0].Claim {
+			q.Set("claim", "true")
+		}
+		if opts[0].Owner != "" {
+			q.Set("owner", opts[0].Owner)
+		}
+		if opts[0].Lease != "" {
+			q.Set("lease", opts[0].Lease)
+		}
+		if encoded := q.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+	}
 	var out nextTaskResp
 	if err := c.do("GET", path, nil, &out); err != nil {
 		return nil, err
@@ -208,6 +247,9 @@ type UpdateTaskInput struct {
 	State       *string   `json:"state,omitempty"`
 	Priority    *int      `json:"priority,omitempty"`
 	Labels      *[]string `json:"labels,omitempty"`
+	IfState     *string   `json:"if_state,omitempty"`
+	Owner       string    `json:"owner,omitempty"`
+	Force       bool      `json:"force,omitempty"`
 }
 
 func (c *Client) UpdateTask(id string, in UpdateTaskInput) (*Task, error) {
@@ -222,6 +264,48 @@ func (c *Client) UpdateTask(id string, in UpdateTaskInput) (*Task, error) {
 func (c *Client) DeleteTask(id string) error {
 	path := fmt.Sprintf("/api/v1/tasks/%s", url.PathEscape(id))
 	return c.do("DELETE", path, nil, nil)
+}
+
+type ClaimTaskInput struct {
+	Owner string `json:"owner,omitempty"`
+	Lease string `json:"lease,omitempty"`
+}
+
+func (c *Client) ClaimTask(id string, in ClaimTaskInput) (*Task, error) {
+	var out Task
+	path := fmt.Sprintf("/api/v1/tasks/%s/claim", url.PathEscape(id))
+	if err := c.do("POST", path, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type HeartbeatTaskInput struct {
+	Owner string `json:"owner,omitempty"`
+	Lease string `json:"lease,omitempty"`
+}
+
+func (c *Client) HeartbeatTask(id string, in HeartbeatTaskInput) (*Task, error) {
+	var out Task
+	path := fmt.Sprintf("/api/v1/tasks/%s/heartbeat", url.PathEscape(id))
+	if err := c.do("POST", path, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type ReleaseTaskInput struct {
+	Owner string `json:"owner,omitempty"`
+	Force bool   `json:"force,omitempty"`
+}
+
+func (c *Client) ReleaseTask(id string, in ReleaseTaskInput) (*Task, error) {
+	var out Task
+	path := fmt.Sprintf("/api/v1/tasks/%s/release", url.PathEscape(id))
+	if err := c.do("POST", path, in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 type addDepReq struct {
