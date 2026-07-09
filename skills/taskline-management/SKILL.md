@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.11.0
+version: 0.12.0
 ---
 
 # taskline — task management for AI agents
@@ -127,7 +127,10 @@ further along) when it's ready to be worked.
 `pending` AND every task it depends on has state `done`. Runnable
 tasks are returned sorted by `priority DESC`, then `created_at ASC`.
 Use `taskline task next` for the single highest-priority runnable
-task.
+task. Add repeated `--label` filters to `task next` or
+`task list --runnable` to pull from a labeled subset; labels use AND semantics,
+so `--label backend --label ui` returns tasks that have both labels. Matching
+is case-insensitive, like label deduplication.
 
 **Dependency DAG.** Adding an edge that would close a cycle is
 rejected. Self-deps are rejected. Re-adding an existing edge is a
@@ -160,10 +163,12 @@ taskline task list --project demo --state start,dev,test
 taskline task list --project demo --mine
 taskline task list --project demo --owner agent-a
 taskline task list --project demo --unclaimed
+taskline task list --project demo --runnable --label backend
 
 # Pick / inspect
 taskline task next --project demo            # highest-priority runnable, or null
 taskline task next --project demo --claim --owner agent-a --lease 6h
+taskline task next --project demo --claim --owner agent-a --label backend
 taskline task search --project demo fc7a0732 # short id / full id / text matches
 taskline task search --project demo "historical context" --limit 10
 taskline task get <id>
@@ -223,6 +228,13 @@ renew the lease; `task heartbeat <id>` renews without changing task content.
 `task release <id>` gives work back immediately. Expired leases are reclaimed
 without a background worker; the next successful claim/update observes the
 current owner and rejects stale non-owner writes.
+
+Use repeated `--label` flags when agents should consume different labeled
+subsets inside one project. Example:
+`task next --claim --owner agent-a --label backend`
+atomically claims only runnable tasks tagged `backend`; adding more
+labels narrows the filter with AND semantics. The same label filter is
+available on `task list --runnable` for previews.
 
 ### Task docs and links
 

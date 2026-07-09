@@ -83,6 +83,7 @@ type TaskListOptions struct {
 	States    []model.TaskState
 	Owner     *string
 	Unclaimed bool
+	Labels    []string
 }
 
 // ListTasksFiltered returns tasks under a project, optionally filtered by state
@@ -101,7 +102,7 @@ func (s *Service) ListTasksFiltered(ctx context.Context, projectIDOrName string,
 		owner := strings.TrimSpace(*opts.Owner)
 		opts.Owner = &owner
 	}
-	return s.st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, States: opts.States, Owner: opts.Owner, Unclaimed: opts.Unclaimed})
+	return s.st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, States: opts.States, Owner: opts.Owner, Unclaimed: opts.Unclaimed, Labels: opts.Labels})
 }
 
 const (
@@ -134,8 +135,8 @@ func (s *Service) SearchTasks(ctx context.Context, projectIDOrName, query string
 
 // NextRunnableTask returns the highest-priority task whose deps are all done.
 // Returns (nil, nil) if no task is runnable.
-func (s *Service) NextRunnableTask(ctx context.Context, projectIDOrName string) (*model.Task, error) {
-	tasks, err := s.ListRunnableTasks(ctx, projectIDOrName)
+func (s *Service) NextRunnableTask(ctx context.Context, projectIDOrName string, labelSets ...[]string) (*model.Task, error) {
+	tasks, err := s.ListRunnableTasks(ctx, projectIDOrName, labelSets...)
 	if err != nil {
 		return nil, err
 	}
@@ -146,8 +147,9 @@ func (s *Service) NextRunnableTask(ctx context.Context, projectIDOrName string) 
 }
 
 type ClaimOptions struct {
-	Owner string
-	Lease time.Duration
+	Owner  string
+	Lease  time.Duration
+	Labels []string
 }
 
 type ReleaseOptions struct {
@@ -166,7 +168,7 @@ func (s *Service) ClaimNextTask(ctx context.Context, projectIDOrName string, opt
 		return nil, err
 	}
 	nowMs := nowMillis()
-	return s.st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+	return s.st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease), Labels: opts.Labels})
 }
 
 // ClaimTask explicitly reserves one task for an owner.
@@ -199,12 +201,12 @@ func (s *Service) ReleaseTask(ctx context.Context, id string, opts ReleaseOption
 }
 
 // ListRunnableTasks returns all currently-runnable tasks.
-func (s *Service) ListRunnableTasks(ctx context.Context, projectIDOrName string) ([]*model.Task, error) {
+func (s *Service) ListRunnableTasks(ctx context.Context, projectIDOrName string, labelSets ...[]string) ([]*model.Task, error) {
 	p, err := s.ResolveProject(ctx, projectIDOrName)
 	if err != nil {
 		return nil, err
 	}
-	return s.st.ListRunnableTasks(ctx, p.ID)
+	return s.st.ListRunnableTasks(ctx, p.ID, labelSets...)
 }
 
 // UpdateTask applies partial updates with state-machine validation.

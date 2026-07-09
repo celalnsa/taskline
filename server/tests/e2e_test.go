@@ -591,6 +591,69 @@ func TestTaskClaimLeaseAtAPI(t *testing.T) {
 	require.Equal(t, b.Task.ID, unclaimed.Tasks[0].ID)
 }
 
+func TestLabelFilteredRunnableTasksAtAPI(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+	jsonReq(t, "POST", base+"/api/v1/projects", map[string]any{"name": "label-filters"}, &project{})
+
+	var backendOnly, urgentBackend, urgentFrontend, blocked task
+	for _, tc := range []struct {
+		out      *task
+		title    string
+		priority int
+		labels   []string
+	}{
+		{out: &backendOnly, title: "backend", priority: 4, labels: []string{"Backend"}},
+		{out: &urgentBackend, title: "urgent backend", priority: 9, labels: []string{"Backend", "Urgent"}},
+		{out: &urgentFrontend, title: "urgent frontend", priority: 8, labels: []string{"frontend", "urgent"}},
+		{out: &blocked, title: "blocked", priority: 7, labels: []string{"backend", "urgent"}},
+	} {
+		st := jsonReq(t, "POST", base+"/api/v1/projects/label-filters/tasks",
+			map[string]any{"title": tc.title, "type": "feature", "priority": tc.priority, "auto_start": true, "labels": tc.labels}, tc.out)
+		require.Equal(t, http.StatusCreated, st)
+	}
+	st := jsonReq(t, "POST", base+"/api/v1/tasks/"+blocked.ID+"/deps",
+		map[string]any{"depends_on": backendOnly.ID}, nil)
+	require.Equal(t, http.StatusCreated, st)
+
+	var runnable taskListResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/label-filters/tasks/runnable?label=backend&label=urgent", nil, &runnable)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, runnable.Tasks, 1)
+	require.Equal(t, urgentBackend.ID, runnable.Tasks[0].ID)
+
+	var a nextResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/label-filters/tasks/next?claim=true&owner=agent-a&label=backend&label=urgent", nil, &a)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, a.Task)
+	require.Equal(t, urgentBackend.ID, a.Task.ID)
+	require.Equal(t, "agent-a", a.Task.Owner)
+
+	var b nextResp
+	st = jsonReq(t, "GET", base+"/api/v1/projects/label-filters/tasks/next?claim=true&owner=agent-b&label=frontend&label=urgent", nil, &b)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, b.Task)
+	require.Equal(t, urgentFrontend.ID, b.Task.ID)
+	require.Equal(t, "agent-b", b.Task.Owner)
+
+	var done task
+	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
+		map[string]any{"state": "done", "owner": "agent-a"}, &done)
+	require.Equal(t, http.StatusOK, st)
+
+	var withEdge task
+	st = jsonReq(t, "GET", base+"/api/v1/tasks/"+blocked.ID, nil, &withEdge)
+	require.Equal(t, http.StatusOK, st)
+	require.Equal(t, []string{backendOnly.ID}, withEdge.DependsOn)
+
+	st = jsonReq(t, "DELETE", base+"/api/v1/tasks/"+blocked.ID+"/deps/"+backendOnly.ID, nil, nil)
+	require.Equal(t, http.StatusOK, st)
+	st = jsonReq(t, "GET", base+"/api/v1/projects/label-filters/tasks/runnable?label=backend&label=urgent", nil, &runnable)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, runnable.Tasks, 1)
+	require.Equal(t, blocked.ID, runnable.Tasks[0].ID)
+}
+
 func TestTaskLabelsAtAPI(t *testing.T) {
 	base, stop := startServer(t)
 	defer stop()

@@ -60,6 +60,7 @@ export TASKLINE_PROJECT=demo
 ./dist/taskline task doc create <task-id> --title Spec --file ./spec.md
 ./dist/taskline task list
 ./dist/taskline task next
+./dist/taskline task next --claim --owner agent-a --label onboarding
 ```
 
 ## Web UI
@@ -141,6 +142,10 @@ export TASKLINE_SERVER=http://127.0.0.1:8787   # default if unset
 export TASKLINE_PROJECT=demo                   # default --project for task subcommands
 export TASKLINE_OWNER=agent-a                  # default --owner for claim/lease flows
 ```
+
+`task next` and `task list --runnable` accept repeated `--label` filters with
+AND semantics so multiple agents can consume different labeled subsets from one
+project. Label matching is case-insensitive.
 
 ## Tests
 
