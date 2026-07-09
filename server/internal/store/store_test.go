@@ -177,6 +177,39 @@ func TestTaskLabels(t *testing.T) {
 	}
 }
 
+func TestRunnableAndClaimFiltersByAllLabels(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, _ := st.CreateProject(ctx, "p", "")
+	_, err := st.CreateTask(ctx, p.ID, "backend only", "", model.TaskTypeFeature, 4, model.StateStart, []string{"Backend"})
+	require.NoError(t, err)
+	urgentBackend, err := st.CreateTask(ctx, p.ID, "urgent backend", "", model.TaskTypeFeature, 9, model.StateStart, []string{"Backend", "Urgent"})
+	require.NoError(t, err)
+	urgentFrontend, err := st.CreateTask(ctx, p.ID, "urgent frontend", "", model.TaskTypeFeature, 8, model.StateStart, []string{"frontend", "urgent"})
+	require.NoError(t, err)
+
+	listed, err := st.ListTasks(ctx, store.TaskFilter{ProjectID: p.ID, Labels: []string{"backend", "urgent"}})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, urgentBackend.ID, listed[0].ID)
+
+	runnable, err := st.ListRunnableTasks(ctx, p.ID, []string{"urgent"})
+	require.NoError(t, err)
+	require.Len(t, runnable, 2)
+	require.Equal(t, []string{urgentBackend.ID, urgentFrontend.ID}, []string{runnable[0].ID, runnable[1].ID})
+
+	claimed, err := st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{
+		Owner:          "agent-a",
+		Now:            10_000,
+		LeaseExpiresAt: 20_000,
+		Labels:         []string{"backend", "urgent"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	require.Equal(t, urgentBackend.ID, claimed.ID)
+	require.Equal(t, "agent-a", claimed.Owner)
+}
+
 func TestDependencyCycleProtection(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

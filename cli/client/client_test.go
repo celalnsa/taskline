@@ -295,3 +295,74 @@ func TestTaskClaimClientPayloads(t *testing.T) {
 		}
 	}
 }
+
+func TestLabelFilteredClientPayloads(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Method+" "+r.URL.String())
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/demo/tasks":
+			q := r.URL.Query()
+			if q["label"][0] != "backend" || q["label"][1] != "urgent" {
+				t.Fatalf("unexpected task list labels: %s", r.URL.RawQuery)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tasks": []client.Task{{ID: "task-one"}}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/demo/tasks/runnable":
+			q := r.URL.Query()
+			if q["label"][0] != "backend" || q["label"][1] != "urgent" {
+				t.Fatalf("unexpected runnable labels: %s", r.URL.RawQuery)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tasks": []client.Task{{ID: "task-one"}}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/demo/tasks/next":
+			q := r.URL.Query()
+			if q.Get("claim") != "true" || q.Get("owner") != "agent-a" || q["label"][0] != "backend" || q["label"][1] != "urgent" {
+				t.Fatalf("unexpected next labels: %s", r.URL.RawQuery)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"task": client.Task{ID: "task-one"}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/task-one/deps":
+			var in struct {
+				DependsOn string `json:"depends_on"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				t.Fatalf("decode dependency input: %v", err)
+			}
+			if in.DependsOn != "dep-one" {
+				t.Fatalf("unexpected dependency input: %#v", in)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"task_id": "task-one", "depends_on": "dep-one"})
+		default:
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	if _, err := c.ListTasks("demo", nil, client.ListTaskOptions{Labels: []string{"backend", "urgent"}}); err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if _, err := c.ListRunnableTasks("demo", client.ListRunnableOptions{Labels: []string{"backend", "urgent"}}); err != nil {
+		t.Fatalf("ListRunnableTasks: %v", err)
+	}
+	if _, err := c.NextRunnableTask("demo", client.NextTaskOptions{Claim: true, Owner: "agent-a", Labels: []string{"backend", "urgent"}}); err != nil {
+		t.Fatalf("NextRunnableTask: %v", err)
+	}
+	if err := c.AddDependency("task-one", "dep-one"); err != nil {
+		t.Fatalf("AddDependency: %v", err)
+	}
+
+	want := []string{
+		"GET /api/v1/projects/demo/tasks?label=backend&label=urgent",
+		"GET /api/v1/projects/demo/tasks/runnable?label=backend&label=urgent",
+		"GET /api/v1/projects/demo/tasks/next?claim=true&label=backend&label=urgent&owner=agent-a",
+		"POST /api/v1/tasks/task-one/deps",
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("seen paths = %#v, want %#v", seen, want)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Fatalf("seen paths = %#v, want %#v", seen, want)
+		}
+	}
+}

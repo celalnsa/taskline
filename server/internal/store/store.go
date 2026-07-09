@@ -234,6 +234,18 @@ func decodeLabels(raw string) ([]string, error) {
 	return labels, nil
 }
 
+func appendLabelFilters(q string, args []any, column string, labels []string) (string, []any, error) {
+	normalized, err := normalizeLabels(labels)
+	if err != nil {
+		return "", nil, err
+	}
+	for _, label := range normalized {
+		q += fmt.Sprintf(" AND EXISTS (SELECT 1 FROM json_each(%s) WHERE LOWER(value) = LOWER(?))", column)
+		args = append(args, label)
+	}
+	return q, args, nil
+}
+
 // ─── Projects ───────────────────────────────────────────────────────────
 
 // CreateProject inserts a new project. name must be unique.
@@ -364,6 +376,7 @@ type TaskFilter struct {
 	States    []model.TaskState // empty = all states
 	Owner     *string           // nil = any owner
 	Unclaimed bool              // true = owner is empty
+	Labels    []string          // all labels must be present
 }
 
 // ListTasks returns tasks for a project, optionally filtered by state.
@@ -396,6 +409,11 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 	if f.Unclaimed {
 		q += " AND owner = ''"
 	}
+	var err error
+	q, args, err = appendLabelFilters(q, args, "labels", f.Labels)
+	if err != nil {
+		return nil, err
+	}
 	q += " ORDER BY priority DESC, created_at ASC"
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -423,7 +441,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*model.Task, err
 // ListRunnableTasks returns tasks whose state is neither `done` nor
 // `pending` and whose every declared dependency is in state `done`.
 // Sorted priority DESC, created_at ASC.
-func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*model.Task, error) {
+func (s *Store) ListRunnableTasks(ctx context.Context, projectID string, labelSets ...[]string) ([]*model.Task, error) {
 	q := `
 		SELECT ` + taskSelectColumnsT + `
 		  FROM tasks t
@@ -433,9 +451,15 @@ func (s *Store) ListRunnableTasks(ctx context.Context, projectID string) ([]*mod
 		         SELECT 1 FROM task_deps d
 		           JOIN tasks dt ON dt.id = d.depends_on_task_id
 		          WHERE d.task_id = t.id AND dt.state <> 'done'
-		   )
-		 ORDER BY t.priority DESC, t.created_at ASC`
-	rows, err := s.db.QueryContext(ctx, q, projectID)
+		   )`
+	args := []any{projectID}
+	var err error
+	q, args, err = appendLabelFilters(q, args, "t.labels", optionalLabels(labelSets))
+	if err != nil {
+		return nil, err
+	}
+	q += ` ORDER BY t.priority DESC, t.created_at ASC`
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -462,6 +486,7 @@ type ClaimOptions struct {
 	Owner          string
 	Now            int64
 	LeaseExpiresAt int64
+	Labels         []string
 }
 
 // HeartbeatOptions controls no-op lease renewal.
@@ -486,6 +511,11 @@ func (s *Store) ClaimNextTask(ctx context.Context, projectID string, opts ClaimO
 		return nil, errors.New("ClaimNextTask: ProjectID required")
 	}
 	opts = normalizeClaimOptions(opts)
+	labels, err := normalizeLabels(opts.Labels)
+	if err != nil {
+		return nil, err
+	}
+	opts.Labels = labels
 	for attempts := 0; attempts < 3; attempts++ {
 		id, err := s.claimNextTaskID(ctx, projectID, opts)
 		if err != nil {
@@ -514,7 +544,7 @@ func (s *Store) claimNextTaskID(ctx context.Context, projectID string, opts Clai
 	defer tx.Rollback()
 
 	var id string
-	err = tx.QueryRowContext(ctx, `
+	q := `
 		SELECT t.id
 		  FROM tasks t
 		 WHERE t.project_id = ?
@@ -524,11 +554,16 @@ func (s *Store) claimNextTaskID(ctx context.Context, projectID string, opts Clai
 		           JOIN tasks dt ON dt.id = d.depends_on_task_id
 		          WHERE d.task_id = t.id AND dt.state <> 'done'
 		   )
-		   AND (t.owner = '' OR t.owner = ? OR t.lease_expires_at <= ?)
-		 ORDER BY CASE WHEN t.owner = ? THEN 0 ELSE 1 END, t.priority DESC, t.created_at ASC
-		 LIMIT 1`,
-		projectID, opts.Owner, opts.Now, opts.Owner,
-	).Scan(&id)
+		   AND (t.owner = '' OR t.owner = ? OR t.lease_expires_at <= ?)`
+	args := []any{projectID, opts.Owner, opts.Now}
+	q, args, err = appendLabelFilters(q, args, "t.labels", opts.Labels)
+	if err != nil {
+		return "", err
+	}
+	q += ` ORDER BY CASE WHEN t.owner = ? THEN 0 ELSE 1 END, t.priority DESC, t.created_at ASC
+		 LIMIT 1`
+	args = append(args, opts.Owner)
+	err = tx.QueryRowContext(ctx, q, args...).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}

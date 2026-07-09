@@ -146,6 +146,7 @@ type listTasksResp struct {
 type ListTaskOptions struct {
 	Owner     string
 	Unclaimed bool
+	Labels    []string
 }
 
 func (c *Client) ListTasks(projectIDOrName string, states []string, opts ...ListTaskOptions) ([]Task, error) {
@@ -160,6 +161,9 @@ func (c *Client) ListTasks(projectIDOrName string, states []string, opts ...List
 		}
 		if opts[0].Unclaimed {
 			q.Set("unclaimed", "true")
+		}
+		for _, label := range opts[0].Labels {
+			q.Add("label", label)
 		}
 	}
 	if encoded := q.Encode(); encoded != "" {
@@ -187,8 +191,21 @@ func (c *Client) SearchTasks(projectIDOrName, query string, limit int) ([]Task, 
 	return out.Tasks, nil
 }
 
-func (c *Client) ListRunnableTasks(projectIDOrName string) ([]Task, error) {
+type ListRunnableOptions struct {
+	Labels []string
+}
+
+func (c *Client) ListRunnableTasks(projectIDOrName string, opts ...ListRunnableOptions) ([]Task, error) {
 	path := fmt.Sprintf("/api/v1/projects/%s/tasks/runnable", url.PathEscape(projectIDOrName))
+	if len(opts) > 0 {
+		q := url.Values{}
+		for _, label := range opts[0].Labels {
+			q.Add("label", label)
+		}
+		if encoded := q.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+	}
 	var out listTasksResp
 	if err := c.do("GET", path, nil, &out); err != nil {
 		return nil, err
@@ -201,9 +218,10 @@ type nextTaskResp struct {
 }
 
 type NextTaskOptions struct {
-	Claim bool
-	Owner string
-	Lease string
+	Claim  bool
+	Owner  string
+	Lease  string
+	Labels []string
 }
 
 // NextRunnableTask returns the highest-priority runnable task or nil if none.
@@ -219,6 +237,9 @@ func (c *Client) NextRunnableTask(projectIDOrName string, opts ...NextTaskOption
 		}
 		if opts[0].Lease != "" {
 			q.Set("lease", opts[0].Lease)
+		}
+		for _, label := range opts[0].Labels {
+			q.Add("label", label)
 		}
 		if encoded := q.Encode(); encoded != "" {
 			path += "?" + encoded

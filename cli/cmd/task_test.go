@@ -64,6 +64,15 @@ func TestTaskLabelFlagsRegistered(t *testing.T) {
 	if taskCreateCmd.Flag("label") == nil {
 		t.Fatal("task create should expose repeatable --label flag")
 	}
+	if taskListCmd.Flag("label") == nil {
+		t.Fatal("task list should expose repeatable --label flag")
+	}
+	if taskListCmd.Flag("runnable") == nil {
+		t.Fatal("task list should expose --runnable flag")
+	}
+	if taskNextCmd.Flag("label") == nil {
+		t.Fatal("task next should expose repeatable --label flag")
+	}
 	if taskUpdateCmd.Flag("label") == nil {
 		t.Fatal("task update should expose repeatable --label flag")
 	}

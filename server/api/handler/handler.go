@@ -202,7 +202,7 @@ func (h *Handler) listTasks(ctx context.Context, c *app.RequestContext) {
 			}
 		}
 	}
-	opts := service.TaskListOptions{States: states}
+	opts := service.TaskListOptions{States: states, Labels: queryLabels(c)}
 	if raw := strings.TrimSpace(string(c.Query("owner"))); raw != "" {
 		opts.Owner = &raw
 	}
@@ -252,7 +252,7 @@ func (h *Handler) searchTasks(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) {
 	project := c.Param("project")
-	ts, err := h.svc.ListRunnableTasks(ctx, project)
+	ts, err := h.svc.ListRunnableTasks(ctx, project, queryLabels(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -264,6 +264,7 @@ func (h *Handler) listRunnableTasks(ctx context.Context, c *app.RequestContext) 
 
 func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 	project := c.Param("project")
+	labels := queryLabels(c)
 	claim, err := parseBoolQueryDefaultFalse(strings.TrimSpace(string(c.Query("claim"))))
 	if err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -277,11 +278,12 @@ func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 		t, err = h.svc.ClaimNextTask(ctx, project, service.ClaimOptions{
-			Owner: string(c.Query("owner")),
-			Lease: lease,
+			Owner:  string(c.Query("owner")),
+			Lease:  lease,
+			Labels: labels,
 		})
 	} else {
-		t, err = h.svc.NextRunnableTask(ctx, project)
+		t, err = h.svc.NextRunnableTask(ctx, project, labels)
 	}
 	if err != nil {
 		writeServiceError(c, err)
@@ -748,6 +750,15 @@ func parseBoolQueryDefaultFalse(raw string) (bool, error) {
 		return false, nil
 	}
 	return parseBoolQuery(raw)
+}
+
+func queryLabels(c *app.RequestContext) []string {
+	raw := c.QueryArgs().PeekAll("label")
+	labels := make([]string, 0, len(raw))
+	for _, label := range raw {
+		labels = append(labels, string(label))
+	}
+	return labels
 }
 
 func parseBoolQuery(raw string) (bool, error) {
