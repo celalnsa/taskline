@@ -177,6 +177,98 @@ func TestTaskLabels(t *testing.T) {
 	}
 }
 
+func TestUpdateTaskIncrementalLabelsAndDescription(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	tk, err := st.CreateTask(ctx, p.ID, "incremental", "", model.TaskTypeFeature, 0, model.StateStart, []string{"triage", "backend"})
+	require.NoError(t, err)
+
+	appendText := "first note"
+	updated, err := st.UpdateTask(ctx, tk.ID, store.TaskUpdate{
+		AddLabels:         []string{"review", "Backend"},
+		RemoveLabels:      []string{"triage", "missing"},
+		DescriptionAppend: &appendText,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"backend", "review"}, updated.Labels)
+	require.Equal(t, "first note", updated.Description)
+
+	appendText = "second note"
+	updated, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{DescriptionAppend: &appendText})
+	require.NoError(t, err)
+	require.Equal(t, "first note\n\nsecond note", updated.Description)
+
+	replacement := []string{"replace"}
+	_, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Labels: &replacement, AddLabels: []string{"extra"}})
+	require.Error(t, err)
+
+	description := "replace description"
+	_, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{Description: &description, DescriptionAppend: &appendText})
+	require.Error(t, err)
+}
+
+func TestUpdateTaskIncrementalLabelsEnforcesFinalLimit(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	p, err := st.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	labels := make([]string, 20)
+	for i := range labels {
+		labels[i] = fmt.Sprintf("label-%02d", i)
+	}
+	tk, err := st.CreateTask(ctx, p.ID, "many labels", "", model.TaskTypeFeature, 0, model.StateStart, labels)
+	require.NoError(t, err)
+
+	_, err = st.UpdateTask(ctx, tk.ID, store.TaskUpdate{AddLabels: []string{"one-too-many"}})
+	require.Error(t, err)
+}
+
+func TestUpdateTaskConcurrentIncrementalLabels(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "taskline.db")
+	primary, err := store.New(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = primary.Close() })
+	p, err := primary.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	tk, err := primary.CreateTask(ctx, p.ID, "label race", "", model.TaskTypeFeature, 0, model.StateStart, []string{"base"})
+	require.NoError(t, err)
+
+	labels := []string{"one", "two", "three", "four"}
+	stores := make([]*store.Store, len(labels))
+	for i := range labels {
+		stores[i], err = store.New(path)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = stores[i].Close() })
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, len(labels))
+	var wg sync.WaitGroup
+	for i, label := range labels {
+		wg.Add(1)
+		go func(i int, label string) {
+			defer wg.Done()
+			<-start
+			_, err := stores[i].UpdateTask(ctx, tk.ID, store.TaskUpdate{AddLabels: []string{label}})
+			results <- err
+		}(i, label)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	for err := range results {
+		require.NoError(t, err)
+	}
+
+	got, err := primary.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"base", "one", "two", "three", "four"}, got.Labels)
+}
+
 func TestRunnableAndClaimFiltersByAllLabels(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

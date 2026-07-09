@@ -109,6 +109,7 @@ func TestDocClientLifecycle(t *testing.T) {
 }
 
 func TestTaskLabelsClientPayloads(t *testing.T) {
+	patchCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -125,16 +126,26 @@ func TestTaskLabelsClientPayloads(t *testing.T) {
 				State: "start", Labels: in.Labels,
 			})
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/tasks/task-one":
+			patchCount++
 			var in client.UpdateTaskInput
 			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 				t.Fatalf("decode update task input: %v", err)
 			}
-			if in.Labels == nil || len(*in.Labels) != 1 || (*in.Labels)[0] != "review" {
-				t.Fatalf("unexpected update labels: %#v", in.Labels)
+			if patchCount == 1 {
+				if in.Labels == nil || len(*in.Labels) != 1 || (*in.Labels)[0] != "review" {
+					t.Fatalf("unexpected update labels: %#v", in.Labels)
+				}
+			} else {
+				if in.LabelOps == nil || len(in.LabelOps.Add) != 1 || in.LabelOps.Add[0] != "backend" || len(in.LabelOps.Remove) != 1 || in.LabelOps.Remove[0] != "triage" {
+					t.Fatalf("unexpected label ops: %#v", in.LabelOps)
+				}
+				if in.DescriptionAppend == nil || *in.DescriptionAppend != "note" {
+					t.Fatalf("unexpected description append: %#v", in.DescriptionAppend)
+				}
 			}
 			_ = json.NewEncoder(w).Encode(client.Task{
 				ID: "task-one", ProjectID: "project-one", Title: "labeled", Type: "feature",
-				State: "start", Labels: *in.Labels,
+				State: "start", Labels: []string{"review"},
 			})
 		default:
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
@@ -156,12 +167,20 @@ func TestTaskLabelsClientPayloads(t *testing.T) {
 	}
 
 	labels := []string{"review"}
+	appendText := "note"
 	updated, err := c.UpdateTask("task-one", client.UpdateTaskInput{Labels: &labels})
 	if err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 	if len(updated.Labels) != 1 || updated.Labels[0] != "review" {
 		t.Fatalf("unexpected updated labels: %#v", updated.Labels)
+	}
+	_, err = c.UpdateTask("task-one", client.UpdateTaskInput{
+		LabelOps:          &client.LabelOps{Add: []string{"backend"}, Remove: []string{"triage"}},
+		DescriptionAppend: &appendText,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTask incremental payload: %v", err)
 	}
 }
 

@@ -177,6 +177,8 @@ taskline task get <id>
 taskline task update <id> --state test
 taskline task update <id> --priority 5 --description "new prose"
 taskline task update <id> --label review --label frontend   # replace labels
+taskline task update <id> --add-label review --remove-label triage
+taskline task update <id> --append-description "new note"
 taskline task update <id> --clear-labels                    # remove labels
 taskline task update <id> --state done --if-state review --owner agent-a
 taskline task update <id> --state pending --force            # manual correction

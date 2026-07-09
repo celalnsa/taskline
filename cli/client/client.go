@@ -262,15 +262,22 @@ func (c *Client) GetTask(id string) (*Task, error) {
 }
 
 type UpdateTaskInput struct {
-	Title       *string   `json:"title,omitempty"`
-	Description *string   `json:"description,omitempty"`
-	Type        *string   `json:"type,omitempty"`
-	State       *string   `json:"state,omitempty"`
-	Priority    *int      `json:"priority,omitempty"`
-	Labels      *[]string `json:"labels,omitempty"`
-	IfState     *string   `json:"if_state,omitempty"`
-	Owner       string    `json:"owner,omitempty"`
-	Force       bool      `json:"force,omitempty"`
+	Title             *string   `json:"title,omitempty"`
+	Description       *string   `json:"description,omitempty"`
+	DescriptionAppend *string   `json:"description_append,omitempty"`
+	Type              *string   `json:"type,omitempty"`
+	State             *string   `json:"state,omitempty"`
+	Priority          *int      `json:"priority,omitempty"`
+	Labels            *[]string `json:"labels,omitempty"`
+	LabelOps          *LabelOps `json:"label_ops,omitempty"`
+	IfState           *string   `json:"if_state,omitempty"`
+	Owner             string    `json:"owner,omitempty"`
+	Force             bool      `json:"force,omitempty"`
+}
+
+type LabelOps struct {
+	Add    []string `json:"add,omitempty"`
+	Remove []string `json:"remove,omitempty"`
 }
 
 func (c *Client) UpdateTask(id string, in UpdateTaskInput) (*Task, error) {

@@ -234,6 +234,43 @@ func decodeLabels(raw string) ([]string, error) {
 	return labels, nil
 }
 
+func applyLabelOps(existing, add, remove []string) ([]string, error) {
+	addLabels, err := normalizeLabels(add)
+	if err != nil {
+		return nil, err
+	}
+	removeLabels, err := normalizeLabels(remove)
+	if err != nil {
+		return nil, err
+	}
+	removeSet := map[string]struct{}{}
+	for _, label := range removeLabels {
+		removeSet[strings.ToLower(label)] = struct{}{}
+	}
+	out := make([]string, 0, len(existing)+len(addLabels))
+	seen := map[string]struct{}{}
+	for _, label := range existing {
+		key := strings.ToLower(label)
+		if _, remove := removeSet[key]; remove {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		out = append(out, label)
+		seen[key] = struct{}{}
+	}
+	for _, label := range addLabels {
+		key := strings.ToLower(label)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		out = append(out, label)
+		seen[key] = struct{}{}
+	}
+	return normalizeLabels(out)
+}
+
 func appendLabelFilters(q string, args []any, column string, labels []string) (string, []any, error) {
 	normalized, err := normalizeLabels(labels)
 	if err != nil {
@@ -685,27 +722,68 @@ func normalizeReleaseOptions(opts ReleaseOptions) ReleaseOptions {
 
 // TaskUpdate carries optional field updates. Nil pointers mean "unchanged".
 type TaskUpdate struct {
-	Title          *string
-	Description    *string
-	Type           *model.TaskType
-	State          *model.TaskState
-	Priority       *int
-	Labels         *[]string
-	IfState        *model.TaskState
-	Owner          string
-	Force          bool
-	Now            int64
-	LeaseExpiresAt int64
+	Title             *string
+	Description       *string
+	DescriptionAppend *string
+	Type              *model.TaskType
+	State             *model.TaskState
+	Priority          *int
+	Labels            *[]string
+	AddLabels         []string
+	RemoveLabels      []string
+	IfState           *model.TaskState
+	Owner             string
+	Force             bool
+	Now               int64
+	LeaseExpiresAt    int64
 }
 
 // UpdateTask applies the update. State transitions are validated by the caller
 // (service layer) — the store just persists what it's given.
 func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model.Task, error) {
+	attempts := 1
+	if u.needsReadModifyWriteRetry() {
+		attempts = 8
+	}
+	var lastErr error
+	for range attempts {
+		t, err := s.updateTaskOnce(ctx, id, u)
+		if err == nil {
+			return t, nil
+		}
+		if !u.needsReadModifyWriteRetry() || !errors.Is(err, ErrConflict) {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func (u TaskUpdate) hasLabelOps() bool {
+	return len(u.AddLabels) > 0 || len(u.RemoveLabels) > 0
+}
+
+func (u TaskUpdate) needsReadModifyWriteRetry() bool {
+	return u.hasLabelOps() || u.DescriptionAppend != nil
+}
+
+func (s *Store) updateTaskOnce(ctx context.Context, id string, u TaskUpdate) (*model.Task, error) {
+	if u.Labels != nil && u.hasLabelOps() {
+		return nil, errors.New("labels replacement cannot be combined with add/remove labels")
+	}
+	if u.Description != nil && u.DescriptionAppend != nil {
+		return nil, errors.New("description replacement cannot be combined with description append")
+	}
 	cur, err := s.GetTask(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	originalOwner := cur.Owner
+	originalDescription := cur.Description
+	originalLabelsJSON, err := encodeLabels(cur.Labels)
+	if err != nil {
+		return nil, err
+	}
 	if u.Now == 0 {
 		u.Now = now()
 	}
@@ -726,6 +804,13 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	if u.Description != nil {
 		cur.Description = *u.Description
 	}
+	if u.DescriptionAppend != nil {
+		if cur.Description == "" {
+			cur.Description = *u.DescriptionAppend
+		} else {
+			cur.Description += "\n\n" + *u.DescriptionAppend
+		}
+	}
 	if u.Type != nil {
 		if !u.Type.Valid() {
 			return nil, fmt.Errorf("invalid task type %q", *u.Type)
@@ -743,6 +828,13 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	}
 	if u.Labels != nil {
 		labels, err := normalizeLabels(*u.Labels)
+		if err != nil {
+			return nil, err
+		}
+		cur.Labels = labels
+	}
+	if u.hasLabelOps() {
+		labels, err := applyLabelOps(cur.Labels, u.AddLabels, u.RemoveLabels)
 		if err != nil {
 			return nil, err
 		}
@@ -772,6 +864,14 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	if !u.Force {
 		q += ` AND owner=?`
 		args = append(args, originalOwner)
+	}
+	if u.hasLabelOps() {
+		q += ` AND labels=?`
+		args = append(args, originalLabelsJSON)
+	}
+	if u.DescriptionAppend != nil {
+		q += ` AND description=?`
+		args = append(args, originalDescription)
 	}
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {

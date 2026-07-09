@@ -311,15 +311,26 @@ func (h *Handler) getTask(ctx context.Context, c *app.RequestContext) {
 }
 
 type updateTaskReq struct {
-	Title       *string   `json:"title,omitempty"`
-	Description *string   `json:"description,omitempty"`
-	Type        *string   `json:"type,omitempty"`
-	State       *string   `json:"state,omitempty"`
-	Priority    *int      `json:"priority,omitempty"`
-	Labels      *[]string `json:"labels,omitempty"`
-	IfState     *string   `json:"if_state,omitempty"`
-	Owner       string    `json:"owner,omitempty"`
-	Force       bool      `json:"force,omitempty"`
+	Title             *string      `json:"title,omitempty"`
+	Description       *string      `json:"description,omitempty"`
+	DescriptionAppend *string      `json:"description_append,omitempty"`
+	Type              *string      `json:"type,omitempty"`
+	State             *string      `json:"state,omitempty"`
+	Priority          *int         `json:"priority,omitempty"`
+	Labels            *[]string    `json:"labels,omitempty"`
+	LabelOps          *labelOpsReq `json:"label_ops,omitempty"`
+	IfState           *string      `json:"if_state,omitempty"`
+	Owner             string       `json:"owner,omitempty"`
+	Force             bool         `json:"force,omitempty"`
+}
+
+type labelOpsReq struct {
+	Add    []string `json:"add,omitempty"`
+	Remove []string `json:"remove,omitempty"`
+}
+
+func (r *labelOpsReq) hasOps() bool {
+	return r != nil && (len(r.Add) > 0 || len(r.Remove) > 0)
 }
 
 func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
@@ -336,6 +347,13 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 	if req.Description != nil {
 		u.Description = req.Description
 	}
+	if req.Description != nil && req.DescriptionAppend != nil {
+		writeError(c, http.StatusBadRequest, errors.New("description and description_append cannot be used together"))
+		return
+	}
+	if req.DescriptionAppend != nil {
+		u.DescriptionAppend = req.DescriptionAppend
+	}
 	if req.Type != nil {
 		tt := model.TaskType(*req.Type)
 		u.Type = &tt
@@ -348,7 +366,15 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 		u.Priority = req.Priority
 	}
 	if req.Labels != nil {
+		if req.LabelOps.hasOps() {
+			writeError(c, http.StatusBadRequest, errors.New("labels and label_ops cannot be used together"))
+			return
+		}
 		u.Labels = req.Labels
+	}
+	if req.LabelOps.hasOps() {
+		u.AddLabels = req.LabelOps.Add
+		u.RemoveLabels = req.LabelOps.Remove
 	}
 	if req.IfState != nil {
 		st := model.TaskState(*req.IfState)

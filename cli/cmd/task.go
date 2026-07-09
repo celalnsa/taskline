@@ -70,10 +70,13 @@ func init() {
 
 	taskUpdateCmd.Flags().String("title", "", "new title")
 	taskUpdateCmd.Flags().String("description", "", "new description")
+	taskUpdateCmd.Flags().String("append-description", "", "append text to the current description")
 	taskUpdateCmd.Flags().String("type", "", "new type: feature|bug|docs")
 	taskUpdateCmd.Flags().String("state", "", "new state: pending|start|spec|dev|test|review|done")
 	taskUpdateCmd.Flags().Int("priority", 0, "new priority")
 	taskUpdateCmd.Flags().StringArray("label", nil, "replace task labels (repeatable)")
+	taskUpdateCmd.Flags().StringArray("add-label", nil, "add task label without replacing existing labels (repeatable)")
+	taskUpdateCmd.Flags().StringArray("remove-label", nil, "remove task label without replacing other labels (repeatable)")
 	taskUpdateCmd.Flags().Bool("clear-labels", false, "clear all task labels")
 	taskUpdateCmd.Flags().String("if-state", "", "only update if current state still matches")
 	taskUpdateCmd.Flags().String("owner", "", "task owner for claimed-task updates (or $TASKLINE_OWNER)")
@@ -299,6 +302,13 @@ var taskUpdateCmd = &cobra.Command{
 			v, _ := cmd.Flags().GetString("description")
 			in.Description = &v
 		}
+		if cmd.Flags().Changed("append-description") {
+			if cmd.Flags().Changed("description") {
+				return errors.New("--description and --append-description cannot be used together")
+			}
+			v, _ := cmd.Flags().GetString("append-description")
+			in.DescriptionAppend = &v
+		}
 		if cmd.Flags().Changed("type") {
 			v, _ := cmd.Flags().GetString("type")
 			in.Type = &v
@@ -312,9 +322,14 @@ var taskUpdateCmd = &cobra.Command{
 			in.Priority = &v
 		}
 		labelsChanged := cmd.Flags().Changed("label")
+		addLabelsChanged := cmd.Flags().Changed("add-label")
+		removeLabelsChanged := cmd.Flags().Changed("remove-label")
 		clearLabels, _ := cmd.Flags().GetBool("clear-labels")
 		if labelsChanged && clearLabels {
 			return errors.New("--label and --clear-labels cannot be used together")
+		}
+		if (labelsChanged || clearLabels) && (addLabelsChanged || removeLabelsChanged) {
+			return errors.New("--add-label/--remove-label cannot be combined with --label or --clear-labels")
 		}
 		if labelsChanged {
 			v, _ := cmd.Flags().GetStringArray("label")
@@ -323,6 +338,11 @@ var taskUpdateCmd = &cobra.Command{
 		if clearLabels {
 			v := []string{}
 			in.Labels = &v
+		}
+		if addLabelsChanged || removeLabelsChanged {
+			add, _ := cmd.Flags().GetStringArray("add-label")
+			remove, _ := cmd.Flags().GetStringArray("remove-label")
+			in.LabelOps = &client.LabelOps{Add: add, Remove: remove}
 		}
 		if cmd.Flags().Changed("if-state") {
 			v, _ := cmd.Flags().GetString("if-state")
