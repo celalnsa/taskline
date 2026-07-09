@@ -460,6 +460,69 @@ func TestUpdateTaskIfStateRejectsStaleState(t *testing.T) {
 	require.Equal(t, model.StateDev, updated.State)
 }
 
+func TestUpdateTaskIfStateAllowsSingleConcurrentWriter(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "taskline.db")
+	primary, err := store.New(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = primary.Close() })
+	p, err := primary.CreateProject(ctx, "p", "")
+	require.NoError(t, err)
+	tk, err := primary.CreateTask(ctx, p.ID, "cas race", "", model.TaskTypeFeature, 0, model.StateStart)
+	require.NoError(t, err)
+
+	const workers = 12
+	stores := make([]*store.Store, workers)
+	for i := range workers {
+		stores[i], err = store.New(path)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = stores[i].Close() })
+	}
+
+	startState := model.StateStart
+	doneState := model.StateDone
+	start := make(chan struct{})
+	results := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, err := stores[i].UpdateTask(ctx, tk.ID, store.TaskUpdate{
+				State:   &doneState,
+				IfState: &startState,
+				Now:     10_000 + int64(i),
+			})
+			results <- err
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	successes := 0
+	conflicts := 0
+	for err := range results {
+		if err == nil {
+			successes++
+			continue
+		}
+		if errors.Is(err, store.ErrConflict) {
+			conflicts++
+			continue
+		}
+		require.NoError(t, err)
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, workers-1, conflicts)
+
+	got, err := primary.GetTask(ctx, tk.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.StateDone, got.State)
+}
+
 func TestLinkCRUD(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

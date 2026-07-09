@@ -670,6 +670,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	if err != nil {
 		return nil, err
 	}
+	originalOwner := cur.Owner
 	if u.Now == 0 {
 		u.Now = now()
 	}
@@ -715,19 +716,57 @@ func (s *Store) UpdateTask(ctx context.Context, id string, u TaskUpdate) (*model
 	if u.Owner != "" && cur.Owner == u.Owner && u.LeaseExpiresAt > 0 {
 		cur.LeaseExpiresAt = u.LeaseExpiresAt
 	}
+	renewLease := u.Owner != "" && cur.Owner == u.Owner && u.LeaseExpiresAt > 0
 	labelsJSON, err := encodeLabels(cur.Labels)
 	if err != nil {
 		return nil, err
 	}
 	cur.UpdatedAt = u.Now
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,owner=?,claimed_at=?,lease_expires_at=?,updated_at=? WHERE id=?`,
-		cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.Owner, cur.ClaimedAt, cur.LeaseExpiresAt, cur.UpdatedAt, cur.ID,
-	)
+	q := `UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,updated_at=?`
+	args := []any{cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.UpdatedAt}
+	if renewLease {
+		q += `,lease_expires_at=?`
+		args = append(args, cur.LeaseExpiresAt)
+	}
+	q += ` WHERE id=?`
+	args = append(args, cur.ID)
+	if u.IfState != nil {
+		q += ` AND state=?`
+		args = append(args, *u.IfState)
+	}
+	if !u.Force {
+		q += ` AND owner=?`
+		args = append(args, originalOwner)
+	}
+	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
-	return cur, nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, s.updateTaskConflict(ctx, id, u, originalOwner)
+	}
+	return s.GetTask(ctx, id)
+}
+
+func (s *Store) updateTaskConflict(ctx context.Context, id string, u TaskUpdate, originalOwner string) error {
+	latest, err := s.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if u.IfState != nil && latest.State != *u.IfState {
+		return fmt.Errorf("%w: state conflict: expected %s, current state %s", ErrConflict, *u.IfState, latest.State)
+	}
+	if !u.Force && latest.Owner != originalOwner {
+		if latest.Owner != "" {
+			return fmt.Errorf("%w: task is claimed by %s", ErrConflict, latest.Owner)
+		}
+		return fmt.Errorf("%w: task claim changed concurrently", ErrConflict)
+	}
+	return fmt.Errorf("%w: task changed concurrently", ErrConflict)
 }
 
 // DeleteTask removes a task (cascades to deps and attachment rows via FK).
