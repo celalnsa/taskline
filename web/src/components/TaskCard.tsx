@@ -1,8 +1,9 @@
 import { useDraggable } from "@dnd-kit/core";
 import { useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { UserRound } from "lucide-react";
 import type { Task } from "../lib/api";
 import { getTaskLabelTheme, taskLabelChipClass } from "../lib/labels";
-import { formatRelativeTime } from "../lib/time";
+import { formatElapsedTime, formatRelativeTime } from "../lib/time";
 
 const MAX_VISIBLE_CARD_CHIPS = 4;
 
@@ -23,6 +24,9 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const labels = task.labels ?? [];
   const dependencyCount = task.depends_on?.length ?? 0;
+  const claimOwner = task.owner?.trim();
+  const claimElapsed = task.claimed_at ? formatElapsedTime(task.claimed_at) : "";
+  const claimTitle = claimOwner ? buildClaimTitle(task, claimOwner) : undefined;
   const metadataChipCount = 1 + (dependencyCount > 0 ? 1 : 0);
   const visibleLabelCount = Math.max(0, MAX_VISIBLE_CARD_CHIPS - metadataChipCount);
   const visibleLabels = labels.slice(0, visibleLabelCount);
@@ -178,9 +182,31 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
           )}
         </div>
       </div>
-      <div className="mt-1 flex items-center justify-end">
+      <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
+        {claimOwner && (
+          <span
+            aria-label={
+              claimElapsed
+                ? `Claimed by ${claimOwner} for ${claimElapsed}`
+                : `Claimed by ${claimOwner}`
+            }
+            className="inline-flex min-w-0 max-w-[72%] items-center gap-1 rounded border border-[var(--tl-outline)] bg-[var(--tl-bg-quiet)] px-1.5 py-0.5 text-[10px] leading-3 text-[var(--tl-ink-muted)]"
+            title={claimTitle}
+          >
+            <UserRound size={10} aria-hidden="true" className="shrink-0" />
+            <span className="min-w-0 truncate">{claimOwner}</span>
+            {claimElapsed && (
+              <>
+                <span aria-hidden="true" className="shrink-0 text-[var(--tl-ink-faint)]">
+                  ·
+                </span>
+                <span className="shrink-0 tabular-nums">{claimElapsed}</span>
+              </>
+            )}
+          </span>
+        )}
         <span
-          className="text-[10px] tabular-nums text-[var(--tl-ink-faint)]"
+          className="ml-auto shrink-0 text-[10px] tabular-nums text-[var(--tl-ink-faint)]"
           title={new Date(task.updated_at).toLocaleString()}
         >
           {formatRelativeTime(task.updated_at)}
@@ -188,4 +214,17 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
       </div>
     </div>
   );
+}
+
+function buildClaimTitle(task: Task, owner: string): string {
+  const parts = [`Owner: ${owner}`];
+  if (task.claimed_at) {
+    parts.push(
+      `Claimed ${formatRelativeTime(task.claimed_at)} (${new Date(task.claimed_at).toLocaleString()})`
+    );
+  }
+  if (task.lease_expires_at) {
+    parts.push(`Lease expires ${new Date(task.lease_expires_at).toLocaleString()}`);
+  }
+  return parts.join(" · ");
 }

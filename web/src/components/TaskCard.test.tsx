@@ -45,6 +45,7 @@ function renderCard(
 describe("TaskCard", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -221,6 +222,25 @@ describe("TaskCard", () => {
     expect(screen.queryByText("review")).toBeNull();
     expect(screen.queryByText("later")).toBeNull();
     expect(screen.getByText("+2")).toBeTruthy();
+  });
+
+  it("shows the claim owner and elapsed claim duration on claimed cards", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+
+    renderCard(vi.fn(), vi.fn(), {
+      ...task,
+      owner: "codex-local",
+      claimed_at: Date.parse("2026-01-01T11:15:00.000Z"),
+      lease_expires_at: Date.parse("2026-01-01T17:15:00.000Z"),
+    });
+
+    const claimStatus = screen.getByLabelText(/claimed by codex-local/i);
+
+    expect(claimStatus.textContent).toContain("codex-local");
+    expect(claimStatus.textContent).toContain("45 mins");
+    expect(claimStatus.getAttribute("title")).toContain("Claimed 45 mins ago");
+    expect(claimStatus.getAttribute("title")).toContain("Lease expires");
   });
 
   it("counts priority and dependency chips when deciding hidden labels", () => {

@@ -16,21 +16,26 @@ const YEAR = 365 * DAY;
 
 type Unit = "min" | "hour" | "day" | "week" | "month" | "year";
 
-function pick(value: number, unit: Unit): string {
+function pickDuration(value: number, unit: Unit): string {
   const v = Math.floor(value);
   const plural = v === 1 ? unit : `${unit}s`;
-  return `${v} ${plural} ago`;
+  return `${v} ${plural}`;
 }
 
-export function formatRelativeTime(timestampMs: number, now: number = Date.now()): string {
+export function formatElapsedTime(timestampMs: number, now: number = Date.now()): string {
   const diff = now - timestampMs;
   // Future timestamps shouldn't happen in normal flow, but if a client
   // clock is skewed forward we don't want to render a negative time.
   if (diff < MINUTE) return "just now";
-  if (diff < HOUR) return pick(diff / MINUTE, "min");
-  if (diff < DAY) return pick(diff / HOUR, "hour");
-  if (diff < WEEK) return pick(diff / DAY, "day");
-  if (diff < MONTH) return pick(diff / WEEK, "week");
-  if (diff < YEAR) return pick(diff / MONTH, "month");
-  return pick(diff / YEAR, "year");
+  if (diff < HOUR) return pickDuration(diff / MINUTE, "min");
+  if (diff < DAY) return pickDuration(diff / HOUR, "hour");
+  if (diff < WEEK) return pickDuration(diff / DAY, "day");
+  if (diff < MONTH) return pickDuration(diff / WEEK, "week");
+  if (diff < YEAR) return pickDuration(diff / MONTH, "month");
+  return pickDuration(diff / YEAR, "year");
+}
+
+export function formatRelativeTime(timestampMs: number, now: number = Date.now()): string {
+  const elapsed = formatElapsedTime(timestampMs, now);
+  return elapsed === "just now" ? elapsed : `${elapsed} ago`;
 }

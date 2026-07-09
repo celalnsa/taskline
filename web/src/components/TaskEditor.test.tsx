@@ -74,6 +74,7 @@ function renderCreateEditor(onClose = vi.fn(), allTasks: Task[] = []) {
 describe("TaskEditor markdown description editing", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -106,6 +107,23 @@ describe("TaskEditor markdown description editing", () => {
       expect(wrapper?.className).toContain("items-center");
       expect(wrapper?.className).toContain("gap-2");
     }
+  });
+
+  it("shows claim metadata for a claimed task", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
+
+    renderEditor(vi.fn(), {
+      ...task,
+      owner: "codex-local",
+      claimed_at: Date.parse("2026-01-01T11:15:00.000Z"),
+      lease_expires_at: Date.parse("2026-01-01T17:15:00.000Z"),
+    });
+
+    expect(screen.getByText("Claim")).toBeTruthy();
+    expect(screen.getByText("codex-local")).toBeTruthy();
+    expect(screen.getByText("45 mins")).toBeTruthy();
+    expect(screen.getByText(/lease expires/i)).toBeTruthy();
   });
 
   it("opens a markdown editor from the description field", async () => {
