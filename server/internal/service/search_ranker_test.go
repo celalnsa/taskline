@@ -36,6 +36,18 @@ func TestTaskSearchRankerScoresLexicalFields(t *testing.T) {
 			want:  8000,
 		},
 		{
+			name:  "short id with copied punctuation",
+			task:  searchTask("fc7a0732-0000-0000-0000-000000000001", "", "", model.TaskTypeFeature, model.StateStart, nil, 0, 0),
+			query: "fc7a0732:",
+			want:  15000,
+		},
+		{
+			name:  "short id term in mixed query",
+			task:  searchTask("fc7a0732-0000-0000-0000-000000000001", "", "", model.TaskTypeFeature, model.StateStart, nil, 0, 0),
+			query: "copied fc7a0732",
+			want:  15000,
+		},
+		{
 			name:  "title",
 			task:  searchTask("aaaaaaaa-0000-0000-0000-000000000001", "Agent Hooks", "", model.TaskTypeFeature, model.StateStart, nil, 0, 0),
 			query: "agent",

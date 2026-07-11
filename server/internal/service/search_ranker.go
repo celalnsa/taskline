@@ -3,6 +3,7 @@ package service
 import (
 	"sort"
 	"strings"
+	"unicode"
 
 	"taskline_server/api/model"
 )
@@ -56,14 +57,8 @@ func (r taskSearchRanker) scoreNormalized(task *model.Task, query string, terms 
 		return 0
 	}
 	score := 0
-	id := task.ID
-	if query == id {
-		score += 20000
-	} else if len(query) >= 4 && strings.HasPrefix(id, query) {
-		score += 15000
-	} else if len(query) >= 4 && strings.Contains(id, query) {
-		score += 8000
-	}
+	id := normalizeTaskSearchText(task.ID)
+	score += scoreTaskID(id, query, terms)
 
 	title := normalizeTaskSearchText(task.Title)
 	description := normalizeTaskSearchText(task.Description)
@@ -106,6 +101,35 @@ func (r taskSearchRanker) scoreNormalized(task *model.Task, query string, terms 
 	return score
 }
 
+func scoreTaskID(id, query string, terms []string) int {
+	if score := scoreTaskIDTerm(id, query); score > 0 {
+		return score
+	}
+	best := 0
+	for _, term := range terms {
+		if score := scoreTaskIDTerm(id, normalizeTaskSearchIDTerm(term)); score > best {
+			best = score
+		}
+	}
+	return best
+}
+
+func scoreTaskIDTerm(id, term string) int {
+	if id == "" || term == "" {
+		return 0
+	}
+	if term == id {
+		return 20000
+	}
+	if len(term) >= 4 && strings.HasPrefix(id, term) {
+		return 15000
+	}
+	if len(term) >= 4 && strings.Contains(id, term) {
+		return 8000
+	}
+	return 0
+}
+
 func normalizeTaskSearchText(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
@@ -122,4 +146,10 @@ func taskSearchTerms(query string) []string {
 		terms = append(terms, term)
 	}
 	return terms
+}
+
+func normalizeTaskSearchIDTerm(term string) string {
+	return strings.TrimFunc(term, func(r rune) bool {
+		return unicode.IsPunct(r) || unicode.IsSymbol(r)
+	})
 }
