@@ -21,7 +21,8 @@ const task: Task = {
 };
 
 function renderMenu({ onEdit }: { onEdit?: (task: Task) => void } = {}) {
-  const onCopy = vi.fn();
+  const onClone = vi.fn();
+  const onCopyTaskID = vi.fn();
   const onDelete = vi.fn();
   const onClose = vi.fn();
 
@@ -29,14 +30,15 @@ function renderMenu({ onEdit }: { onEdit?: (task: Task) => void } = {}) {
     <TaskContextMenu
       task={task}
       position={{ x: 24, y: 32 }}
-      onCopy={onCopy}
+      onClone={onClone}
+      onCopyTaskID={onCopyTaskID}
       onDelete={onDelete}
       onEdit={onEdit}
       onClose={onClose}
     />
   );
 
-  return { onCopy, onDelete, onClose };
+  return { onClone, onCopyTaskID, onDelete, onClose };
 }
 
 describe("TaskContextMenu", () => {
@@ -68,17 +70,39 @@ describe("TaskContextMenu", () => {
     expect(onDelete).toHaveBeenCalledWith(task);
   });
 
-  it("renders an optional edit action before copy and delete", async () => {
+  it("renders an optional edit action before clone, copy ID, and delete", async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
     const { onClose } = renderMenu({ onEdit });
 
     const items = screen.getAllByRole("menuitem");
-    expect(items.map((item) => item.textContent)).toEqual(["Edit", "Copy", "Delete"]);
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Edit",
+      "Clone",
+      "Copy task ID",
+      "Delete",
+    ]);
 
     await user.click(screen.getByRole("menuitem", { name: /^edit$/i }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onEdit).toHaveBeenCalledWith(task);
+  });
+
+  it("uses separate actions for cloning and copying the task ID", async () => {
+    const user = userEvent.setup();
+    const { onClone, onCopyTaskID } = renderMenu();
+
+    await user.click(screen.getByRole("menuitem", { name: /^clone$/i }));
+
+    expect(onClone).toHaveBeenCalledWith(task);
+    expect(onCopyTaskID).not.toHaveBeenCalled();
+
+    cleanup();
+    const next = renderMenu();
+    await user.click(screen.getByRole("menuitem", { name: /^copy task id$/i }));
+
+    expect(next.onCopyTaskID).toHaveBeenCalledWith(task);
+    expect(next.onClone).not.toHaveBeenCalled();
   });
 });

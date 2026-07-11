@@ -241,7 +241,7 @@ describe("KanbanBoard context menu", () => {
     expect(deleteMutate).toHaveBeenCalledWith("task-1", expect.any(Object));
   });
 
-  it("opens a create editor prefilled with copied basic task information", async () => {
+  it("opens a create editor prefilled with cloned basic task information", async () => {
     const user = userEvent.setup();
     const { deleteMutate } = renderBoard();
 
@@ -249,7 +249,7 @@ describe("KanbanBoard context menu", () => {
       clientX: 32,
       clientY: 48,
     });
-    await user.click(screen.getByRole("menuitem", { name: /^copy$/i }));
+    await user.click(screen.getByRole("menuitem", { name: /^clone$/i }));
 
     expect(screen.getByRole("dialog", { name: /create task copy source task/i })).toBeTruthy();
     expect(screen.getByTestId("editor-mode").textContent).toBe("create");
@@ -259,6 +259,24 @@ describe("KanbanBoard context menu", () => {
     expect(screen.getByText("7")).toBeTruthy();
     expect(screen.getByText("provider,review")).toBeTruthy();
     expect(deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("copies the task ID from the right-click menu", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderBoard();
+
+    fireEvent.contextMenu(screen.getByText("Copy source task"), {
+      clientX: 32,
+      clientY: 48,
+    });
+    await user.click(screen.getByRole("menuitem", { name: /^copy task id$/i }));
+
+    expect(writeText).toHaveBeenCalledWith("task-1");
   });
 
   it("pans the board horizontally when dragging empty kanban space", () => {

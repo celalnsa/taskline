@@ -18,7 +18,7 @@ import {
   type TaskState,
 } from "../lib/api";
 import { useDeleteTask, useTasks, useUpdateTask } from "../hooks/queries";
-import { createTaskCopyDraft } from "../lib/taskActions";
+import { copyTaskIDToClipboard, createTaskCloneDraft } from "../lib/taskActions";
 import { TaskCard } from "./TaskCard";
 import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskEditor } from "./TaskEditor";
@@ -87,7 +87,7 @@ export function KanbanBoard({ project }: Props) {
   const updateTask = useUpdateTask(project.id);
   const deleteTask = useDeleteTask(project.id);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [copyDraft, setCopyDraft] = useState<Task | null>(null);
+  const [cloneDraft, setCloneDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [columnSortModes, setColumnSortModes] = useState<Record<TaskState, ColumnSortMode>>(() =>
@@ -164,6 +164,13 @@ export function KanbanBoard({ project }: Props) {
         setError((err as Error).message);
         setTimeout(() => setError(null), 5000);
       },
+    });
+  }
+
+  function copyTaskIDWithError(task: Task) {
+    void copyTaskIDToClipboard(task).catch((err) => {
+      setError((err as Error).message);
+      setTimeout(() => setError(null), 5000);
     });
   }
 
@@ -270,13 +277,13 @@ export function KanbanBoard({ project }: Props) {
           onClose={() => setEditing(null)}
         />
       )}
-      {copyDraft && (
+      {cloneDraft && (
         <TaskEditor
           project={project}
-          task={copyDraft}
+          task={cloneDraft}
           allTasks={tasks}
           mode="create"
-          onClose={() => setCopyDraft(null)}
+          onClose={() => setCloneDraft(null)}
         />
       )}
       {taskMenu && (
@@ -285,7 +292,8 @@ export function KanbanBoard({ project }: Props) {
           position={{ x: taskMenu.x, y: taskMenu.y }}
           onClose={() => setTaskMenu(null)}
           onDelete={deleteTaskWithError}
-          onCopy={(task) => setCopyDraft(createTaskCopyDraft(task))}
+          onClone={(task) => setCloneDraft(createTaskCloneDraft(task))}
+          onCopyTaskID={copyTaskIDWithError}
         />
       )}
     </div>

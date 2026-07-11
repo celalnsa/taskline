@@ -392,7 +392,7 @@ describe("GraphView", () => {
     expect(screen.getByRole("alert").textContent).toBe("delete failed");
   });
 
-  it("copies a graph task into a prefilled create editor from the right-click menu", async () => {
+  it("clones a graph task into a prefilled create editor from the right-click menu", async () => {
     const user = userEvent.setup();
     const { deleteTaskMutate } = renderGraph([
       task({
@@ -408,7 +408,7 @@ describe("GraphView", () => {
     ]);
 
     fireEvent.contextMenu(screen.getByTestId("node-b"), { clientX: 60, clientY: 80 });
-    await user.click(screen.getByRole("menuitem", { name: /^copy$/i }));
+    await user.click(screen.getByRole("menuitem", { name: /^clone$/i }));
 
     const dialog = screen.getByRole("dialog", { name: /create task copyable graph task/i });
     expect(dialog).toBeTruthy();
@@ -419,6 +419,21 @@ describe("GraphView", () => {
     expect(within(dialog).getByText("9")).toBeTruthy();
     expect(within(dialog).getByText("graph,copy")).toBeTruthy();
     expect(deleteTaskMutate).not.toHaveBeenCalled();
+  });
+
+  it("copies a graph task ID from the right-click menu", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderGraph([task({ id: "b", title: "Task with copyable ID" })]);
+
+    fireEvent.contextMenu(screen.getByTestId("node-b"), { clientX: 60, clientY: 80 });
+    await user.click(screen.getByRole("menuitem", { name: /^copy task id$/i }));
+
+    expect(writeText).toHaveBeenCalledWith("b");
   });
 
   it("creates a dependency when connecting one task to another", async () => {

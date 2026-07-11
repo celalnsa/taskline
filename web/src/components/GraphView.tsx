@@ -30,7 +30,7 @@ import {
   useTasks,
   useUpdateTask,
 } from "../hooks/queries";
-import { createTaskCopyDraft } from "../lib/taskActions";
+import { copyTaskIDToClipboard, createTaskCloneDraft } from "../lib/taskActions";
 import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskEditor } from "./TaskEditor";
 
@@ -90,7 +90,7 @@ export function GraphView({ project }: Props) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [copyDraft, setCopyDraft] = useState<Task | null>(null);
+  const [cloneDraft, setCloneDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
@@ -265,13 +265,13 @@ export function GraphView({ project }: Props) {
           onClose={() => setEditing(null)}
         />
       )}
-      {copyDraft && (
+      {cloneDraft && (
         <TaskEditor
           project={project}
-          task={copyDraft}
+          task={cloneDraft}
           allTasks={tasks}
           mode="create"
-          onClose={() => setCopyDraft(null)}
+          onClose={() => setCloneDraft(null)}
         />
       )}
       {taskMenu && (
@@ -280,7 +280,10 @@ export function GraphView({ project }: Props) {
           position={{ x: taskMenu.x, y: taskMenu.y }}
           onClose={() => setTaskMenu(null)}
           onEdit={setEditing}
-          onCopy={(task) => setCopyDraft(createTaskCopyDraft(task))}
+          onClone={(task) => setCloneDraft(createTaskCloneDraft(task))}
+          onCopyTaskID={(task) => {
+            void copyTaskIDToClipboard(task).catch(showMutationError);
+          }}
           onDelete={(task) => {
             deleteTask.mutate(task.id, { onError: showMutationError });
             setSelectedTaskId(null);
