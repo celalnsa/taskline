@@ -152,6 +152,47 @@ describe("KanbanBoard context menu", () => {
     expect(taskTitlesInColumn("start")).toEqual(["Ready high", "Ready low", "Blocked high"]);
   });
 
+  it("sorts the done column by most recently updated by default", async () => {
+    const user = userEvent.setup();
+    renderBoard([
+      task({
+        id: "done-older",
+        title: "Older high priority",
+        state: "done",
+        priority: 10,
+        updated_at: 200,
+      }),
+      task({
+        id: "done-newer",
+        title: "Newest low priority",
+        state: "done",
+        priority: 1,
+        updated_at: 900,
+      }),
+      task({
+        id: "done-middle",
+        title: "Middle update",
+        state: "done",
+        priority: 5,
+        updated_at: 500,
+      }),
+    ]);
+
+    expect(taskTitlesInColumn("done")).toEqual([
+      "Newest low priority",
+      "Middle update",
+      "Older high priority",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /sort done tasks/i }));
+
+    expect(
+      screen
+        .getByRole("menuitemradio", { name: /recently updated/i })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
   it("changes the clicked column sort mode", async () => {
     const user = userEvent.setup();
     renderBoard([

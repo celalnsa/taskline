@@ -71,9 +71,10 @@ Two views, switchable from the toolbar:
 
 - **Kanban** — seven columns (pending / start / spec / dev / test /
   review / done), each showing its task count in the column header.
-  Columns default to "next execution order" (unblocked first, then
-  priority / FIFO) and expose per-column sort controls for execution
-  order, priority high-to-low, and created oldest-first. Drag a card to
+  All non-Done columns default to "next execution order" (unblocked first, then
+  priority / FIFO), while Done defaults to recently updated first. Every
+  column exposes sort controls for execution order, priority high-to-low,
+  created oldest-first, and recently updated. Drag a card to
   change its state; the server accepts moves in either direction.
   `pending` is a parking lot — tasks there are not runnable, and the
   "+ New task" modal exposes an *Auto-start* toggle (on by default) to

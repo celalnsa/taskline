@@ -379,10 +379,9 @@ function Column({
 }
 
 function createDefaultColumnSortModes(): Record<TaskState, ColumnSortMode> {
-  return Object.fromEntries(STATES.map((state) => [state, "execution"])) as Record<
-    TaskState,
-    ColumnSortMode
-  >;
+  return Object.fromEntries(
+    STATES.map((state) => [state, state === "done" ? "updated" : "execution"])
+  ) as Record<TaskState, ColumnSortMode>;
 }
 
 function compareTasksForColumn(
