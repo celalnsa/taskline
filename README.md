@@ -136,7 +136,14 @@ TASKLINE_DB=./.cache/data/taskline.db
 TASKLINE_LISTEN=:8787
 TASKLINE_IMAGES_DIR=./.cache/data/images
 TASKLINE_DOCS_DIR=./.cache/data/docs
+# Optional; otherwise the server reuses `gh auth token` from the local keychain.
+TASKLINE_GITHUB_TOKEN=
 ```
+
+Entering `review` requires an attached GitHub PR link. Entering `done` also
+verifies through GitHub that the PR is merged, all review threads are resolved,
+and CI is green or not configured. The token lookup order is
+`TASKLINE_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN`, then the local `gh` login.
 
 ## CLI environment
 

@@ -75,14 +75,17 @@ and are not installed globally.
   dependency — it breaks cross-compile and the `go run` workflow.
 - **State machine.** `pending → start → spec → dev → test → review → done`.
   Movement in either direction is allowed (review surfacing a bug →
-  drop back to dev is a real workflow); validation only rejects unknown
-  state names. `pending` is a non-runnable parking lot; the entry-point
+  drop back to dev is a real workflow), but target states may have service-layer
+  entry rules. Entering `review` requires an attached, live GitHub PR;
+  entering `done` requires a merged PR with no unresolved review threads and
+  green or absent CI checks. `--force` only bypasses claim ownership and never
+  bypasses workflow evidence. `pending` is a non-runnable parking lot; the entry-point
   state is `start` (formerly `created`). `spec` is for product
   requirements, UX, scope, and acceptance criteria; technical design
   and implementation start in `dev`; full local verification belongs in
   `test`; code review and CI belong in `review`. Tasks created without
   `auto_start` land in `pending`. Lives in `server/api/model/model.go`
-  (`CanTransitionTo`).
+  (`CanTransitionTo`) and `server/internal/service/workflow.go` (entry rules).
 - **Dependency DAG.** `AddDependency` rejects cycles with 409. Any new
   graph mutation MUST keep the cycle check.
 - **Errors.** Store layer returns sentinel errors (`ErrNotFound`,
