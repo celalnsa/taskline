@@ -19,10 +19,54 @@ import (
 // Service holds business logic on top of the store: name resolution,
 // state-machine validation, runnable filtering.
 type Service struct {
-	st *store.Store
+	st              *store.Store
+	stateEntryRules map[model.TaskState][]StateEntryRule
 }
 
-func New(st *store.Store) *Service { return &Service{st: st} }
+type serviceOptions struct {
+	pullRequestVerifier PullRequestVerifier
+	extraStateRules     map[model.TaskState][]StateEntryRule
+}
+
+// Option customizes service integrations without coupling business logic to
+// their concrete implementations.
+type Option func(*serviceOptions)
+
+// WithPullRequestVerifier supplies the external PR facts used by the built-in
+// review and done state-entry rules.
+func WithPullRequestVerifier(verifier PullRequestVerifier) Option {
+	return func(opts *serviceOptions) {
+		if verifier != nil {
+			opts.pullRequestVerifier = verifier
+		}
+	}
+}
+
+// WithStateEntryRule appends a rule for a target state. It is the extension
+// point for future workflow evidence requirements.
+func WithStateEntryRule(state model.TaskState, rule StateEntryRule) Option {
+	return func(opts *serviceOptions) {
+		if rule == nil {
+			return
+		}
+		if opts.extraStateRules == nil {
+			opts.extraStateRules = make(map[model.TaskState][]StateEntryRule)
+		}
+		opts.extraStateRules[state] = append(opts.extraStateRules[state], rule)
+	}
+}
+
+func New(st *store.Store, options ...Option) *Service {
+	opts := serviceOptions{pullRequestVerifier: unavailablePullRequestVerifier{}}
+	for _, option := range options {
+		option(&opts)
+	}
+	rules := defaultStateEntryRules(opts.pullRequestVerifier)
+	for state, extra := range opts.extraStateRules {
+		rules[state] = append(rules[state], extra...)
+	}
+	return &Service{st: st, stateEntryRules: rules}
+}
 
 const DefaultLeaseDuration = 6 * time.Hour
 
@@ -295,6 +339,7 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 	if u.IfState != nil && !u.IfState.Valid() {
 		return nil, fmt.Errorf("invalid if-state %q", *u.IfState)
 	}
+	u.Owner = strings.TrimSpace(u.Owner)
 	if u.State != nil {
 		cur, err := s.st.GetTask(ctx, id)
 		if err != nil {
@@ -303,8 +348,23 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 		if err := cur.State.CanTransitionTo(*u.State); err != nil {
 			return nil, fmt.Errorf("invalid transition %s -> %s: %w", cur.State, *u.State, err)
 		}
+		if u.IfState != nil && cur.State != *u.IfState {
+			return nil, fmt.Errorf("%w: state conflict: expected %s, current state %s", store.ErrConflict, *u.IfState, cur.State)
+		}
+		if !u.Force && cur.Owner != "" {
+			if u.Owner == "" {
+				return nil, fmt.Errorf("%w: task is claimed by %s; pass owner or force", store.ErrConflict, cur.Owner)
+			}
+			if u.Owner != cur.Owner {
+				return nil, fmt.Errorf("%w: task is claimed by %s", store.ErrConflict, cur.Owner)
+			}
+		}
+		if cur.State != *u.State {
+			if err := s.validateStateEntry(ctx, cur, *u.State); err != nil {
+				return nil, err
+			}
+		}
 	}
-	u.Owner = strings.TrimSpace(u.Owner)
 	if u.Owner != "" {
 		nowMs := nowMillis()
 		u.Now = nowMs

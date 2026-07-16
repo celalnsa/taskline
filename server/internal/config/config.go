@@ -22,6 +22,7 @@ import (
 //	TASKLINE_LISTEN     — listen addr (default :8787)
 //	TASKLINE_IMAGES_DIR — image storage dir (default ./data/images)
 //	TASKLINE_DOCS_DIR   — markdown doc storage dir (default ./data/docs)
+//	TASKLINE_GITHUB_TOKEN — optional GitHub token for workflow evidence checks
 type Config struct {
 	DBPath     string
 	ListenAddr string

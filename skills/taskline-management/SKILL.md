@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.13.0
+version: 0.14.0
 ---
 
 # taskline — task management for AI agents
@@ -115,10 +115,13 @@ server derives owner from the registered token.
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
 | `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |
 
-**State machine.** Any state may transition to any other named state.
-Forward jumps (`start` → `done`) and drop-backs (`review` → `dev`
-when a defect surfaces) are both legal. Unknown state names are
-rejected — don't invent new ones.
+**State machine.** Any state may transition toward any other named state, but
+target-state evidence rules still apply. Drop-backs (`review` → `dev` when a
+defect surfaces) and directional jumps are legal; entering `review` requires
+an attached valid GitHub PR, and entering `done` requires that PR to be merged
+with review threads resolved and CI green or not configured. `--force` does
+not bypass these gates. Unknown state names are rejected — don't invent new
+ones.
 `test` is the local verification stage between implementation and
 review: test review, unit tests, API e2e, browser smoke, and any other
 checks that should pass before PR review/CI begins.
@@ -289,8 +292,9 @@ Recommended moments to call it:
 
 - **spec/dev/test/review**: create or update the matching Markdown doc.
 - **test → review**: link the PR URL just after `gh pr create` ("PR #N").
-- **review → done**: the merged-commit URL or anything a future
-  reader would want to reach for ("merge", "post-mortem").
+- **review → done**: update the Review Report and any merged-commit or
+  post-mortem links before changing state. The attached PR link itself is the
+  authoritative merge/review/CI evidence.
 
 Docs and links surface inline on `task get` and in the web detail view.
 There is no limit on how many docs or links a task can hold; favour
@@ -435,7 +439,8 @@ task description or implementation notes, then continue.
      so anyone reading the task later can jump straight to the
      review.
 - **Advance:** `taskline task update <id> --state review`
-- **Skip when:** never. Tests are the gate.
+- **Skip when:** never. Tests and a real pushed PR are the gate. The server
+  rejects the transition until the PR link has been attached.
 
 ### review → done
 
@@ -464,24 +469,29 @@ task description or implementation notes, then continue.
      Address each finding; for real defects, drop the task back to
      `dev`, re-run tests after each batch, and push. If a comment is
      wrong, **reply with reasoning** rather than silently ignoring it.
-  4. Create or update a `Review Report` task doc covering PR comments,
-     CI status, and whether the implementation still matches the
-     original design. If not, either update the design doc with the
+  4. Merge with `gh pr merge --squash --delete-branch` (or the project's
+     required merge style) only after reviews and CI are ready.
+  5. Confirm the remote result with
+     `gh pr view <n> --json state,mergedAt,statusCheckRollup`.
+  6. Create or update a `Review Report` task doc covering PR comments,
+     CI status, merge result, and whether the implementation still matches
+     the original design. If not, either update the design doc with the
      justified change or drop back to `dev` for rework.
 - **Advance:** `taskline task update <id> --state done` *only after*
   (a) CI green or N/A, (b) at least one review posted, and
-  (c) every reviewer comment addressed or rebutted.
+  (c) every reviewer comment addressed or rebutted, and (d) the PR is merged.
+  The server queries GitHub and rejects `done` when merge, review-thread, or CI
+  evidence is incomplete.
 - **Drop back to dev** with `taskline task update <id> --state dev`
   when review or CI surfaces a real defect. The bidirectional state
   machine exists for exactly this — don't delete-and-recreate.
 
 ### done — wrap-up
 
-- **Trigger:** PR approved (or all comments addressed) + CI green.
+- **Trigger:** task is `done` after the PR was merged and verified.
 - **Actions:**
-  1. `gh pr merge --squash --delete-branch` (or the project's style).
-  2. `git checkout main && git pull`
-  3. Delete the local feature branch (gh's `--delete-branch` may have
+  1. `git checkout main && git pull`
+  2. Delete the local feature branch (gh's `--delete-branch` may have
      done this already).
 - The taskline task is already `done`; this stage is repo hygiene.
 
@@ -494,14 +504,15 @@ A task qualifies as fast-path when **all** of:
 - no test scaffolding or new dependency.
 
 Examples: typo in a comment, raising a log level, bumping a constant.
-The loop collapses to:
+The product/spec work may collapse, but the delivery gates do not:
 
 ```
-	start → dev → done
+	start → dev → test → review → done
 ```
 
-No branch, no spec note, no PR. Commit directly on main with a
-one-line message. The state machine still records what happened.
+Skip a separate Spec when appropriate and keep stage docs concise, but still
+use a branch, commit, real push, PR, CI/review, and merge. Documentation never
+substitutes for delivery evidence.
 
 ## Gotchas
 
@@ -514,6 +525,15 @@ one-line message. The state machine still records what happened.
   `pending/start/spec/dev/test/review/done`. The state `created` was
   renamed to `start`, and `design` was renamed to `spec`; don't
   reintroduce old names.
+- **`cannot enter review`** — create and push the branch, open a real GitHub
+  PR, attach it with the exact `taskline task link ...` command shown in the
+  error, then retry the state update.
+- **`cannot enter done`** — follow the listed blocker: resolve every review
+  thread, wait for CI, merge the PR, update task docs/links, then retry. Do not
+  use `--force`; it cannot bypass delivery evidence.
+- **`state entry verification unavailable`** — GitHub could not be queried.
+  Configure `TASKLINE_GITHUB_TOKEN`/`GITHUB_TOKEN`/`GH_TOKEN` for the server or
+  run `gh auth login` on the server host, then retry.
 - **`dependency would create a cycle`** — the edge would loop back.
   Restructure the graph or pick a different anchor.
 - **`project name "X" already exists`** — name collision. Reuse the

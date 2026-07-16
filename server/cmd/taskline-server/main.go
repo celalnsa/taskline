@@ -9,6 +9,7 @@ import (
 
 	"taskline_server/api/handler"
 	"taskline_server/internal/config"
+	githubapi "taskline_server/internal/github"
 	"taskline_server/internal/service"
 	"taskline_server/internal/store"
 )
@@ -30,7 +31,7 @@ func main() {
 	}
 	defer func() { _ = st.Close() }()
 
-	svc := service.New(st)
+	svc := service.New(st, service.WithPullRequestVerifier(githubapi.NewVerifier()))
 	h := handler.New(svc, cfg)
 
 	hz := server.Default(server.WithHostPorts(cfg.ListenAddr))

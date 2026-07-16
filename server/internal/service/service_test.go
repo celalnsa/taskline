@@ -19,7 +19,13 @@ func newSvc(t *testing.T) *service.Service {
 	st, err := store.New(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = st.Close() })
-	return service.New(st)
+	return service.New(st, service.WithPullRequestVerifier(&fakePullRequestVerifier{
+		status: service.PullRequestStatus{
+			State:            service.PullRequestMerged,
+			Merged:           true,
+			CheckRollupState: service.CheckRollupSuccess,
+		},
+	}))
 }
 
 func TestRegisterAgentAndResolveToken(t *testing.T) {
@@ -72,6 +78,7 @@ func TestUpdateTaskAllowsBackwardTransition(t *testing.T) {
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
 	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
+	attachPullRequest(t, s, tk.ID)
 
 	// Forward skip is fine.
 	got, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: ptrState(model.StateReview)})
@@ -167,6 +174,7 @@ func TestNextRunnableTaskReturnsNilWhenNothingRunnable(t *testing.T) {
 	s := newSvc(t)
 	p, _ := s.CreateProject(ctx, "p", "")
 	tk, _ := s.CreateTask(ctx, p.ID, "t", "", model.TaskTypeFeature, 0, true)
+	attachPullRequest(t, s, tk.ID)
 
 	stDone := model.StateDone
 	_, err := s.UpdateTask(ctx, tk.ID, store.TaskUpdate{State: &stDone})

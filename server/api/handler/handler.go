@@ -930,6 +930,10 @@ func writeServiceError(c *app.RequestContext, err error) {
 		writeError(c, http.StatusNotFound, err)
 	case errors.Is(err, store.ErrConflict):
 		writeError(c, http.StatusConflict, err)
+	case errors.Is(err, service.ErrStateEntryBlocked):
+		writeError(c, http.StatusConflict, err)
+	case errors.Is(err, service.ErrStateEntryVerificationUnavailable):
+		writeError(c, http.StatusServiceUnavailable, err)
 	default:
 		writeError(c, http.StatusBadRequest, err)
 	}

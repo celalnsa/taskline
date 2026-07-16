@@ -28,6 +28,23 @@ import (
 // startServer boots a taskline-server instance backed by a temp SQLite file +
 // random port. Returns the base URL and a shutdown func.
 func startServer(t *testing.T) (string, func()) {
+	return startServerWithVerifier(t, &mutablePullRequestVerifier{status: service.PullRequestStatus{
+		State:            service.PullRequestMerged,
+		Merged:           true,
+		CheckRollupState: service.CheckRollupSuccess,
+	}})
+}
+
+type mutablePullRequestVerifier struct {
+	status service.PullRequestStatus
+	err    error
+}
+
+func (v *mutablePullRequestVerifier) VerifyPullRequest(context.Context, service.PullRequestRef) (service.PullRequestStatus, error) {
+	return v.status, v.err
+}
+
+func startServerWithVerifier(t *testing.T, verifier service.PullRequestVerifier) (string, func()) {
 	t.Helper()
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "taskline.db")
@@ -38,7 +55,7 @@ func startServer(t *testing.T) (string, func()) {
 
 	st, err := store.New(dbPath)
 	require.NoError(t, err)
-	svc := service.New(st)
+	svc := service.New(st, service.WithPullRequestVerifier(verifier))
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -70,6 +87,30 @@ func startServer(t *testing.T) (string, func()) {
 		_ = hz.Shutdown(context.Background())
 		_ = st.Close()
 	}
+}
+
+func attachTestPullRequest(t *testing.T, base, taskID string) {
+	t.Helper()
+	st := jsonReq(t, http.MethodPost, base+"/api/v1/tasks/"+taskID+"/links", map[string]any{
+		"url":   "https://github.com/celalnsa/taskline/pull/123",
+		"label": "PR #123",
+	}, nil)
+	require.Equal(t, http.StatusCreated, st)
+}
+
+func jsonReqError(t *testing.T, method, requestURL string, body any) (int, string) {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	req, err := http.NewRequest(method, requestURL, bytes.NewReader(raw))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, string(responseBody)
 }
 
 // jsonReq performs a single JSON request, decoding into out (nil to skip).
@@ -211,6 +252,7 @@ func TestEndToEndHappyPath(t *testing.T) {
 	require.Equal(t, t1.ID, nx.Task.ID)
 
 	// Mark t1 done → t2 unblocks and outranks because of priority.
+	attachTestPullRequest(t, base, t1.ID)
 	var updated task
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+t1.ID,
 		map[string]any{"state": "done"}, &updated)
@@ -470,6 +512,7 @@ func TestStateTransitionAtAPI(t *testing.T) {
 	var tk task
 	jsonReq(t, "POST", base+"/api/v1/projects/states/tasks",
 		map[string]any{"title": "x", "type": "feature"}, &tk)
+	attachTestPullRequest(t, base, tk.ID)
 
 	// Forward jump.
 	st := jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
@@ -499,6 +542,48 @@ func TestStateTransitionAtAPI(t *testing.T) {
 	st = jsonReq(t, "PATCH", base+"/api/v1/tasks/"+tk.ID,
 		map[string]any{"state": "design"}, nil)
 	require.Equal(t, http.StatusBadRequest, st)
+}
+
+func TestStateEntryEvidenceErrorsAtAPI(t *testing.T) {
+	verifier := &mutablePullRequestVerifier{status: service.PullRequestStatus{
+		State:            service.PullRequestOpen,
+		CheckRollupState: service.CheckRollupSuccess,
+	}}
+	base, stop := startServerWithVerifier(t, verifier)
+	defer stop()
+	jsonReq(t, http.MethodPost, base+"/api/v1/projects", map[string]any{"name": "evidence"}, &project{})
+	var tk task
+	jsonReq(t, http.MethodPost, base+"/api/v1/projects/evidence/tasks",
+		map[string]any{"title": "guarded", "type": "feature", "auto_start": true}, &tk)
+
+	status, body := jsonReqError(t, http.MethodPatch, base+"/api/v1/tasks/"+tk.ID, map[string]any{"state": "review"})
+	require.Equal(t, http.StatusConflict, status)
+	require.Contains(t, body, "attach a valid GitHub PR")
+	require.Contains(t, body, "taskline task link "+tk.ID)
+
+	attachTestPullRequest(t, base, tk.ID)
+	status = jsonReq(t, http.MethodPatch, base+"/api/v1/tasks/"+tk.ID, map[string]any{"state": "review"}, &tk)
+	require.Equal(t, http.StatusOK, status)
+
+	status, body = jsonReqError(t, http.MethodPatch, base+"/api/v1/tasks/"+tk.ID, map[string]any{"state": "done", "force": true})
+	require.Equal(t, http.StatusConflict, status)
+	require.Contains(t, body, "has not been merged")
+	require.Contains(t, body, "resolve review comments, wait for CI, merge the PR")
+
+	verifier.status = service.PullRequestStatus{
+		State:            service.PullRequestMerged,
+		Merged:           true,
+		CheckRollupState: service.CheckRollupSuccess,
+	}
+	status = jsonReq(t, http.MethodPatch, base+"/api/v1/tasks/"+tk.ID, map[string]any{"state": "done"}, &tk)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, "done", tk.State)
+
+	verifier.err = fmt.Errorf("rate limited")
+	status, body = jsonReqError(t, http.MethodPatch, base+"/api/v1/tasks/"+tk.ID, map[string]any{"state": "review"})
+	require.Equal(t, http.StatusServiceUnavailable, status)
+	require.Contains(t, body, "state entry verification unavailable")
+	require.Contains(t, body, "rate limited")
 }
 
 func TestAutoStartDefaultsToPendingAndExcludesFromRunnable(t *testing.T) {
@@ -610,6 +695,7 @@ func TestTaskClaimLeaseAtAPI(t *testing.T) {
 	require.Greater(t, heartbeat.LeaseExpiresAt, a.Task.LeaseExpiresAt)
 
 	var updated task
+	attachTestPullRequest(t, base, a.Task.ID)
 	st = jsonReqWithToken(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
 		map[string]any{"state": "done", "if_state": "start"}, &updated, agentAToken)
 	require.Equal(t, http.StatusOK, st)
@@ -692,6 +778,7 @@ func TestLabelFilteredRunnableTasksAtAPI(t *testing.T) {
 	require.Equal(t, "agent-b", b.Task.Owner)
 
 	var done task
+	attachTestPullRequest(t, base, a.Task.ID)
 	st = jsonReqWithToken(t, "PATCH", base+"/api/v1/tasks/"+a.Task.ID,
 		map[string]any{"state": "done"}, &done, agentAToken)
 	require.Equal(t, http.StatusOK, st)

@@ -63,10 +63,11 @@ drop back to `spec`. Forcing the agent to delete-and-recreate in those cases
 destroys history (description, dependencies, attachments) that is
 exactly the context a future agent needs.
 
-Skipping forward is fine too (`start → done` is a perfectly valid
-move for trivial work). The state machine's only job is to keep the
-set of legal state names honest; the *direction* of motion is a
-modeling choice the agent gets to make.
+Skipping intermediate states is structurally allowed, but entering a target
+state may require evidence. `review` requires a real linked PR; `done` requires
+that PR to be merged with review threads resolved and CI green (or not
+configured). The *direction* of motion remains an agent choice, while the
+service prevents documentation from substituting for shipped work.
 
 `pending` lives off the main pipeline. It captures the difference
 between "I want to work on this" and "I want to remember this". A
@@ -146,9 +147,10 @@ shapes were considered:
 
 ## Non-goals
 
-- **CI / runner orchestration.** taskline records what should happen,
-  not what *is* happening. State only changes when something writes to
-  the API. We don't poll, we don't trigger jobs, we don't watch git.
+- **CI / runner orchestration.** taskline does not trigger jobs, run CI, or
+  poll repositories in the background. It does synchronously read linked PR
+  facts when a caller asks to enter `review` or `done`; the caller still owns
+  every state change.
 - **Spec authoring.** A task has a title and a description. If you want
   spec-style requirements, write them in the description or link to a
   doc. taskline tracks *that work exists*, not *what the work is*.
