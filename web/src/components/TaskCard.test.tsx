@@ -224,7 +224,7 @@ describe("TaskCard", () => {
     expect(screen.getByText("+2")).toBeTruthy();
   });
 
-  it("shows the claim owner and elapsed claim duration on claimed cards", () => {
+  it("shows active claim work on its own row with a robot icon", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
 
@@ -233,14 +233,36 @@ describe("TaskCard", () => {
       owner: "codex-local",
       claimed_at: Date.parse("2026-01-01T11:15:00.000Z"),
       lease_expires_at: Date.parse("2026-01-01T17:15:00.000Z"),
+      updated_at: Date.parse("2026-01-01T11:55:00.000Z"),
+    });
+
+    const claimStatus = screen.getByLabelText(/claimed by codex-local/i);
+    const updatedStatus = screen.getByText("5 mins ago");
+
+    expect(claimStatus.textContent).toContain("codex-local working 45 mins");
+    expect(claimStatus.querySelector(".lucide-bot")).not.toBeNull();
+    expect(claimStatus.parentElement).not.toBe(updatedStatus.parentElement);
+    expect(claimStatus.getAttribute("title")).toContain("Claimed 45 mins ago");
+    expect(claimStatus.getAttribute("title")).toContain("Lease expires");
+  });
+
+  it("freezes completed claim duration at the task completion update", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-03T12:00:00.000Z"));
+
+    renderCard(vi.fn(), vi.fn(), {
+      ...task,
+      state: "done",
+      owner: "codex-local",
+      claimed_at: Date.parse("2026-01-01T11:15:00.000Z"),
+      completed_at: Date.parse("2026-01-01T12:00:00.000Z"),
+      updated_at: Date.parse("2026-01-03T12:00:00.000Z"),
     });
 
     const claimStatus = screen.getByLabelText(/claimed by codex-local/i);
 
-    expect(claimStatus.textContent).toContain("codex-local");
-    expect(claimStatus.textContent).toContain("45 mins");
-    expect(claimStatus.getAttribute("title")).toContain("Claimed 45 mins ago");
-    expect(claimStatus.getAttribute("title")).toContain("Lease expires");
+    expect(claimStatus.textContent).toContain("codex-local worked 45 mins");
+    expect(claimStatus.textContent).not.toContain("day");
   });
 
   it("counts priority and dependency chips when deciding hidden labels", () => {

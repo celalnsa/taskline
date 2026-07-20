@@ -156,6 +156,53 @@ func TestUpdateTaskAndDelete(t *testing.T) {
 	require.True(t, errors.Is(st.DeleteTask(ctx, tk.ID), store.ErrNotFound))
 }
 
+func TestCompletedAtTracksDoneTransitionsAndIgnoresLaterUpdates(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	project, err := st.CreateProject(ctx, "completion", "")
+	require.NoError(t, err)
+	task, err := st.CreateTask(ctx, project.ID, "tracked", "", model.TaskTypeFeature, 0, model.StateStart)
+	require.NoError(t, err)
+	task, err = st.ClaimTask(ctx, task.ID, store.ClaimOptions{
+		Owner: "agent-a", Now: 1_000, LeaseExpiresAt: 11_000,
+	})
+	require.NoError(t, err)
+
+	done := model.StateDone
+	task, err = st.UpdateTask(ctx, task.ID, store.TaskUpdate{
+		State: &done, Owner: "agent-a", Now: 2_000, LeaseExpiresAt: 12_000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2_000), task.CompletedAt)
+
+	task, err = st.HeartbeatTask(ctx, task.ID, store.HeartbeatOptions{
+		Owner: "agent-a", Now: 3_000, LeaseExpiresAt: 13_000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2_000), task.CompletedAt)
+	require.Equal(t, int64(3_000), task.UpdatedAt)
+
+	title := "edited after completion"
+	task, err = st.UpdateTask(ctx, task.ID, store.TaskUpdate{
+		Title: &title, Owner: "agent-a", Now: 4_000, LeaseExpiresAt: 14_000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2_000), task.CompletedAt)
+
+	dev := model.StateDev
+	task, err = st.UpdateTask(ctx, task.ID, store.TaskUpdate{
+		State: &dev, Owner: "agent-a", Now: 5_000, LeaseExpiresAt: 15_000,
+	})
+	require.NoError(t, err)
+	require.Zero(t, task.CompletedAt)
+
+	task, err = st.UpdateTask(ctx, task.ID, store.TaskUpdate{
+		State: &done, Owner: "agent-a", Now: 6_000, LeaseExpiresAt: 16_000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(6_000), task.CompletedAt)
+}
+
 func TestTaskLabels(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
@@ -852,7 +899,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 11, v1, "first open should advance to latest schema version")
+	require.Equal(t, 12, v1, "first open should advance to latest schema version")
 
 	require.NoError(t, st1.Close())
 
@@ -863,6 +910,40 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 	v2, err := readUserVersion(path)
 	require.NoError(t, err)
 	require.Equal(t, v1, v2, "re-opening must not change user_version")
+}
+
+func TestMigrationBackfillsStableCompletionTime(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "taskline.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		CREATE TABLE tasks(
+		    id TEXT PRIMARY KEY,
+		    state TEXT NOT NULL,
+		    updated_at INTEGER NOT NULL
+		);
+		INSERT INTO tasks(id,state,updated_at)
+		    VALUES ('done-task','done',1234), ('active-task','dev',5678);
+		PRAGMA user_version = 11;
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	st, err := store.New(path)
+	require.NoError(t, err)
+	require.NoError(t, st.Close())
+
+	db, err := sql.Open("sqlite", "file:"+path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	var doneAt, activeAt int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT completed_at FROM tasks WHERE id='done-task'`).Scan(&doneAt))
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT completed_at FROM tasks WHERE id='active-task'`).Scan(&activeAt))
+	require.Equal(t, int64(1234), doneAt)
+	require.Zero(t, activeAt)
 }
 
 func TestMigrationAddsDocsTypeWithoutDroppingTaskChildren(t *testing.T) {
@@ -938,7 +1019,7 @@ func TestMigrationAddsDocsTypeWithoutDroppingTaskChildren(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 11, v)
+	require.Equal(t, 12, v)
 
 	got, err := st.GetTask(ctx, "b")
 	require.NoError(t, err)
@@ -1012,7 +1093,7 @@ func TestMigrationUpgradesCreatedAndDesignRows(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 11, v, "migration should have run through latest schema version")
+	require.Equal(t, 12, v, "migration should have run through latest schema version")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")

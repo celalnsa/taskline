@@ -51,6 +51,9 @@ var schemaTaskClaims string
 //go:embed schema/0011_task_agents.sql
 var schemaTaskAgents string
 
+//go:embed schema/0012_task_completion.sql
+var schemaTaskCompletion string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -74,6 +77,7 @@ var schemaMigrations = []migration{
 	{version: 9, sql: schemaDocsTaskType},
 	{version: 10, sql: schemaTaskClaims},
 	{version: 11, sql: schemaTaskAgents},
+	{version: 12, sql: schemaTaskCompletion},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -178,8 +182,8 @@ const (
 )
 
 const (
-	taskSelectColumns  = `id,project_id,title,description,type,state,priority,labels,owner,claimed_at,lease_expires_at,created_at,updated_at`
-	taskSelectColumnsT = `t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.labels,t.owner,t.claimed_at,t.lease_expires_at,t.created_at,t.updated_at`
+	taskSelectColumns  = `id,project_id,title,description,type,state,priority,labels,owner,claimed_at,lease_expires_at,completed_at,created_at,updated_at`
+	taskSelectColumnsT = `t.id,t.project_id,t.title,t.description,t.type,t.state,t.priority,t.labels,t.owner,t.claimed_at,t.lease_expires_at,t.completed_at,t.created_at,t.updated_at`
 )
 
 func optionalLabels(labels [][]string) []string {
@@ -428,6 +432,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 	if err != nil {
 		return nil, err
 	}
+	createdAt := now()
 	t := &model.Task{
 		ID:          newID(),
 		ProjectID:   projectID,
@@ -437,12 +442,15 @@ func (s *Store) CreateTask(ctx context.Context, projectID, title, description st
 		State:       initialState,
 		Priority:    priority,
 		Labels:      normalizedLabels,
-		CreatedAt:   now(),
-		UpdatedAt:   now(),
+		CreatedAt:   createdAt,
+		UpdatedAt:   createdAt,
+	}
+	if initialState == model.StateDone {
+		t.CompletedAt = createdAt
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO tasks(id,project_id,title,description,type,state,priority,labels,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.ProjectID, t.Title, t.Description, t.Type, t.State, t.Priority, labelsJSON, t.CreatedAt, t.UpdatedAt,
+		`INSERT INTO tasks(id,project_id,title,description,type,state,priority,labels,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.ProjectID, t.Title, t.Description, t.Type, t.State, t.Priority, labelsJSON, t.CompletedAt, t.CreatedAt, t.UpdatedAt,
 	)
 	if err != nil {
 		if isFKErr(err) {
@@ -943,6 +951,11 @@ func (s *Store) updateTaskOnce(ctx context.Context, id string, u TaskUpdate) (*m
 		if !u.State.Valid() {
 			return nil, fmt.Errorf("invalid task state %q", *u.State)
 		}
+		if *u.State == model.StateDone && cur.State != model.StateDone {
+			cur.CompletedAt = u.Now
+		} else if *u.State != model.StateDone && cur.State == model.StateDone {
+			cur.CompletedAt = 0
+		}
 		cur.State = *u.State
 	}
 	if u.Priority != nil {
@@ -971,8 +984,8 @@ func (s *Store) updateTaskOnce(ctx context.Context, id string, u TaskUpdate) (*m
 		return nil, err
 	}
 	cur.UpdatedAt = u.Now
-	q := `UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,updated_at=?`
-	args := []any{cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.UpdatedAt}
+	q := `UPDATE tasks SET title=?,description=?,type=?,state=?,priority=?,labels=?,completed_at=?,updated_at=?`
+	args := []any{cur.Title, cur.Description, cur.Type, cur.State, cur.Priority, labelsJSON, cur.CompletedAt, cur.UpdatedAt}
 	if renewLease {
 		q += `,lease_expires_at=?`
 		args = append(args, cur.LeaseExpiresAt)
@@ -1350,6 +1363,7 @@ func scanTask(r rowScanner) (*model.Task, error) {
 		&t.Owner,
 		&t.ClaimedAt,
 		&t.LeaseExpiresAt,
+		&t.CompletedAt,
 		&t.CreatedAt,
 		&t.UpdatedAt,
 	); err != nil {

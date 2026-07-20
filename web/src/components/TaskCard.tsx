@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { useRef, type MouseEvent as ReactMouseEvent } from "react";
-import { UserRound } from "lucide-react";
+import { Bot } from "lucide-react";
 import type { Task } from "../lib/api";
 import { getTaskLabelTheme, taskLabelChipClass } from "../lib/labels";
 import { formatElapsedTime, formatRelativeTime } from "../lib/time";
@@ -25,8 +25,17 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
   const labels = task.labels ?? [];
   const dependencyCount = task.depends_on?.length ?? 0;
   const claimOwner = task.owner?.trim();
-  const claimElapsed = task.claimed_at ? formatElapsedTime(task.claimed_at) : "";
-  const claimTitle = claimOwner ? buildClaimTitle(task, claimOwner) : undefined;
+  const claimVerb = task.state === "done" ? "worked" : "working";
+  const claimElapsed = task.claimed_at
+    ? task.state === "done"
+      ? task.completed_at
+        ? formatElapsedTime(task.claimed_at, task.completed_at)
+        : ""
+      : formatElapsedTime(task.claimed_at)
+    : "";
+  const claimTitle = claimOwner
+    ? buildClaimTitle(task, claimOwner, claimVerb, claimElapsed)
+    : undefined;
   const metadataChipCount = 1 + (dependencyCount > 0 ? 1 : 0);
   const visibleLabelCount = Math.max(0, MAX_VISIBLE_CARD_CHIPS - metadataChipCount);
   const visibleLabels = labels.slice(0, visibleLabelCount);
@@ -182,31 +191,31 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
           )}
         </div>
       </div>
-      <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
-        {claimOwner && (
+      {claimOwner && (
+        <div className="mt-1.5 min-w-0">
           <span
             aria-label={
               claimElapsed
-                ? `Claimed by ${claimOwner} for ${claimElapsed}`
+                ? `Claimed by ${claimOwner}, ${claimVerb} ${claimElapsed}`
                 : `Claimed by ${claimOwner}`
             }
-            className="inline-flex min-w-0 max-w-[72%] items-center gap-1 rounded border border-[var(--tl-outline)] bg-[var(--tl-bg-quiet)] px-1.5 py-0.5 text-[10px] leading-3 text-[var(--tl-ink-muted)]"
+            className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-[var(--tl-outline)] bg-[var(--tl-bg-quiet)] px-1.5 py-0.5 text-[10px] leading-3 text-[var(--tl-ink-muted)]"
             title={claimTitle}
           >
-            <UserRound size={10} aria-hidden="true" className="shrink-0" />
+            <Bot size={11} aria-hidden="true" className="shrink-0" />
             <span className="min-w-0 truncate">{claimOwner}</span>
             {claimElapsed && (
-              <>
-                <span aria-hidden="true" className="shrink-0 text-[var(--tl-ink-faint)]">
-                  ·
-                </span>
-                <span className="shrink-0 tabular-nums">{claimElapsed}</span>
-              </>
+              <span className="shrink-0 whitespace-nowrap">
+                {" "}
+                {claimVerb} <span className="tabular-nums">{claimElapsed}</span>
+              </span>
             )}
           </span>
-        )}
+        </div>
+      )}
+      <div className="mt-1 flex min-w-0 justify-end">
         <span
-          className="ml-auto shrink-0 text-[10px] tabular-nums text-[var(--tl-ink-faint)]"
+          className="shrink-0 text-[10px] tabular-nums text-[var(--tl-ink-faint)]"
           title={new Date(task.updated_at).toLocaleString()}
         >
           {formatRelativeTime(task.updated_at)}
@@ -216,8 +225,16 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
   );
 }
 
-function buildClaimTitle(task: Task, owner: string): string {
+function buildClaimTitle(
+  task: Task,
+  owner: string,
+  claimVerb: "working" | "worked",
+  claimElapsed: string
+): string {
   const parts = [`Owner: ${owner}`];
+  if (claimElapsed) {
+    parts.push(`${claimVerb === "worked" ? "Worked" : "Working"} ${claimElapsed}`);
+  }
   if (task.claimed_at) {
     parts.push(
       `Claimed ${formatRelativeTime(task.claimed_at)} (${new Date(task.claimed_at).toLocaleString()})`
