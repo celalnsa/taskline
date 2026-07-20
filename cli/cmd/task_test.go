@@ -111,6 +111,32 @@ func TestTaskSearchCommandRegistered(t *testing.T) {
 	}
 }
 
+func TestTaskHistoryCommandRegistered(t *testing.T) {
+	found := false
+	for _, cmd := range taskCmd.Commands() {
+		if cmd.Name() == "history" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("task history command not registered")
+	}
+}
+
+func TestRenderTaskHistoryTable(t *testing.T) {
+	var buf bytes.Buffer
+	renderTaskHistoryTable(&buf, []client.TaskEvent{{
+		Actor: "agent-a", Action: "updated", Summary: "Updated title", CreatedAt: 1_234,
+	}})
+	out := buf.String()
+	for _, want := range []string{"TIME", "ACTOR", "ACTION", "SUMMARY", "agent-a", "updated", "Updated title"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("history table %q missing %q", out, want)
+		}
+	}
+}
+
 func TestTaskClaimCommandsAndFlagsRegistered(t *testing.T) {
 	for _, tc := range []struct {
 		name string

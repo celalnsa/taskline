@@ -119,6 +119,94 @@ func TestCreateTaskAcceptsDocsType(t *testing.T) {
 	require.Equal(t, model.StateStart, tk.State)
 }
 
+func TestTaskHistoryRecordsActorAndFullFieldChanges(t *testing.T) {
+	ctx := service.WithActor(context.Background(), "agent-a")
+	s := newSvc(t)
+	p, err := s.CreateProject(ctx, "history", "")
+	require.NoError(t, err)
+
+	task, err := s.CreateTask(
+		ctx, p.ID, "Before title", "Before description",
+		model.TaskTypeFeature, 1, true, []string{"before"},
+	)
+	require.NoError(t, err)
+
+	title := "After title"
+	description := "After description"
+	priority := 7
+	labels := []string{"after", "audit"}
+	updated, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{
+		Title: &title, Description: &description, Priority: &priority, Labels: &labels,
+	})
+	require.NoError(t, err)
+	require.Equal(t, title, updated.Title)
+
+	events, err := s.ListTaskEvents(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	require.Equal(t, "updated", events[0].Action)
+	require.Equal(t, "agent-a", events[0].Actor)
+	changes := events[0].Details["changes"].(map[string]any)
+	require.Equal(t, "Before title", changes["title"].(map[string]any)["before"])
+	require.Equal(t, "After title", changes["title"].(map[string]any)["after"])
+	require.Equal(t, "Before description", changes["description"].(map[string]any)["before"])
+	require.Equal(t, "After description", changes["description"].(map[string]any)["after"])
+	require.Equal(t, "created", events[1].Action)
+	require.Equal(t, "agent-a", events[1].Actor)
+}
+
+func TestTaskHistoryCoversClaimsAndAttachedResources(t *testing.T) {
+	ctx := service.WithActor(context.Background(), "agent-a")
+	s := newSvc(t)
+	p, err := s.CreateProject(ctx, "history-resources", "")
+	require.NoError(t, err)
+	task, err := s.CreateTask(ctx, p.ID, "tracked", "", model.TaskTypeFeature, 0, true)
+	require.NoError(t, err)
+	dependency, err := s.CreateTask(ctx, p.ID, "dependency", "", model.TaskTypeFeature, 0, true)
+	require.NoError(t, err)
+
+	require.NoError(t, s.AddDependency(ctx, task.ID, dependency.ID))
+	require.NoError(t, s.DeleteDependency(ctx, task.ID, dependency.ID))
+	_, err = s.ClaimTask(ctx, task.ID, service.ClaimOptions{Owner: "agent-a"})
+	require.NoError(t, err)
+	_, err = s.HeartbeatTask(ctx, task.ID, service.ClaimOptions{Owner: "agent-a"})
+	require.NoError(t, err)
+	_, err = s.ReleaseTask(ctx, task.ID, service.ReleaseOptions{Owner: "agent-a"})
+	require.NoError(t, err)
+
+	image := &model.Image{TaskID: task.ID, Filename: "diagram.png", MimeType: "image/png", SizeBytes: 42}
+	require.NoError(t, s.AddImage(ctx, image))
+	doc := &model.Doc{TaskID: task.ID, Title: "Spec", StoragePath: "/tmp/spec.md"}
+	require.NoError(t, s.AddDoc(ctx, doc))
+	nextTitle := "Updated Spec"
+	_, err = s.UpdateDoc(ctx, doc.ID, store.DocUpdate{Title: &nextTitle}, true)
+	require.NoError(t, err)
+	link, err := s.AddLink(ctx, task.ID, "https://github.com/celalnsa/taskline/pull/80", "PR")
+	require.NoError(t, err)
+	require.NoError(t, s.DeleteLink(ctx, link.ID))
+	_, err = s.DeleteDoc(ctx, doc.ID)
+	require.NoError(t, err)
+	_, err = s.DeleteImage(ctx, image.ID)
+	require.NoError(t, err)
+	require.NoError(t, s.DeleteTask(ctx, task.ID))
+
+	events, err := s.ListTaskEvents(ctx, task.ID)
+	require.NoError(t, err)
+	actions := make([]string, 0, len(events))
+	for _, event := range events {
+		actions = append(actions, event.Action)
+		require.Equal(t, "agent-a", event.Actor)
+	}
+	for _, action := range []string{
+		"created", "dependency_added", "dependency_removed", "claimed",
+		"claim_renewed", "released", "image_added", "document_added",
+		"document_updated", "link_added", "link_removed", "document_removed",
+		"image_removed", "deleted",
+	} {
+		require.Contains(t, actions, action)
+	}
+}
+
 func TestSearchTasksRanksShortIDsAndKeywords(t *testing.T) {
 	ctx := context.Background()
 	s := newSvc(t)

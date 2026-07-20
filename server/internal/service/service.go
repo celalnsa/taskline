@@ -200,7 +200,16 @@ func (s *Service) CreateTask(ctx context.Context, projectIDOrName, title, descri
 	if autoStart {
 		initial = model.StateStart
 	}
-	return s.st.CreateTask(ctx, p.ID, title, description, taskType, priority, initial, labels...)
+	task, err := s.st.CreateTask(ctx, p.ID, title, description, taskType, priority, initial, labels...)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.recordTaskEvent(ctx, task.ID, "created", "Created task", map[string]any{
+		"task": taskSnapshot(task),
+	}, task.CreatedAt); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // GetTask fetches a task by id.
@@ -308,7 +317,17 @@ func (s *Service) ClaimNextTask(ctx context.Context, projectIDOrName string, opt
 		return nil, err
 	}
 	nowMs := nowMillis()
-	return s.st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease), Labels: opts.Labels})
+	task, err := s.st.ClaimNextTask(ctx, p.ID, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease), Labels: opts.Labels})
+	if err != nil || task == nil {
+		return task, err
+	}
+	if err := s.recordTaskEvent(ctx, task.ID, "claimed", "Claimed task", map[string]any{
+		"owner": task.Owner, "claimed_at": task.ClaimedAt,
+		"lease_expires_at": task.LeaseExpiresAt,
+	}, task.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // ClaimTask explicitly reserves one task for an owner.
@@ -318,7 +337,17 @@ func (s *Service) ClaimTask(ctx context.Context, id string, opts ClaimOptions) (
 		return nil, err
 	}
 	nowMs := nowMillis()
-	return s.st.ClaimTask(ctx, id, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+	task, err := s.st.ClaimTask(ctx, id, store.ClaimOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.recordTaskEvent(ctx, task.ID, "claimed", "Claimed task", map[string]any{
+		"owner": task.Owner, "claimed_at": task.ClaimedAt,
+		"lease_expires_at": task.LeaseExpiresAt,
+	}, task.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // HeartbeatTask renews a task lease for the current owner.
@@ -328,7 +357,16 @@ func (s *Service) HeartbeatTask(ctx context.Context, id string, opts ClaimOption
 		return nil, err
 	}
 	nowMs := nowMillis()
-	return s.st.HeartbeatTask(ctx, id, store.HeartbeatOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+	task, err := s.st.HeartbeatTask(ctx, id, store.HeartbeatOptions{Owner: owner, Now: nowMs, LeaseExpiresAt: nowMs + durationMillis(lease)})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.recordTaskEvent(ctx, task.ID, "claim_renewed", "Renewed claim lease", map[string]any{
+		"owner": task.Owner, "lease_expires_at": task.LeaseExpiresAt,
+	}, task.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // ReleaseTask clears a claim. Without Force, owner must match.
@@ -337,7 +375,21 @@ func (s *Service) ReleaseTask(ctx context.Context, id string, opts ReleaseOption
 	if owner == "" && !opts.Force {
 		return nil, errors.New("agent identity required: run taskline register --name <agent>")
 	}
-	return s.st.ReleaseTask(ctx, id, store.ReleaseOptions{Owner: owner, Force: opts.Force, Now: nowMillis()})
+	before, err := s.st.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	task, err := s.st.ReleaseTask(ctx, id, store.ReleaseOptions{Owner: owner, Force: opts.Force, Now: nowMillis()})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.recordTaskEvent(ctx, task.ID, "released", "Released task claim", map[string]any{
+		"owner": before.Owner, "claimed_at": before.ClaimedAt,
+		"force": opts.Force,
+	}, task.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // ListRunnableTasks returns all currently-runnable tasks claimable by owner.
@@ -363,27 +415,27 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 		return nil, fmt.Errorf("invalid if-state %q", *u.IfState)
 	}
 	u.Owner = strings.TrimSpace(u.Owner)
+	before, err := s.st.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if u.State != nil {
-		cur, err := s.st.GetTask(ctx, id)
-		if err != nil {
-			return nil, err
+		if err := before.State.CanTransitionTo(*u.State); err != nil {
+			return nil, fmt.Errorf("invalid transition %s -> %s: %w", before.State, *u.State, err)
 		}
-		if err := cur.State.CanTransitionTo(*u.State); err != nil {
-			return nil, fmt.Errorf("invalid transition %s -> %s: %w", cur.State, *u.State, err)
+		if u.IfState != nil && before.State != *u.IfState {
+			return nil, fmt.Errorf("%w: state conflict: expected %s, current state %s", store.ErrConflict, *u.IfState, before.State)
 		}
-		if u.IfState != nil && cur.State != *u.IfState {
-			return nil, fmt.Errorf("%w: state conflict: expected %s, current state %s", store.ErrConflict, *u.IfState, cur.State)
-		}
-		if !u.Force && cur.Owner != "" {
+		if !u.Force && before.Owner != "" {
 			if u.Owner == "" {
-				return nil, fmt.Errorf("%w: task is claimed by %s; pass owner or force", store.ErrConflict, cur.Owner)
+				return nil, fmt.Errorf("%w: task is claimed by %s; pass owner or force", store.ErrConflict, before.Owner)
 			}
-			if u.Owner != cur.Owner {
-				return nil, fmt.Errorf("%w: task is claimed by %s", store.ErrConflict, cur.Owner)
+			if u.Owner != before.Owner {
+				return nil, fmt.Errorf("%w: task is claimed by %s", store.ErrConflict, before.Owner)
 			}
 		}
-		if cur.State != *u.State {
-			if err := s.validateStateEntry(ctx, cur, *u.State); err != nil {
+		if before.State != *u.State {
+			if err := s.validateStateEntry(ctx, before, *u.State); err != nil {
 				return nil, err
 			}
 		}
@@ -393,7 +445,17 @@ func (s *Service) UpdateTask(ctx context.Context, id string, u store.TaskUpdate)
 		u.Now = nowMs
 		u.LeaseExpiresAt = nowMs + durationMillis(DefaultLeaseDuration)
 	}
-	return s.st.UpdateTask(ctx, id, u)
+	task, err := s.st.UpdateTask(ctx, id, u)
+	if err != nil {
+		return nil, err
+	}
+	changes := taskFieldChanges(before, task)
+	if err := s.recordTaskEvent(ctx, task.ID, "updated", updatedTaskSummary(changes), map[string]any{
+		"changes": changes,
+	}, task.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 func normalizeClaimInput(owner string, lease time.Duration) (string, time.Duration, error) {
@@ -416,7 +478,16 @@ func durationMillis(d time.Duration) int64 { return int64(d / time.Millisecond) 
 
 // DeleteTask removes a task and its dependency / attachment rows via FK cascade.
 func (s *Service) DeleteTask(ctx context.Context, id string) error {
-	return s.st.DeleteTask(ctx, id)
+	task, err := s.st.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.st.DeleteTask(ctx, id); err != nil {
+		return err
+	}
+	return s.recordTaskEvent(ctx, id, "deleted", "Deleted task", map[string]any{
+		"task": taskSnapshot(task),
+	}, nowMillis())
 }
 
 // AddDependency makes taskID wait for dependsOnID.
@@ -428,17 +499,32 @@ func (s *Service) AddDependency(ctx context.Context, taskID, dependsOnID string)
 	if _, err := s.st.GetTask(ctx, dependsOnID); err != nil {
 		return fmt.Errorf("dependency %s: %w", dependsOnID, err)
 	}
-	return s.st.AddDependency(ctx, taskID, dependsOnID)
+	if err := s.st.AddDependency(ctx, taskID, dependsOnID); err != nil {
+		return err
+	}
+	return s.recordTaskEvent(ctx, taskID, "dependency_added", "Added task dependency", map[string]any{
+		"depends_on": dependsOnID,
+	}, nowMillis())
 }
 
 // DeleteDependency removes a single dependency edge from taskID.
 func (s *Service) DeleteDependency(ctx context.Context, taskID, dependsOnID string) error {
-	return s.st.DeleteDependency(ctx, taskID, dependsOnID)
+	if err := s.st.DeleteDependency(ctx, taskID, dependsOnID); err != nil {
+		return err
+	}
+	return s.recordTaskEvent(ctx, taskID, "dependency_removed", "Removed task dependency", map[string]any{
+		"depends_on": dependsOnID,
+	}, nowMillis())
 }
 
 // AddImage attaches a stored image to a task.
 func (s *Service) AddImage(ctx context.Context, img *model.Image) error {
-	return s.st.AddImage(ctx, img)
+	if err := s.st.AddImage(ctx, img); err != nil {
+		return err
+	}
+	return s.recordTaskEvent(ctx, img.TaskID, "image_added", "Added image "+img.Filename, map[string]any{
+		"image": map[string]any{"id": img.ID, "filename": img.Filename, "mime_type": img.MimeType, "size_bytes": img.SizeBytes},
+	}, img.UploadedAt)
 }
 
 // GetImage fetches an image attachment by id.
@@ -448,7 +534,16 @@ func (s *Service) GetImage(ctx context.Context, id string) (*model.Image, error)
 
 // DeleteImage removes an image attachment by id.
 func (s *Service) DeleteImage(ctx context.Context, id string) (*model.Image, error) {
-	return s.st.DeleteImage(ctx, id)
+	img, err := s.st.DeleteImage(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.recordTaskEvent(ctx, img.TaskID, "image_removed", "Removed image "+img.Filename, map[string]any{
+		"image": map[string]any{"id": img.ID, "filename": img.Filename},
+	}, nowMillis()); err != nil {
+		return nil, err
+	}
+	return img, nil
 }
 
 // AddDoc attaches a markdown document to a task. The handler owns file IO; the
@@ -464,7 +559,12 @@ func (s *Service) AddDoc(ctx context.Context, doc *model.Doc) error {
 	if doc.StoragePath == "" {
 		return errors.New("doc storage path required")
 	}
-	return s.st.AddDoc(ctx, doc)
+	if err := s.st.AddDoc(ctx, doc); err != nil {
+		return err
+	}
+	return s.recordTaskEvent(ctx, doc.TaskID, "document_added", "Added document "+doc.Title, map[string]any{
+		"document": map[string]any{"id": doc.ID, "title": doc.Title},
+	}, doc.CreatedAt)
 }
 
 // GetDoc fetches a markdown document by id.
@@ -474,7 +574,11 @@ func (s *Service) GetDoc(ctx context.Context, id string) (*model.Doc, error) {
 
 // UpdateDoc updates document metadata. Content updates are written by the
 // handler before calling this method to bump the document timestamp.
-func (s *Service) UpdateDoc(ctx context.Context, id string, u store.DocUpdate) (*model.Doc, error) {
+func (s *Service) UpdateDoc(ctx context.Context, id string, u store.DocUpdate, contentChanged bool) (*model.Doc, error) {
+	before, err := s.st.GetDoc(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if u.Title != nil {
 		title := strings.TrimSpace(*u.Title)
 		if title == "" {
@@ -482,12 +586,38 @@ func (s *Service) UpdateDoc(ctx context.Context, id string, u store.DocUpdate) (
 		}
 		u.Title = &title
 	}
-	return s.st.UpdateDoc(ctx, id, u)
+	doc, err := s.st.UpdateDoc(ctx, id, u)
+	if err != nil {
+		return nil, err
+	}
+	changes := make(map[string]any)
+	if before.Title != doc.Title {
+		changes["title"] = map[string]any{"before": before.Title, "after": doc.Title}
+	}
+	if contentChanged {
+		changes["content"] = map[string]any{"changed": true}
+	}
+	if err := s.recordTaskEvent(ctx, doc.TaskID, "document_updated", "Updated document "+doc.Title, map[string]any{
+		"document": map[string]any{"id": doc.ID, "title": doc.Title},
+		"changes":  changes,
+	}, doc.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return doc, nil
 }
 
 // DeleteDoc removes document metadata by id.
 func (s *Service) DeleteDoc(ctx context.Context, id string) (*model.Doc, error) {
-	return s.st.DeleteDoc(ctx, id)
+	doc, err := s.st.DeleteDoc(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.recordTaskEvent(ctx, doc.TaskID, "document_removed", "Removed document "+doc.Title, map[string]any{
+		"document": map[string]any{"id": doc.ID, "title": doc.Title},
+	}, nowMillis()); err != nil {
+		return nil, err
+	}
+	return doc, nil
 }
 
 // AddLink attaches a URL to a task. rawURL is required and must use the
@@ -515,10 +645,24 @@ func (s *Service) AddLink(ctx context.Context, taskID, rawURL, label string) (*m
 	if err := s.st.AddLink(ctx, link); err != nil {
 		return nil, err
 	}
+	if err := s.recordTaskEvent(ctx, taskID, "link_added", "Added link "+link.URL, map[string]any{
+		"link": map[string]any{"id": link.ID, "url": link.URL, "label": link.Label},
+	}, link.CreatedAt); err != nil {
+		return nil, err
+	}
 	return link, nil
 }
 
 // DeleteLink removes a link by its id.
 func (s *Service) DeleteLink(ctx context.Context, id string) error {
-	return s.st.DeleteLink(ctx, id)
+	link, err := s.st.GetLink(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.st.DeleteLink(ctx, id); err != nil {
+		return err
+	}
+	return s.recordTaskEvent(ctx, link.TaskID, "link_removed", "Removed link "+link.URL, map[string]any{
+		"link": map[string]any{"id": link.ID, "url": link.URL, "label": link.Label},
+	}, nowMillis())
 }

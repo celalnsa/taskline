@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.16.0
+version: 0.17.0
 ---
 
 # taskline — task management for AI agents
@@ -122,6 +122,13 @@ server derives owner from the registered token.
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
 | `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |
 
+Every mutation also appends a task history event with `actor`, `action`,
+`summary`, structured `details`, and `created_at`. A registered agent token is
+recorded as that agent name; otherwise the actor is `web`, `cli`, or `api`.
+Use `taskline task history <id>` whenever you need durable operation context or
+the exact before/after values for title, description, state, type, priority, or
+labels.
+
 **State machine.** Any state may transition toward any other named state, but
 target-state evidence rules still apply. Drop-backs (`review` → `dev` when a
 defect surfaces) and directional jumps are legal; entering `review` requires
@@ -210,6 +217,7 @@ taskline task next --project demo --claim --label backend
 taskline task search --project demo fc7a0732 # short id / full id / text matches
 taskline task search --project demo "historical context" --limit 10
 taskline task get <id>
+taskline task history <id>                  # actor, operation, time, before/after
 
 # Mutate (PATCH semantics — only pass the flags you want changed)
 taskline task update <id> --state test

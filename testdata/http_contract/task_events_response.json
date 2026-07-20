@@ -1,0 +1,20 @@
+{
+  "events": [
+    {
+      "id": "event-0001",
+      "task_id": "task-0001",
+      "actor": "agent-a",
+      "action": "updated",
+      "summary": "Updated title",
+      "details": {
+        "changes": {
+          "title": {
+            "after": "New title",
+            "before": "Old title"
+          }
+        }
+      },
+      "created_at": 1780051742142
+    }
+  ]
+}

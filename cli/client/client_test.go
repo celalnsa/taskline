@@ -242,6 +242,34 @@ func TestSearchTasksClientEncodesQueryAndLimit(t *testing.T) {
 	}
 }
 
+func TestTaskHistoryClientIdentifiesCLI(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/tasks/task-one/events" {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
+			return
+		}
+		if got := r.Header.Get("X-Taskline-Client"); got != "cli" {
+			t.Fatalf("X-Taskline-Client = %q, want cli", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"events": []client.TaskEvent{{
+				ID: "event-one", TaskID: "task-one", Actor: "agent-a",
+				Action: "updated", Summary: "Updated title", CreatedAt: 1234,
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	events, err := client.New(srv.URL).ListTaskEvents("task-one")
+	if err != nil {
+		t.Fatalf("ListTaskEvents: %v", err)
+	}
+	if len(events) != 1 || events[0].Actor != "agent-a" || events[0].Action != "updated" {
+		t.Fatalf("unexpected events: %#v", events)
+	}
+}
+
 func TestRegisterAgentClientPayload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

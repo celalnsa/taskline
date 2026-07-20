@@ -84,10 +84,13 @@ task_images (id, task_id → tasks.id, filename, mime_type,
 task_docs   (id, task_id → tasks.id, title, storage_path,
              created_at, updated_at)
 task_links  (id, task_id → tasks.id, url, label, created_at)
+task_events (id, task_id, actor, action, summary, details JSON, created_at)
 ```
 
-All FKs `ON DELETE CASCADE`. Cascade is what makes
+Attachment and dependency FKs use `ON DELETE CASCADE`. Cascade is what makes
 `DELETE /api/v1/tasks/:id` "just work" without app-level cleanup.
+`task_events.task_id` intentionally has no FK: append-only history remains
+queryable by task ID after the task itself is deleted.
 
 Indexes:
 - `idx_tasks_project_state(project_id, state)` — list-by-state filter
@@ -96,12 +99,27 @@ Indexes:
 - `idx_task_images_task(task_id)` — task detail attachment lookup
 - `idx_task_docs_task(task_id)` — task detail doc lookup
 - `idx_task_links_task(task_id)` — task detail link lookup
+- `idx_task_events_task_created(task_id, created_at DESC)` — newest history first
 
 Schema lives twice: once at `server/migrations/0001_init.sql` (for tools
 that read the migration history) and once at
 `server/internal/store/schema/0001_init.sql` (`go:embed`-ed into the
 binary so a fresh database can be created without shipping the migrations
 directory). Keep them identical.
+
+## Task operation history
+
+Mutation handlers resolve an actor once per request. A valid bearer token wins
+and contributes the registered agent name; otherwise `X-Taskline-Client`
+distinguishes `web` and `cli`, with `api` as the neutral fallback. The handler
+places that actor in the request context and never constructs event payloads.
+
+The service owns the event vocabulary, summaries, task snapshots, and
+structured field differences. It synchronously appends a history event after
+each successful task, claim, dependency, image, document, or link mutation.
+The store owns only JSON persistence and newest-first retrieval. Task update
+events retain full before/after values; document content updates record that
+content changed without duplicating full Markdown bodies into SQLite.
 
 ## State machine
 

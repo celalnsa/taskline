@@ -6,6 +6,7 @@ import nextTaskResponseFixture from "../../../testdata/http_contract/next_task_r
 import projectFixture from "../../../testdata/http_contract/project.json";
 import statusFixture from "../../../testdata/http_contract/status.json";
 import taskFixture from "../../../testdata/http_contract/task_full.json";
+import taskEventsResponseFixture from "../../../testdata/http_contract/task_events_response.json";
 import tasksResponseFixture from "../../../testdata/http_contract/tasks_response.json";
 import {
   STATES,
@@ -13,6 +14,7 @@ import {
   type ServerStatus,
   type Task,
   type TaskDoc,
+  type TaskEvent,
   type TaskImage,
   type TaskLink,
 } from "./api";
@@ -27,6 +29,7 @@ describe("canonical HTTP contract fixtures", () => {
     const doc: TaskDoc = docFixture;
     const image: TaskImage = imageFixture;
     const link: TaskLink = linkFixture;
+    const events: TaskEvent[] = taskEventsResponseFixture.events;
 
     expect(keys(project)).toEqual([
       "created_at",
@@ -95,6 +98,15 @@ describe("canonical HTTP contract fixtures", () => {
       "url",
     ]);
     expect(keys(link)).toEqual(["created_at", "id", "label", "task_id", "url"]);
+    expect(keys(events[0])).toEqual([
+      "action",
+      "actor",
+      "created_at",
+      "details",
+      "id",
+      "summary",
+      "task_id",
+    ]);
   });
 
   it("uses known state and type literals", () => {

@@ -107,6 +107,10 @@ and are not installed globally.
 - **Task labels.** Labels are task-local strings stored as JSON on the
   `tasks` row. They are not a project-level registry yet; keep create/update
   support in the normal task API/CLI/editor flow.
+- **Task history.** Every task mutation appends a `task_events` row through
+  the service-layer recorder. Keep actor/action/summary/change construction in
+  `internal/service`; the store only persists and lists events. Event task IDs
+  deliberately have no FK so history survives task deletion.
 
 ## Frontend ↔ backend contract
 

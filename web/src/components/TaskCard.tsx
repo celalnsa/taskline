@@ -11,6 +11,7 @@ interface Props {
   task: Task;
   isBlocked: boolean;
   onClick: () => void;
+  onHistoryClick?: () => void;
   onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void;
   // When true, the card renders as a static clone for use inside
   // <DragOverlay/> — no useDraggable wiring, no transform, the
@@ -20,7 +21,14 @@ interface Props {
   overlay?: boolean;
 }
 
-export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = false }: Props) {
+export function TaskCard({
+  task,
+  isBlocked,
+  onClick,
+  onHistoryClick,
+  onContextMenu,
+  overlay = false,
+}: Props) {
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const labels = task.labels ?? [];
   const dependencyCount = task.depends_on?.length ?? 0;
@@ -214,12 +222,23 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
         </div>
       )}
       <div className="mt-1 flex min-w-0 justify-end">
-        <span
-          className="shrink-0 text-[10px] tabular-nums text-[var(--tl-ink-faint)]"
+        <button
+          type="button"
+          aria-label={`View history for ${task.title}`}
+          className="shrink-0 rounded-sm px-0.5 text-[10px] tabular-nums text-[var(--tl-ink-faint)] transition-colors hover:bg-[var(--tl-bg-quiet)] hover:text-[var(--tl-water)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tl-focus)]"
           title={new Date(task.updated_at).toLocaleString()}
+          onPointerDown={(event) => {
+            pointerStart.current = null;
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            onHistoryClick?.();
+          }}
+          disabled={overlay || !onHistoryClick}
         >
           {formatRelativeTime(task.updated_at)}
-        </span>
+        </button>
       </div>
     </div>
   );

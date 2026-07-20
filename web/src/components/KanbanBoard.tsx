@@ -17,11 +17,12 @@ import {
   type Task,
   type TaskState,
 } from "../lib/api";
-import { useDeleteTask, useTasks, useUpdateTask } from "../hooks/queries";
+import { useDeleteTask, useTaskEvents, useTasks, useUpdateTask } from "../hooks/queries";
 import { copyTaskIDToClipboard, createTaskCloneDraft } from "../lib/taskActions";
 import { TaskCard } from "./TaskCard";
 import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskEditor } from "./TaskEditor";
+import { TaskHistoryDialog } from "./TaskHistoryDialog";
 
 interface Props {
   project: Project;
@@ -87,6 +88,7 @@ export function KanbanBoard({ project }: Props) {
   const updateTask = useUpdateTask(project.id);
   const deleteTask = useDeleteTask(project.id);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [cloneDraft, setCloneDraft] = useState<Task | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenuState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +103,7 @@ export function KanbanBoard({ project }: Props) {
   // (and the kanban scroller's overflow-x-auto/overflow-y-hidden), which
   // is what made cards "disappear" mid-drag.
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const historyQ = useTaskEvents(historyTask?.id ?? null);
   const sensors = useSensors(
     // 4px movement before a drag begins so click-to-edit isn't hijacked.
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -247,6 +250,7 @@ export function KanbanBoard({ project }: Props) {
                     task={t}
                     isBlocked={isBlocked(t)}
                     onClick={() => setEditing(t)}
+                    onHistoryClick={() => setHistoryTask(t)}
                     onContextMenu={(event) => {
                       setTaskMenu({ task: t, x: event.clientX, y: event.clientY });
                     }}
@@ -275,6 +279,15 @@ export function KanbanBoard({ project }: Props) {
           task={editing}
           allTasks={tasks}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {historyTask && (
+        <TaskHistoryDialog
+          task={historyTask}
+          events={historyQ.data ?? []}
+          isLoading={historyQ.isLoading}
+          error={historyQ.error}
+          onClose={() => setHistoryTask(null)}
         />
       )}
       {cloneDraft && (
