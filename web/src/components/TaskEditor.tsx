@@ -13,6 +13,7 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  Bot,
   ChevronDown,
   Clock3,
   FileCode2,
@@ -22,7 +23,6 @@ import {
   Tag,
   TimerReset,
   Trash2,
-  UserRound,
   X,
 } from "lucide-react";
 import {
@@ -372,7 +372,14 @@ function ClaimSection({ task }: { task: Task }) {
   const owner = task.owner?.trim();
   if (!owner) return null;
 
-  const claimedElapsed = task.claimed_at ? formatElapsedTime(task.claimed_at) : "";
+  const claimVerb = task.state === "done" ? "worked" : "working";
+  const claimElapsed = task.claimed_at
+    ? task.state === "done"
+      ? task.completed_at
+        ? formatElapsedTime(task.claimed_at, task.completed_at)
+        : ""
+      : formatElapsedTime(task.claimed_at)
+    : "";
   const claimedAt = task.claimed_at ? new Date(task.claimed_at).toLocaleString() : "unknown";
   const leaseExpires = task.lease_expires_at
     ? new Date(task.lease_expires_at).toLocaleString()
@@ -386,17 +393,22 @@ function ClaimSection({ task }: { task: Task }) {
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-medium text-[var(--tl-ink-muted)]">Claim</p>
         <span className="inline-flex min-w-0 max-w-[70%] items-center gap-1 rounded border border-[var(--tl-outline)] bg-[var(--tl-surface)] px-2 py-0.5 text-xs text-[var(--tl-ink-muted)]">
-          <UserRound size={12} aria-hidden="true" className="shrink-0" />
+          <Bot size={12} aria-hidden="true" className="shrink-0" />
           <span className="truncate">{owner}</span>
         </span>
       </div>
       <div className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-        <div className="flex min-w-0 items-center gap-1.5 text-[var(--tl-ink-muted)]">
+        <div
+          className="flex min-w-0 items-center gap-1.5 text-[var(--tl-ink-muted)]"
+          title={task.claimed_at ? `Claimed ${claimedAt}` : undefined}
+        >
           <Clock3 size={12} aria-hidden="true" className="shrink-0" />
-          <span className="shrink-0">claimed</span>
-          <span className="font-medium tabular-nums text-[var(--tl-ink)]" title={claimedAt}>
-            {claimedElapsed || claimedAt}
-          </span>
+          <span className="shrink-0">{claimVerb}</span>
+          {claimElapsed && (
+            <span className="font-medium tabular-nums text-[var(--tl-ink)]">
+              {claimElapsed}
+            </span>
+          )}
         </div>
         <div className="flex min-w-0 items-center gap-1.5 text-[var(--tl-ink-muted)]">
           <TimerReset size={12} aria-hidden="true" className="shrink-0" />
