@@ -36,6 +36,7 @@ Environment:
   Agent identity is loaded from .config/taskline/agent.json in the current directory
 
 Examples:
+  taskline status
   taskline register --name agent-a
   taskline project create --name demo
   taskline task create --project demo --title "first task" --type feature

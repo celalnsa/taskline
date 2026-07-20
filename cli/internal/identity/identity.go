@@ -51,10 +51,18 @@ func Load(server string) (*Identity, bool, error) {
 	}
 	id.Server = strings.TrimRight(id.Server, "/")
 	if id.Server != strings.TrimRight(server, "/") {
-		return nil, false, fmt.Errorf("agent identity in %s is for %s, current server is %s; run taskline register --name <agent>", path, id.Server, strings.TrimRight(server, "/"))
+		return nil, false, fmt.Errorf(
+			"agent identity in %s is for %s, current server is %s; correct TASKLINE_SERVER or remove the local identity before intentional re-registration",
+			path,
+			id.Server,
+			strings.TrimRight(server, "/"),
+		)
 	}
 	if strings.TrimSpace(id.Token) == "" || strings.TrimSpace(id.Agent.Name) == "" {
-		return nil, false, fmt.Errorf("agent identity in %s is incomplete; run taskline register --name <agent>", path)
+		return nil, false, fmt.Errorf(
+			"agent identity in %s is incomplete; repair or remove it before registering again",
+			path,
+		)
 	}
 	return &id, true, nil
 }

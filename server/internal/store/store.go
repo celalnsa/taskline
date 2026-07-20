@@ -382,6 +382,34 @@ func (s *Store) GetAgentByTokenHash(ctx context.Context, tokenHash string) (*mod
 	return scanAgent(row)
 }
 
+// ListActiveClaims returns compact live, non-terminal claims for one owner
+// across every project.
+func (s *Store) ListActiveClaims(ctx context.Context, owner string, nowMS int64) ([]model.ActiveClaim, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id,title,claimed_at,lease_expires_at
+		FROM tasks
+		WHERE owner = ?
+		  AND lease_expires_at > ?
+		  AND state NOT IN (?, ?)
+		ORDER BY claimed_at ASC, id ASC`,
+		owner, nowMS, model.StatePending, model.StateDone,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	claims := make([]model.ActiveClaim, 0)
+	for rows.Next() {
+		var claim model.ActiveClaim
+		if err := rows.Scan(&claim.ID, &claim.Title, &claim.ClaimedAt, &claim.LeaseExpiresAt); err != nil {
+			return nil, err
+		}
+		claims = append(claims, claim)
+	}
+	return claims, rows.Err()
+}
+
 // ─── Tasks ──────────────────────────────────────────────────────────────
 
 // CreateTask inserts a new task with the given initial state.

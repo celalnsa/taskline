@@ -45,6 +45,7 @@ func (h *Handler) Register(s *server.Hertz) {
 	s.GET("/healthz", h.health)
 
 	v1 := s.Group("/api/v1")
+	v1.GET("/status", h.status)
 	v1.POST("/agents/register", h.registerAgent)
 
 	v1.POST("/projects", h.createProject)
@@ -137,6 +138,17 @@ type registerAgentReq struct {
 }
 
 func (h *Handler) registerAgent(ctx context.Context, c *app.RequestContext) {
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return
+	}
+	if agent != nil {
+		writeError(c, http.StatusConflict, fmt.Errorf(
+			"already registered as %s; run taskline status to inspect the current identity; remove .config/taskline/agent.json before intentional re-registration",
+			agent.Name,
+		))
+		return
+	}
 	var req registerAgentReq
 	if err := decodeJSON(c, &req); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -151,6 +163,19 @@ func (h *Handler) registerAgent(ctx context.Context, c *app.RequestContext) {
 		"agent": reg.Agent,
 		"token": reg.Token,
 	})
+}
+
+func (h *Handler) status(ctx context.Context, c *app.RequestContext) {
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return
+	}
+	status, err := h.svc.Status(ctx, agent)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(c, http.StatusOK, status)
 }
 
 // ─── Project handlers ───────────────────────────────────────────────────

@@ -273,6 +273,42 @@ func TestRegisterAgentClientPayload(t *testing.T) {
 	}
 }
 
+func TestStatusClientUsesTokenAndDecodesActiveClaims(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/status" {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.String(), http.StatusTeapot)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer agent-token" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(client.ServerStatus{
+			OK:         true,
+			ServerTime: 5_000,
+			Agent:      &client.Agent{ID: "agent-id", Name: "agent-a"},
+			ActiveTasks: []client.ActiveClaim{{
+				ID: "task-id", Title: "claimed", ClaimedAt: 1_000,
+				ClaimedForMS: 4_000, LeaseExpiresAt: 10_000,
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	c.Token = "agent-token"
+	status, err := c.GetStatus()
+	if err != nil {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if !status.OK || status.Agent == nil || status.Agent.Name != "agent-a" {
+		t.Fatalf("unexpected status: %#v", status)
+	}
+	if len(status.ActiveTasks) != 1 || status.ActiveTasks[0].ClaimedForMS != 4_000 {
+		t.Fatalf("unexpected active tasks: %#v", status.ActiveTasks)
+	}
+}
+
 func TestTaskClaimClientPayloads(t *testing.T) {
 	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

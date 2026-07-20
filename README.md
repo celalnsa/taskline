@@ -54,8 +54,11 @@ cp .env.example .env       # only needed first time
 
 # In another shell — drive via CLI
 export TASKLINE_PROJECT=demo
-./dist/taskline project create --name demo --description "first one"
+./dist/taskline status
+# Register only when status reports registered=false, then verify again.
 ./dist/taskline register --name agent-a
+./dist/taskline status
+./dist/taskline project create --name demo --description "first one"
 ./dist/taskline task create --title "first task" --type feature --priority 1 --label onboarding
 # --type accepts feature, bug, or docs
 ./dist/taskline task doc create <task-id> --title Spec --file ./spec.md
@@ -155,9 +158,18 @@ export TASKLINE_PROJECT=demo                   # default --project for task subc
 Agent identity is stored per working directory, not globally:
 
 ```bash
-taskline register --name agent-a
+taskline status
+taskline register --name agent-a  # only when status reports registered=false
+taskline status
 # writes .config/taskline/agent.json in the current directory
 ```
+
+`taskline status` is the preflight for agent work. It reports the CLI version,
+server health, config directory, default project, registered agent, and that
+agent's live claims across projects. A bad or stale token makes the command fail
+instead of silently appearing unregistered. Registration also rejects a request
+that already carries a valid agent token, preventing accidental identity
+replacement.
 
 `task next` and `task list --runnable` accept repeated `--label` filters with
 AND semantics so multiple agents can consume different labeled subsets from one

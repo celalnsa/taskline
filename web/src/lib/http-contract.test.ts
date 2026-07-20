@@ -4,11 +4,13 @@ import imageFixture from "../../../testdata/http_contract/image.json";
 import linkFixture from "../../../testdata/http_contract/link.json";
 import nextTaskResponseFixture from "../../../testdata/http_contract/next_task_response.json";
 import projectFixture from "../../../testdata/http_contract/project.json";
+import statusFixture from "../../../testdata/http_contract/status.json";
 import taskFixture from "../../../testdata/http_contract/task_full.json";
 import tasksResponseFixture from "../../../testdata/http_contract/tasks_response.json";
 import {
   STATES,
   type Project,
+  type ServerStatus,
   type Task,
   type TaskDoc,
   type TaskImage,
@@ -18,6 +20,7 @@ import {
 describe("canonical HTTP contract fixtures", () => {
   it("match the exported web API shapes", () => {
     const project: Project = projectFixture;
+    const status: ServerStatus = statusFixture;
     const task = asTask(taskFixture);
     const tasksResponse = { tasks: tasksResponseFixture.tasks.map(asTask) };
     const nextTaskResponse = { task: asTask(nextTaskResponseFixture.task) };
@@ -31,6 +34,25 @@ describe("canonical HTTP contract fixtures", () => {
       "id",
       "name",
       "updated_at",
+    ]);
+    expect(keys(status)).toEqual([
+      "active_tasks",
+      "agent",
+      "ok",
+      "server_time",
+    ]);
+    expect(keys(status.agent!)).toEqual([
+      "created_at",
+      "id",
+      "name",
+      "updated_at",
+    ]);
+    expect(keys(status.active_tasks[0])).toEqual([
+      "claimed_at",
+      "claimed_for_ms",
+      "id",
+      "lease_expires_at",
+      "title",
     ]);
     expect(keys(task)).toEqual([
       "claimed_at",

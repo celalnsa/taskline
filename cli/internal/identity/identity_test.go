@@ -65,4 +65,7 @@ func TestLoadRejectsDifferentServer(t *testing.T) {
 	if !strings.Contains(err.Error(), "current server is http://127.0.0.1:8610") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if !strings.Contains(err.Error(), "correct TASKLINE_SERVER") {
+		t.Fatalf("error should guide server correction: %v", err)
+	}
 }

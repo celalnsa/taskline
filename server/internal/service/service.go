@@ -106,6 +106,29 @@ func (s *Service) ResolveAgentToken(ctx context.Context, token string) (*model.A
 	return s.st.GetAgentByTokenHash(ctx, hashAgentToken(token))
 }
 
+// Status returns server health and, when agent is non-nil, its live claims.
+func (s *Service) Status(ctx context.Context, agent *model.Agent) (*model.ServerStatus, error) {
+	nowMS := nowMillis()
+	status := &model.ServerStatus{
+		OK:          true,
+		ServerTime:  nowMS,
+		Agent:       agent,
+		ActiveTasks: make([]model.ActiveClaim, 0),
+	}
+	if agent == nil {
+		return status, nil
+	}
+	claims, err := s.st.ListActiveClaims(ctx, agent.Name, nowMS)
+	if err != nil {
+		return nil, err
+	}
+	for i := range claims {
+		claims[i].ClaimedForMS = max(nowMS-claims[i].ClaimedAt, 0)
+	}
+	status.ActiveTasks = claims
+	return status, nil
+}
+
 func normalizeAgentName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
