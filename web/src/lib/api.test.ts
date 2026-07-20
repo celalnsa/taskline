@@ -5,6 +5,7 @@ import {
   deleteTaskDoc,
   deleteTaskImage,
   getTaskDoc,
+  listTaskEvents,
   searchTasks,
   STATE_LABELS,
   STATES,
@@ -112,6 +113,40 @@ describe("searchTasks", () => {
   });
 });
 
+describe("listTaskEvents", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("loads task history and identifies the Web client", async () => {
+    const event = {
+      id: "event-1",
+      task_id: "task/one",
+      actor: "web",
+      action: "updated",
+      summary: "Updated title",
+      details: {},
+      created_at: 1780051741142,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ events: [event] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listTaskEvents("task/one")).resolves.toEqual([event]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/tasks/task%2Fone/events",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ "X-Taskline-Client": "web" }),
+      })
+    );
+  });
+});
+
 describe("uploadTaskImage", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -143,7 +178,7 @@ describe("uploadTaskImage", () => {
       expect.objectContaining({ method: "POST", body: expect.any(FormData) })
     );
     const init = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(init.headers).toBeUndefined();
+    expect(init.headers).toEqual({ "X-Taskline-Client": "web" });
     expect((init.body as FormData).get("file")).toBe(file);
   });
 });

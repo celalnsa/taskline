@@ -84,6 +84,17 @@ type Task struct {
 	UpdatedAt      int64    `json:"updated_at"`
 }
 
+// TaskEvent is one append-only task operation record.
+type TaskEvent struct {
+	ID        string         `json:"id"`
+	TaskID    string         `json:"task_id"`
+	Actor     string         `json:"actor"`
+	Action    string         `json:"action"`
+	Summary   string         `json:"summary"`
+	Details   map[string]any `json:"details"`
+	CreatedAt int64          `json:"created_at"`
+}
+
 // Link is a URL attached to a task.
 type Link struct {
 	ID        string `json:"id"`
@@ -189,6 +200,19 @@ func (c *Client) CreateTask(projectIDOrName string, in CreateTaskInput) (*Task, 
 		return nil, err
 	}
 	return &out, nil
+}
+
+type listTaskEventsResp struct {
+	Events []TaskEvent `json:"events"`
+}
+
+func (c *Client) ListTaskEvents(taskID string) ([]TaskEvent, error) {
+	var out listTaskEventsResp
+	path := fmt.Sprintf("/api/v1/tasks/%s/events", url.PathEscape(taskID))
+	if err := c.do("GET", path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Events, nil
 }
 
 type listTasksResp struct {
@@ -485,6 +509,7 @@ func (c *Client) UploadImage(taskID, filePath string) (*Image, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("X-Taskline-Client", "cli")
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
@@ -521,6 +546,7 @@ func (c *Client) do(method, path string, in any, out any) error {
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("X-Taskline-Client", "cli")
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}

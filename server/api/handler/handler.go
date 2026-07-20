@@ -58,6 +58,7 @@ func (h *Handler) Register(s *server.Hertz) {
 	v1.GET("/projects/:project/tasks/next", h.nextRunnableTask)
 
 	v1.GET("/tasks/:id", h.getTask)
+	v1.GET("/tasks/:id/events", h.listTaskEvents)
 	v1.PATCH("/tasks/:id", h.updateTask)
 	v1.DELETE("/tasks/:id", h.deleteTask)
 	v1.POST("/tasks/:id/claim", h.claimTask)
@@ -89,7 +90,7 @@ func (h *Handler) Register(s *server.Hertz) {
 func corsMiddleware(_ context.Context, c *app.RequestContext) {
 	c.Response.Header.Set("Access-Control-Allow-Origin", "*")
 	c.Response.Header.Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-	c.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+	c.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Taskline-Client")
 	if string(c.Method()) == http.MethodOptions {
 		c.SetStatusCode(http.StatusNoContent)
 		c.Abort()
@@ -224,6 +225,10 @@ type createTaskReq struct {
 
 func (h *Handler) createTask(ctx context.Context, c *app.RequestContext) {
 	project := c.Param("project")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	var req createTaskReq
 	if err := decodeJSON(c, &req); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -346,7 +351,7 @@ func (h *Handler) nextRunnableTask(ctx context.Context, c *app.RequestContext) {
 			writeError(c, http.StatusBadRequest, parseErr)
 			return
 		}
-		t, err = h.svc.ClaimNextTask(ctx, project, service.ClaimOptions{
+		t, err = h.svc.ClaimNextTask(service.WithActor(ctx, agent.Name), project, service.ClaimOptions{
 			Owner:  agent.Name,
 			Lease:  lease,
 			Labels: labels,
@@ -384,6 +389,15 @@ func (h *Handler) getTask(ctx context.Context, c *app.RequestContext) {
 	h.attachments.AttachTaskImageURLs(t)
 	h.attachments.AttachTaskDocURLs(t)
 	writeJSON(c, http.StatusOK, t)
+}
+
+func (h *Handler) listTaskEvents(ctx context.Context, c *app.RequestContext) {
+	events, err := h.svc.ListTaskEvents(ctx, c.Param("id"))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	writeJSON(c, http.StatusOK, map[string]any{"events": events})
 }
 
 type updateTaskReq struct {
@@ -459,6 +473,9 @@ func (h *Handler) updateTask(ctx context.Context, c *app.RequestContext) {
 		return
 	} else if agent != nil {
 		u.Owner = agent.Name
+		ctx = service.WithActor(ctx, agent.Name)
+	} else {
+		ctx = service.WithActor(ctx, requestClientActor(c))
 	}
 	u.Force = req.Force
 	t, err := h.svc.UpdateTask(ctx, id, u)
@@ -495,7 +512,7 @@ func (h *Handler) claimTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
-	t, err := h.svc.ClaimTask(ctx, id, service.ClaimOptions{Owner: agent.Name, Lease: lease})
+	t, err := h.svc.ClaimTask(service.WithActor(ctx, agent.Name), id, service.ClaimOptions{Owner: agent.Name, Lease: lease})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -521,7 +538,7 @@ func (h *Handler) heartbeatTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
-	t, err := h.svc.HeartbeatTask(ctx, id, service.ClaimOptions{Owner: agent.Name, Lease: lease})
+	t, err := h.svc.HeartbeatTask(service.WithActor(ctx, agent.Name), id, service.ClaimOptions{Owner: agent.Name, Lease: lease})
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -538,13 +555,20 @@ func (h *Handler) releaseTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return
+	}
+	if !req.Force && agent == nil {
+		writeError(c, http.StatusUnauthorized, errors.New("agent token required: run taskline register --name <agent>"))
+		return
+	}
 	owner := ""
-	if !req.Force {
-		agent, ok := h.requireAgent(ctx, c)
-		if !ok {
-			return
-		}
+	if agent != nil {
 		owner = agent.Name
+		ctx = service.WithActor(ctx, agent.Name)
+	} else {
+		ctx = service.WithActor(ctx, requestClientActor(c))
 	}
 	t, err := h.svc.ReleaseTask(ctx, id, service.ReleaseOptions{Owner: owner, Force: req.Force})
 	if err != nil {
@@ -558,6 +582,10 @@ func (h *Handler) releaseTask(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) deleteTask(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	if err := h.svc.DeleteTask(ctx, id); err != nil {
 		writeServiceError(c, err)
 		return
@@ -571,6 +599,10 @@ type addDepReq struct {
 
 func (h *Handler) addDependency(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	var req addDepReq
 	if err := decodeJSON(c, &req); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -590,6 +622,10 @@ func (h *Handler) addDependency(ctx context.Context, c *app.RequestContext) {
 func (h *Handler) deleteDependency(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
 	dependsOn := c.Param("dependsOn")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	if err := h.svc.DeleteDependency(ctx, id, dependsOn); err != nil {
 		writeServiceError(c, err)
 		return
@@ -608,6 +644,10 @@ type addLinkReq struct {
 
 func (h *Handler) addLink(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	var req addLinkReq
 	if err := decodeJSON(c, &req); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -623,6 +663,10 @@ func (h *Handler) addLink(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) deleteLink(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	if err := h.svc.DeleteLink(ctx, id); err != nil {
 		writeServiceError(c, err)
 		return
@@ -637,6 +681,10 @@ type createDocReq struct {
 
 func (h *Handler) createDoc(ctx context.Context, c *app.RequestContext) {
 	taskID := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	if _, err := h.svc.GetTask(ctx, taskID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -710,6 +758,10 @@ type updateDocReq struct {
 
 func (h *Handler) updateDoc(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	doc, err := h.svc.GetDoc(ctx, id)
 	if err != nil {
 		writeServiceError(c, err)
@@ -737,7 +789,7 @@ func (h *Handler) updateDoc(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 	}
-	updated, err := h.svc.UpdateDoc(ctx, id, u)
+	updated, err := h.svc.UpdateDoc(ctx, id, u, req.Content != nil)
 	if err != nil {
 		if tempPath != "" {
 			_ = h.attachments.DeleteFile(tempPath)
@@ -763,6 +815,10 @@ func (h *Handler) updateDoc(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) deleteDoc(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	doc, err := h.svc.DeleteDoc(ctx, id)
 	if err != nil {
 		writeServiceError(c, err)
@@ -776,6 +832,10 @@ func (h *Handler) deleteDoc(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) uploadImage(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	// Verify task exists before writing the file.
 	if _, err := h.svc.GetTask(ctx, id); err != nil {
 		writeServiceError(c, err)
@@ -823,6 +883,10 @@ func (h *Handler) getImage(ctx context.Context, c *app.RequestContext) {
 
 func (h *Handler) deleteImage(ctx context.Context, c *app.RequestContext) {
 	id := c.Param("id")
+	var ok bool
+	if ctx, ok = h.withRequestActor(ctx, c); !ok {
+		return
+	}
 	img, err := h.svc.DeleteImage(ctx, id)
 	if err != nil {
 		writeServiceError(c, err)
@@ -872,6 +936,28 @@ func (h *Handler) requireAgent(ctx context.Context, c *app.RequestContext) (*mod
 		return nil, false
 	}
 	return agent, true
+}
+
+func (h *Handler) withRequestActor(ctx context.Context, c *app.RequestContext) (context.Context, bool) {
+	agent, ok := h.optionalAgent(ctx, c)
+	if !ok {
+		return ctx, false
+	}
+	if agent != nil {
+		return service.WithActor(ctx, agent.Name), true
+	}
+	return service.WithActor(ctx, requestClientActor(c)), true
+}
+
+func requestClientActor(c *app.RequestContext) string {
+	switch strings.ToLower(strings.TrimSpace(string(c.Request.Header.Peek("X-Taskline-Client")))) {
+	case "web":
+		return "web"
+	case "cli":
+		return "cli"
+	default:
+		return "api"
+	}
 }
 
 func parseBearerToken(raw string) (string, error) {

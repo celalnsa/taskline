@@ -129,6 +129,10 @@ func jsonReq(t *testing.T, method, url string, body any, out any) int {
 }
 
 func jsonReqWithToken(t *testing.T, method, url string, body any, out any, token string) int {
+	return jsonReqWithHeaders(t, method, url, body, out, token, nil)
+}
+
+func jsonReqWithHeaders(t *testing.T, method, url string, body any, out any, token string, headers map[string]string) int {
 	t.Helper()
 	var rdr io.Reader
 	if body != nil {
@@ -144,6 +148,9 @@ func jsonReqWithToken(t *testing.T, method, url string, body any, out any, token
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -152,6 +159,58 @@ func jsonReqWithToken(t *testing.T, method, url string, body any, out any, token
 		require.NoError(t, json.Unmarshal(raw, out), "decode body: %s", string(raw))
 	}
 	return resp.StatusCode
+}
+
+func TestTaskHistoryTracksActorsChangesAndSurvivesDeletion(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+
+	jsonReq(t, http.MethodPost, base+"/api/v1/projects",
+		map[string]any{"name": "history"}, &project{})
+	var created task
+	st := jsonReqWithHeaders(t, http.MethodPost, base+"/api/v1/projects/history/tasks",
+		map[string]any{
+			"title": "Before", "description": "Old description",
+			"type": "feature", "auto_start": true,
+		},
+		&created, "", map[string]string{"X-Taskline-Client": "web"})
+	require.Equal(t, http.StatusCreated, st)
+
+	st = jsonReqWithHeaders(t, http.MethodPatch, base+"/api/v1/tasks/"+created.ID,
+		map[string]any{"title": "After", "description": "New description"},
+		&created, "", map[string]string{"X-Taskline-Client": "cli"})
+	require.Equal(t, http.StatusOK, st)
+
+	token := registerAgent(t, base, "history-agent")
+	st = jsonReqWithHeaders(t, http.MethodPost, base+"/api/v1/tasks/"+created.ID+"/claim",
+		map[string]any{"lease": "1h"}, &created, token,
+		map[string]string{"X-Taskline-Client": "cli"})
+	require.Equal(t, http.StatusOK, st)
+
+	var history struct {
+		Events []model.TaskEvent `json:"events"`
+	}
+	st = jsonReq(t, http.MethodGet, base+"/api/v1/tasks/"+created.ID+"/events", nil, &history)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, history.Events, 3)
+	require.Equal(t, "claimed", history.Events[0].Action)
+	require.Equal(t, "history-agent", history.Events[0].Actor)
+	require.Equal(t, "updated", history.Events[1].Action)
+	require.Equal(t, "cli", history.Events[1].Actor)
+	require.Equal(t, "created", history.Events[2].Action)
+	require.Equal(t, "web", history.Events[2].Actor)
+	changes := history.Events[1].Details["changes"].(map[string]any)
+	require.Equal(t, "Before", changes["title"].(map[string]any)["before"])
+	require.Equal(t, "After", changes["title"].(map[string]any)["after"])
+
+	st = jsonReqWithHeaders(t, http.MethodDelete, base+"/api/v1/tasks/"+created.ID,
+		nil, nil, "", map[string]string{"X-Taskline-Client": "cli"})
+	require.Equal(t, http.StatusOK, st)
+	st = jsonReq(t, http.MethodGet, base+"/api/v1/tasks/"+created.ID+"/events", nil, &history)
+	require.Equal(t, http.StatusOK, st)
+	require.Len(t, history.Events, 4)
+	require.Equal(t, "deleted", history.Events[0].Action)
+	require.Equal(t, "cli", history.Events[0].Actor)
 }
 
 func registerAgent(t *testing.T, base, name string) string {

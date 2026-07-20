@@ -83,6 +83,16 @@ export interface Task {
   updated_at: number;
 }
 
+export interface TaskEvent {
+  id: string;
+  task_id: string;
+  actor: string;
+  action: string;
+  summary: string;
+  details: Record<string, unknown>;
+  created_at: number;
+}
+
 export interface TaskImage {
   id: string;
   task_id: string;
@@ -124,7 +134,10 @@ async function request<T>(
 ): Promise<T> {
   const res = await fetch(path, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      "X-Taskline-Client": "web",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw await readApiError(res);
@@ -199,6 +212,14 @@ export async function createTask(
   );
 }
 
+export async function listTaskEvents(taskId: string): Promise<TaskEvent[]> {
+  const response = await request<{ events: TaskEvent[] }>(
+    "GET",
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/events`
+  );
+  return response.events ?? [];
+}
+
 export async function updateTask(
   id: string,
   patch: Partial<
@@ -220,7 +241,11 @@ export async function uploadTaskImage(
   body.append("file", file);
   const res = await fetch(
     `/api/v1/tasks/${encodeURIComponent(taskId)}/images`,
-    { method: "POST", body }
+    {
+      method: "POST",
+      headers: { "X-Taskline-Client": "web" },
+      body,
+    }
   );
   if (!res.ok) throw await readApiError(res);
   return (await res.json()) as TaskImage;

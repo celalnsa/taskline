@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -22,6 +23,7 @@ func init() {
 		taskSearchCmd,
 		taskNextCmd,
 		taskGetCmd,
+		taskHistoryCmd,
 		taskUpdateCmd,
 		taskDeleteCmd,
 		taskClaimCmd,
@@ -279,6 +281,21 @@ var taskGetCmd = &cobra.Command{
 		}
 		return output.Render(os.Stdout, output.Resolve(formatFlag), t, func(w io.Writer) {
 			renderTaskTable(w, []client.Task{*t})
+		})
+	},
+}
+
+var taskHistoryCmd = &cobra.Command{
+	Use:   "history <task-id>",
+	Short: "Show the complete operation history for a task",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		events, err := newClient().ListTaskEvents(args[0])
+		if err != nil {
+			return err
+		}
+		return output.Render(os.Stdout, output.Resolve(formatFlag), map[string]any{"events": events}, func(w io.Writer) {
+			renderTaskHistoryTable(w, events)
 		})
 	},
 }
@@ -620,6 +637,19 @@ func renderTaskTable(w io.Writer, ts []client.Task) {
 			shortID(t.ID), t.State, t.Type, t.Priority, renderOwner(t.Owner), renderLabels(t.Labels), trimRune(t.Title, 50), deps)
 	}
 	tw.Flush()
+}
+
+func renderTaskHistoryTable(w io.Writer, events []client.TaskEvent) {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "TIME\tACTOR\tACTION\tSUMMARY")
+	for _, event := range events {
+		fmt.Fprintf(
+			tw, "%s\t%s\t%s\t%s\n",
+			time.UnixMilli(event.CreatedAt).Local().Format("2006-01-02 15:04:05"),
+			event.Actor, event.Action, event.Summary,
+		)
+	}
+	_ = tw.Flush()
 }
 
 func filterTasksByOwner(ts []client.Task, owner string) []client.Task {

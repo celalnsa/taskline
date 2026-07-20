@@ -42,6 +42,14 @@ export function useTaskSearch(projectIdOrName: string | null, query: string) {
   });
 }
 
+export function useTaskEvents(taskId: string | null) {
+  return useQuery({
+    queryKey: ["tasks", taskId, "events"],
+    queryFn: () => api.listTaskEvents(taskId!),
+    enabled: !!taskId,
+  });
+}
+
 export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({

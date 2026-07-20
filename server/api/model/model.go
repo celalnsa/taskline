@@ -127,6 +127,19 @@ type Task struct {
 	UpdatedAt      int64     `json:"updated_at"`
 }
 
+// TaskEvent is one append-only mutation record for a task. Details stays
+// structured so clients can render full before/after values without parsing
+// human-readable summaries.
+type TaskEvent struct {
+	ID        string         `json:"id"`
+	TaskID    string         `json:"task_id"`
+	Actor     string         `json:"actor"`
+	Action    string         `json:"action"`
+	Summary   string         `json:"summary"`
+	Details   map[string]any `json:"details"`
+	CreatedAt int64          `json:"created_at"`
+}
+
 // Link is a URL attached to a task — typically a spec doc, PR, technical
 // note, or other artifact the agent wants to keep alongside the task.
 type Link struct {

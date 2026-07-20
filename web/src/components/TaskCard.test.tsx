@@ -1,6 +1,5 @@
 import { DndContext } from "@dnd-kit/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "../lib/api";
 import { TaskCard } from "./TaskCard";
@@ -22,11 +21,12 @@ const task: Task = {
 };
 
 function renderCard(
-  onClick = vi.fn(),
+  onClick: () => void = vi.fn(),
   onDelete = vi.fn(),
   cardTask: Task = task,
   isBlocked = false,
-  onContextMenu = vi.fn()
+  onContextMenu = vi.fn(),
+  onHistoryClick: () => void = vi.fn()
 ) {
   render(
     <DndContext>
@@ -35,11 +35,12 @@ function renderCard(
         isBlocked={isBlocked}
         onClick={onClick}
         onContextMenu={onContextMenu}
+        onHistoryClick={onHistoryClick}
       />
     </DndContext>
   );
 
-  return { onClick, onDelete, onContextMenu };
+  return { onClick, onDelete, onContextMenu, onHistoryClick };
 }
 
 describe("TaskCard", () => {
@@ -49,11 +50,39 @@ describe("TaskCard", () => {
     vi.unstubAllGlobals();
   });
 
-  it("opens the task editor when clicking the card content", async () => {
-    const user = userEvent.setup();
-    const { onClick } = renderCard();
+  it("opens history from the updated time without opening the editor", () => {
+    let editorClicks = 0;
+    let historyClicks = 0;
+    renderCard(
+      () => {
+        editorClicks++;
+      },
+      vi.fn(),
+      task,
+      false,
+      vi.fn(),
+      () => {
+        historyClicks++;
+      }
+    );
 
-    await user.click(screen.getByText("Clickable task card"));
+    const historyButton = screen.getByRole("button", {
+      name: "View history for Clickable task card",
+    });
+    expect(historyButton.className).toContain("hover:text-");
+    expect((historyButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(historyButton);
+
+    expect(historyClicks).toBe(1);
+    expect(editorClicks).toBe(0);
+  });
+
+  it("opens the task editor when clicking the card content", () => {
+    const { onClick } = renderCard();
+    const card = screen.getByRole("button", { name: /open task clickable task card/i });
+
+    fireEvent.pointerDown(card, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerUp(card, { button: 0, clientX: 0, clientY: 0 });
 
     expect(onClick).toHaveBeenCalledTimes(1);
   });

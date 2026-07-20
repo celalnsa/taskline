@@ -8,6 +8,7 @@ const queryMocks = vi.hoisted(() => ({
   useTasks: vi.fn(),
   useUpdateTask: vi.fn(),
   useDeleteTask: vi.fn(),
+  useTaskEvents: vi.fn(),
 }));
 
 vi.mock("../hooks/queries", () => queryMocks);
@@ -90,6 +91,11 @@ function renderBoard(tasks: Task[] = [sourceTask]) {
   queryMocks.useTasks.mockReturnValue({ data: tasks });
   queryMocks.useUpdateTask.mockReturnValue({ mutate: updateMutate });
   queryMocks.useDeleteTask.mockReturnValue({ mutate: deleteMutate });
+  queryMocks.useTaskEvents.mockReturnValue({
+    data: [],
+    isLoading: false,
+    error: null,
+  });
 
   render(<KanbanBoard project={project} />);
 
@@ -139,6 +145,15 @@ describe("KanbanBoard context menu", () => {
     expect(
       within(menu).getByRole("menuitemradio", { name: /recently updated/i })
     ).toBeTruthy();
+  });
+
+  it("opens task history from the card update time", () => {
+    renderBoard();
+
+    fireEvent.click(screen.getByRole("button", { name: "View history for Copy source task" }));
+
+    expect(queryMocks.useTaskEvents).toHaveBeenLastCalledWith(sourceTask.id);
+    expect(screen.getByRole("dialog", { name: "History for Copy source task" })).toBeTruthy();
   });
 
   it("sorts columns by next execution order by default", () => {

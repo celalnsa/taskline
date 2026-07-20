@@ -54,6 +54,9 @@ var schemaTaskAgents string
 //go:embed schema/0012_task_completion.sql
 var schemaTaskCompletion string
 
+//go:embed schema/0013_task_events.sql
+var schemaTaskEvents string
+
 // schemaMigrations defines the canonical migration set, keyed by
 // monotonically increasing version. We track the last-applied version in
 // SQLite's built-in `PRAGMA user_version` and only run migrations whose
@@ -78,6 +81,7 @@ var schemaMigrations = []migration{
 	{version: 10, sql: schemaTaskClaims},
 	{version: 11, sql: schemaTaskAgents},
 	{version: 12, sql: schemaTaskCompletion},
+	{version: 13, sql: schemaTaskEvents},
 }
 
 // ErrNotFound is returned when a lookup misses.
@@ -1053,6 +1057,82 @@ func (s *Store) DeleteTask(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// AddTaskEvent appends one immutable task operation record.
+func (s *Store) AddTaskEvent(ctx context.Context, event *model.TaskEvent) error {
+	if event == nil {
+		return errors.New("task event required")
+	}
+	if strings.TrimSpace(event.TaskID) == "" {
+		return errors.New("task event task id required")
+	}
+	if strings.TrimSpace(event.Actor) == "" {
+		return errors.New("task event actor required")
+	}
+	if strings.TrimSpace(event.Action) == "" {
+		return errors.New("task event action required")
+	}
+	if event.ID == "" {
+		event.ID = newID()
+	}
+	if event.CreatedAt == 0 {
+		event.CreatedAt = now()
+	}
+	if event.Details == nil {
+		event.Details = map[string]any{}
+	}
+	details, err := json.Marshal(event.Details)
+	if err != nil {
+		return fmt.Errorf("encode task event details: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO task_events(id,task_id,actor,action,summary,details,created_at)
+		VALUES(?,?,?,?,?,?,?)`,
+		event.ID, event.TaskID, event.Actor, event.Action, event.Summary,
+		string(details), event.CreatedAt,
+	)
+	return err
+}
+
+// ListTaskEvents returns all task events newest first. The task row itself is
+// intentionally not required because history survives task deletion.
+func (s *Store) ListTaskEvents(ctx context.Context, taskID string) ([]*model.TaskEvent, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return nil, errors.New("task id required")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id,task_id,actor,action,summary,details,created_at
+		 FROM task_events
+		 WHERE task_id = ?
+		 ORDER BY created_at DESC, rowid DESC`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]*model.TaskEvent, 0)
+	for rows.Next() {
+		var event model.TaskEvent
+		var details string
+		if err := rows.Scan(
+			&event.ID, &event.TaskID, &event.Actor, &event.Action,
+			&event.Summary, &details, &event.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(details), &event.Details); err != nil {
+			return nil, fmt.Errorf("decode task event %s details: %w", event.ID, err)
+		}
+		if event.Details == nil {
+			event.Details = map[string]any{}
+		}
+		events = append(events, &event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 // AddDependency records that taskID waits for dependsOnID to reach `done`.

@@ -95,6 +95,8 @@ Kanban view keeps the URL clean.
 
 The UI auto-refreshes every 10 s so changes from the CLI show up
 without a manual reload.
+Click a Kanban card's updated time to inspect its complete operation history,
+including actor, exact timestamp, and field-level before/after values.
 
 ## Development workflow
 
@@ -179,6 +181,8 @@ claimed task first so it can resume work after a restart. Use
 `task next --claim` before starting work; plain `task next` is only a preview.
 Claim, heartbeat, release, and normal update flows derive owner from the
 registered token and do not accept an owner flag.
+Use `taskline task history <task-id>` to read the same append-only operation
+history from the CLI; JSON output retains structured change details.
 
 `task update` also supports incremental edits for common agent workflows:
 `--add-label`, `--remove-label`, and `--append-description` avoid replacing the

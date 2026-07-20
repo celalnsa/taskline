@@ -203,6 +203,40 @@ func TestCompletedAtTracksDoneTransitionsAndIgnoresLaterUpdates(t *testing.T) {
 	require.Equal(t, int64(6_000), task.CompletedAt)
 }
 
+func TestTaskEventsRemainQueryableAfterTaskDeletion(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	project, err := st.CreateProject(ctx, "history", "")
+	require.NoError(t, err)
+	task, err := st.CreateTask(ctx, project.ID, "tracked", "", model.TaskTypeFeature, 0, model.StateStart)
+	require.NoError(t, err)
+
+	for _, event := range []*model.TaskEvent{
+		{
+			TaskID: task.ID, Actor: "web", Action: "created",
+			Summary: "Created task", Details: map[string]any{"title": "tracked"},
+			CreatedAt: 1_000,
+		},
+		{
+			TaskID: task.ID, Actor: "agent-a", Action: "updated",
+			Summary: "Updated title", Details: map[string]any{"field": "title"},
+			CreatedAt: 2_000,
+		},
+	} {
+		require.NoError(t, st.AddTaskEvent(ctx, event))
+		require.NotEmpty(t, event.ID)
+	}
+	require.NoError(t, st.DeleteTask(ctx, task.ID))
+
+	events, err := st.ListTaskEvents(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	require.Equal(t, "updated", events[0].Action)
+	require.Equal(t, "agent-a", events[0].Actor)
+	require.Equal(t, "created", events[1].Action)
+	require.Equal(t, "tracked", events[1].Details["title"])
+}
+
 func TestTaskLabels(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
@@ -899,7 +933,7 @@ func TestMigrationsRunOnceAcrossReopens(t *testing.T) {
 
 	v1, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 12, v1, "first open should advance to latest schema version")
+	require.Equal(t, 13, v1, "first open should advance to latest schema version")
 
 	require.NoError(t, st1.Close())
 
@@ -921,10 +955,11 @@ func TestMigrationBackfillsStableCompletionTime(t *testing.T) {
 		CREATE TABLE tasks(
 		    id TEXT PRIMARY KEY,
 		    state TEXT NOT NULL,
+		    created_at INTEGER NOT NULL,
 		    updated_at INTEGER NOT NULL
 		);
-		INSERT INTO tasks(id,state,updated_at)
-		    VALUES ('done-task','done',1234), ('active-task','dev',5678);
+		INSERT INTO tasks(id,state,created_at,updated_at)
+		    VALUES ('done-task','done',1000,1234), ('active-task','dev',5000,5678);
 		PRAGMA user_version = 11;
 	`)
 	require.NoError(t, err)
@@ -944,6 +979,34 @@ func TestMigrationBackfillsStableCompletionTime(t *testing.T) {
 		`SELECT completed_at FROM tasks WHERE id='active-task'`).Scan(&activeAt))
 	require.Equal(t, int64(1234), doneAt)
 	require.Zero(t, activeAt)
+}
+
+func TestMigrationBackfillsTaskCreationHistory(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "taskline.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		CREATE TABLE tasks(
+		    id TEXT PRIMARY KEY,
+		    created_at INTEGER NOT NULL
+		);
+		INSERT INTO tasks(id,created_at) VALUES ('legacy-task',1234);
+		PRAGMA user_version = 12;
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	st, err := store.New(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = st.Close() })
+
+	events, err := st.ListTaskEvents(ctx, "legacy-task")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "system", events[0].Actor)
+	require.Equal(t, "created", events[0].Action)
+	require.Equal(t, int64(1234), events[0].CreatedAt)
 }
 
 func TestMigrationAddsDocsTypeWithoutDroppingTaskChildren(t *testing.T) {
@@ -1019,7 +1082,7 @@ func TestMigrationAddsDocsTypeWithoutDroppingTaskChildren(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 12, v)
+	require.Equal(t, 13, v)
 
 	got, err := st.GetTask(ctx, "b")
 	require.NoError(t, err)
@@ -1093,7 +1156,7 @@ func TestMigrationUpgradesCreatedAndDesignRows(t *testing.T) {
 
 	v, err := readUserVersion(path)
 	require.NoError(t, err)
-	require.Equal(t, 12, v, "migration should have run through latest schema version")
+	require.Equal(t, 13, v, "migration should have run through latest schema version")
 
 	// The legacy 'created' row was renamed to 'start' during the swap.
 	ta, err := st.GetTask(ctx, "a")
