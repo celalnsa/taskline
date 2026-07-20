@@ -86,6 +86,25 @@ type Agent struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 
+// ActiveClaim is the compact task shape exposed by the authenticated status
+// endpoint. It intentionally omits task details and attachments.
+type ActiveClaim struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	ClaimedAt      int64  `json:"claimed_at"`
+	ClaimedForMS   int64  `json:"claimed_for_ms"`
+	LeaseExpiresAt int64  `json:"lease_expires_at"`
+}
+
+// ServerStatus proves server reachability and, when authenticated, agent
+// identity plus currently live claims.
+type ServerStatus struct {
+	OK          bool          `json:"ok"`
+	ServerTime  int64         `json:"server_time"`
+	Agent       *Agent        `json:"agent,omitempty"`
+	ActiveTasks []ActiveClaim `json:"active_tasks"`
+}
+
 // Task is the unit of work tracked under a project.
 type Task struct {
 	ID             string    `json:"id"`

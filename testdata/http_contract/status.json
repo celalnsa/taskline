@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "server_time": 1781700000000,
+  "agent": {
+    "id": "agent-0001",
+    "name": "agent-a",
+    "created_at": 1781699000000,
+    "updated_at": 1781699000001
+  },
+  "active_tasks": [
+    {
+      "id": "task-0001",
+      "title": "Canonical active claim",
+      "claimed_at": 1781699700000,
+      "claimed_for_ms": 300000,
+      "lease_expires_at": 1781721300000
+    }
+  ]
+}

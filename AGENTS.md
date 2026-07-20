@@ -94,6 +94,9 @@ and are not installed globally.
 - **CLI output.** JSON when stdout is not a TTY (default for agents),
   table when it is. New commands MUST go through `internal/output` —
   don't `fmt.Println` JSON yourself.
+- **Agent preflight.** Run `taskline status` before registering or claiming.
+  Register only when it reports `registered=false`; invalid identity or token
+  errors must be fixed instead of silently replacing the local agent.
 - **Time.** Server-side timestamps are `time.Now().UnixMilli()` (int64).
   Don't introduce a different time format.
 - **Task docs.** Markdown task docs live on disk under `TASKLINE_DOCS_DIR`

@@ -40,6 +40,28 @@ export interface Project {
   updated_at: number;
 }
 
+export interface Agent {
+  id: string;
+  name: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ActiveClaim {
+  id: string;
+  title: string;
+  claimed_at: number;
+  claimed_for_ms: number;
+  lease_expires_at: number;
+}
+
+export interface ServerStatus {
+  ok: boolean;
+  server_time: number;
+  agent?: Agent;
+  active_tasks: ActiveClaim[];
+}
+
 export interface Task {
   id: string;
   project_id: string;

@@ -17,6 +17,7 @@ func TestHTTPContractFixturesRoundTripServerModels(t *testing.T) {
 	roundTripServerFixture(t, "next_task_response.json", &struct {
 		Task *Task `json:"task"`
 	}{})
+	roundTripServerFixture(t, "status.json", &ServerStatus{})
 	roundTripServerFixture(t, "doc.json", &Doc{})
 	roundTripServerFixture(t, "image.json", &Image{})
 	roundTripServerFixture(t, "link.json", &Link{})

@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.14.0
+version: 0.15.0
 ---
 
 # taskline — task management for AI agents
@@ -62,8 +62,11 @@ or the current repository name when it is unambiguous. If the project
 cannot be resolved, ask only for the project name. Once a project is
 known, export `TASKLINE_PROJECT` for the session or pass `--project`
 on every project-scoped command. Before doing queue work, make sure
-the current working directory has an agent identity:
-`taskline register --name <unique-agent-name>`. Then keep pulling
+the current working directory has a valid agent identity by running
+`taskline status --format json`. Register only when it reports
+`"registered": false`, then run status again. If status fails because
+the local identity or token is invalid, stop and fix that identity
+instead of registering another name over it. Then keep pulling
 `taskline task next --claim --format json` after each completed task
 until it returns the literal `null`. A task is not yours until that
 claim command succeeds and the returned `owner` equals the agent name
@@ -80,7 +83,9 @@ follow-up.
 
 ```bash
 export TASKLINE_PROJECT="demo"   # default project so you can omit --project
-taskline register --name "agent-a"
+taskline status --format json
+taskline register --name "agent-a"  # only when registered=false
+taskline status --format json
 ```
 
 `--project` overrides `$TASKLINE_PROJECT`. A project is referenced by
@@ -93,7 +98,8 @@ in the current working directory. That file contains the bearer token
 used by claim, heartbeat, release, and normal update flows; it is
 intentionally not global because multiple agents may share one machine.
 If a claiming command fails with `agent identity required`, register
-the current directory first. Do not pass or invent owner strings; the
+the current directory first, then verify it with `taskline status`.
+Do not pass or invent owner strings; the
 server derives owner from the registered token.
 
 ## Domain model
@@ -155,6 +161,21 @@ no-op.
 ## CLI cheat sheet
 
 `-h` on any subcommand prints flags. This is the full agent surface.
+
+### Agent preflight
+
+```bash
+taskline status --format json
+taskline register --name agent-a  # only when status says registered=false
+taskline status --format json
+```
+
+Status reports CLI version, server health, checkout-local config directory,
+default project, registered agent, and the agent's current live claims across
+projects. A configured identity must be accepted by the server; an invalid or
+stale token is an error, not an unregistered state. Registration with an
+already-valid token is rejected so one agent cannot accidentally replace
+another checkout identity.
 
 ### Projects
 
@@ -231,6 +252,8 @@ Delete returns `{"deleted": true, "id": ...}`; depend returns
 
 ### Multi-agent claim flow
 
+Run `taskline status --format json` first and confirm the registered agent
+identity. Register only when status explicitly reports `registered=false`.
 Use `task next --claim` when more than one agent may pull from the same
 project. Plain `task next` is a read-only preview and does **not**
 reserve work. Never begin implementation from a plain `task next`
@@ -516,6 +539,12 @@ substitutes for delivery evidence.
 
 ## Gotchas
 
+- **`taskline status` fails for an existing identity** — do not register a new
+  name over it. Check `TASKLINE_SERVER` and
+  `.config/taskline/agent.json`; repair or intentionally remove the stale local
+  identity before registering again.
+- **`already registered as ...`** — this checkout already has a valid token.
+  Run `taskline status` and continue as that agent; do not rotate its identity.
 - **Forgot `--project`?** Export `TASKLINE_PROJECT` once at session
   start. Only `task create`, `task list`, `task search`, and
   `task next` accept `--project` — the rest (`get`, `update`, `delete`, `depend`,

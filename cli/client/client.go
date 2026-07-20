@@ -38,6 +38,21 @@ type Agent struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 
+type ActiveClaim struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	ClaimedAt      int64  `json:"claimed_at"`
+	ClaimedForMS   int64  `json:"claimed_for_ms"`
+	LeaseExpiresAt int64  `json:"lease_expires_at"`
+}
+
+type ServerStatus struct {
+	OK          bool          `json:"ok"`
+	ServerTime  int64         `json:"server_time"`
+	Agent       *Agent        `json:"agent,omitempty"`
+	ActiveTasks []ActiveClaim `json:"active_tasks"`
+}
+
 // Project mirrors the server-side project shape.
 type Project struct {
 	ID          string `json:"id"`
@@ -113,6 +128,14 @@ type RegisterAgentOutput struct {
 func (c *Client) RegisterAgent(in RegisterAgentInput) (*RegisterAgentOutput, error) {
 	var out RegisterAgentOutput
 	if err := c.do("POST", "/api/v1/agents/register", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) GetStatus() (*ServerStatus, error) {
+	var out ServerStatus
+	if err := c.do("GET", "/api/v1/status", nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

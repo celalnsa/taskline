@@ -230,6 +230,14 @@ independent of the server module. Domain shapes are duplicated and kept
 in sync by hand — drift here is the single most likely place for bugs,
 so a CLI-side e2e test suite exercises the round-trip.
 
+Agent preflight uses `GET /api/v1/status`. Without authorization it proves
+server reachability. With a bearer token it also validates the identity and
+returns that agent's live claims across projects. The store query uses the
+existing owner/lease index and returns only the compact status shape; local
+facts such as CLI version, config path, and `$TASKLINE_PROJECT` are composed by
+the CLI. `POST /api/v1/agents/register` rejects a request that already carries
+a valid token so an existing checkout identity cannot be replaced accidentally.
+
 Canonical JSON fixtures in `testdata/http_contract/` guard the duplicated
 HTTP shapes across server, CLI, and web tests. They are intentionally a
 test-only drift net: they do not make the CLI import server packages, do
@@ -269,6 +277,8 @@ CLI config:
 - `TASKLINE_SERVER` — base URL (default `http://127.0.0.1:8787`)
 - `TASKLINE_PROJECT` — default `--project` value (so agents don't have
   to pass it on every subcommand)
+- `.config/taskline/agent.json` — checkout-local agent id and bearer token;
+  `taskline status` validates it before queue work
 
 ## Concurrency
 

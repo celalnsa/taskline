@@ -28,28 +28,36 @@ var registerCmd = &cobra.Command{
 	Short: "Register this working directory as a taskline agent",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name, _ := cmd.Flags().GetString("name")
-		server := resolveServer()
-		c := client.New(server)
-		reg, err := c.RegisterAgent(client.RegisterAgentInput{Name: name})
-		if err != nil {
-			return err
-		}
-		path, err := identity.Save(identity.Identity{
-			Server: server,
-			Agent: identity.Agent{
-				ID:   reg.Agent.ID,
-				Name: reg.Agent.Name,
-			},
-			Token: reg.Token,
-		})
-		if err != nil {
-			return err
-		}
-		out := registerOutput{Agent: reg.Agent, Server: server, ConfigPath: path}
-		return output.Render(os.Stdout, output.Resolve(formatFlag), out, func(w io.Writer) {
-			renderRegisterTable(w, out)
-		})
+		return runRegister(os.Stdout, name, resolveServer(), output.Resolve(formatFlag))
 	},
+}
+
+func runRegister(w io.Writer, name, server string, format output.Format) error {
+	c := client.New(server)
+	if current, ok, err := identity.Load(server); err != nil {
+		return err
+	} else if ok {
+		c.Token = current.Token
+	}
+	reg, err := c.RegisterAgent(client.RegisterAgentInput{Name: name})
+	if err != nil {
+		return err
+	}
+	path, err := identity.Save(identity.Identity{
+		Server: server,
+		Agent: identity.Agent{
+			ID:   reg.Agent.ID,
+			Name: reg.Agent.Name,
+		},
+		Token: reg.Token,
+	})
+	if err != nil {
+		return err
+	}
+	out := registerOutput{Agent: reg.Agent, Server: server, ConfigPath: path}
+	return output.Render(w, format, out, func(tableWriter io.Writer) {
+		renderRegisterTable(tableWriter, out)
+	})
 }
 
 func renderRegisterTable(w io.Writer, out registerOutput) {

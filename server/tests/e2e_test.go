@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"taskline_server/api/handler"
+	"taskline_server/api/model"
 	"taskline_server/internal/config"
 	"taskline_server/internal/service"
 	"taskline_server/internal/store"
@@ -99,12 +100,19 @@ func attachTestPullRequest(t *testing.T, base, taskID string) {
 }
 
 func jsonReqError(t *testing.T, method, requestURL string, body any) (int, string) {
+	return jsonReqErrorWithToken(t, method, requestURL, body, "")
+}
+
+func jsonReqErrorWithToken(t *testing.T, method, requestURL string, body any, token string) (int, string) {
 	t.Helper()
 	raw, err := json.Marshal(body)
 	require.NoError(t, err)
 	req, err := http.NewRequest(method, requestURL, bytes.NewReader(raw))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -157,6 +165,45 @@ func registerAgent(t *testing.T, base, name string) string {
 	require.Equal(t, name, out.Agent.Name)
 	require.NotEmpty(t, out.Token)
 	return out.Token
+}
+
+func TestStatusAndDuplicateRegistrationAtAPI(t *testing.T) {
+	base, stop := startServer(t)
+	defer stop()
+
+	var anonymous model.ServerStatus
+	st := jsonReq(t, http.MethodGet, base+"/api/v1/status", nil, &anonymous)
+	require.Equal(t, http.StatusOK, st)
+	require.True(t, anonymous.OK)
+	require.Nil(t, anonymous.Agent)
+	require.Empty(t, anonymous.ActiveTasks)
+
+	token := registerAgent(t, base, "status-agent")
+	jsonReq(t, http.MethodPost, base+"/api/v1/projects", map[string]any{"name": "status"}, &project{})
+	var created task
+	st = jsonReq(t, http.MethodPost, base+"/api/v1/projects/status/tasks",
+		map[string]any{"title": "claimed", "type": "feature", "auto_start": true}, &created)
+	require.Equal(t, http.StatusCreated, st)
+	st = jsonReqWithToken(t, http.MethodPost, base+"/api/v1/tasks/"+created.ID+"/claim",
+		map[string]any{"lease": "1h"}, &created, token)
+	require.Equal(t, http.StatusOK, st)
+
+	var authenticated model.ServerStatus
+	st = jsonReqWithToken(t, http.MethodGet, base+"/api/v1/status", nil, &authenticated, token)
+	require.Equal(t, http.StatusOK, st)
+	require.NotNil(t, authenticated.Agent)
+	require.Equal(t, "status-agent", authenticated.Agent.Name)
+	require.Len(t, authenticated.ActiveTasks, 1)
+	require.Equal(t, created.ID, authenticated.ActiveTasks[0].ID)
+
+	st = jsonReqWithToken(t, http.MethodGet, base+"/api/v1/status", nil, nil, "invalid-token")
+	require.Equal(t, http.StatusUnauthorized, st)
+
+	status, body := jsonReqErrorWithToken(t, http.MethodPost, base+"/api/v1/agents/register",
+		map[string]any{"name": "replacement"}, token)
+	require.Equal(t, http.StatusConflict, status)
+	require.Contains(t, body, "already registered as status-agent")
+	require.Contains(t, body, "taskline status")
 }
 
 type project struct {
