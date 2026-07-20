@@ -74,6 +74,7 @@ tasks   (id, project_id → projects.id, title, description,
          type ∈ {feature,bug,docs},
          state ∈ {pending,start,spec,dev,test,review,done}, priority,
          labels JSON string array,
+         owner, claimed_at, lease_expires_at, completed_at,
          created_at, updated_at)
 task_deps   (task_id → tasks.id, depends_on_task_id → tasks.id,
              PRIMARY KEY(task_id, depends_on_task_id),
@@ -121,6 +122,11 @@ surface a defect that legitimately reopens the implementation).
 `test` is the local verification stage after implementation and before
 PR/review: unit tests, API e2e, browser smoke, and test coverage review
 belong there, while code review and CI belong in `review`.
+
+The store records `completed_at` when a task enters `done`, clears it when the
+task leaves `done`, and preserves it across ordinary edits and heartbeats. This
+is the stable work-end timestamp; `updated_at` remains the timestamp of the most
+recent mutation and must not be used as completion evidence.
 
 Entry rules are registered by target state in
 `server/internal/service/workflow.go`. They run only when the state actually

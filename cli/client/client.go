@@ -75,6 +75,7 @@ type Task struct {
 	Owner          string   `json:"owner"`
 	ClaimedAt      int64    `json:"claimed_at"`
 	LeaseExpiresAt int64    `json:"lease_expires_at"`
+	CompletedAt    int64    `json:"completed_at"`
 	DependsOn      []string `json:"depends_on,omitempty"`
 	Images         []Image  `json:"images,omitempty"`
 	Docs           []Doc    `json:"docs,omitempty"`

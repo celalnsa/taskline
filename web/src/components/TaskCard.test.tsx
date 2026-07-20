@@ -255,7 +255,8 @@ describe("TaskCard", () => {
       state: "done",
       owner: "codex-local",
       claimed_at: Date.parse("2026-01-01T11:15:00.000Z"),
-      updated_at: Date.parse("2026-01-01T12:00:00.000Z"),
+      completed_at: Date.parse("2026-01-01T12:00:00.000Z"),
+      updated_at: Date.parse("2026-01-03T12:00:00.000Z"),
     });
 
     const claimStatus = screen.getByLabelText(/claimed by codex-local/i);

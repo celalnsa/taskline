@@ -56,6 +56,7 @@ describe("canonical HTTP contract fixtures", () => {
     ]);
     expect(keys(task)).toEqual([
       "claimed_at",
+      "completed_at",
       "created_at",
       "depends_on",
       "description",

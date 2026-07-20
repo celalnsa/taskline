@@ -74,6 +74,7 @@ export interface Task {
   owner?: string;
   claimed_at?: number;
   lease_expires_at?: number;
+  completed_at?: number;
   depends_on?: string[];
   images?: TaskImage[];
   docs?: TaskDoc[];

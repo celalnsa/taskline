@@ -84,7 +84,8 @@ and are not installed globally.
   requirements, UX, scope, and acceptance criteria; technical design
   and implementation start in `dev`; full local verification belongs in
   `test`; code review and CI belong in `review`. Tasks created without
-  `auto_start` land in `pending`. Lives in `server/api/model/model.go`
+  `auto_start` land in `pending`. Entering `done` sets `completed_at`; leaving
+  `done` clears it, while later edits and heartbeats must preserve it. Lives in `server/api/model/model.go`
   (`CanTransitionTo`) and `server/internal/service/workflow.go` (entry rules).
 - **Dependency DAG.** `AddDependency` rejects cycles with 409. Any new
   graph mutation MUST keep the cycle check.

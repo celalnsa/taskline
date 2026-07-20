@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.15.0
+version: 0.16.0
 ---
 
 # taskline — task management for AI agents
@@ -117,6 +117,7 @@ server derives owner from the registered token.
 | `owner`       | optional multi-agent owner; empty means unclaimed                          |
 | `claimed_at`  | unix milliseconds when the current owner claimed the task                  |
 | `lease_expires_at` | unix milliseconds when the current owner lease expires              |
+| `completed_at` | stable unix milliseconds when the task most recently entered `done`; zero otherwise |
 | `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
 | `images`      | optional binary attachments; each image includes a `url` for retrieval     |
 | `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |

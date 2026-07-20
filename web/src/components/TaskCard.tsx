@@ -28,7 +28,9 @@ export function TaskCard({ task, isBlocked, onClick, onContextMenu, overlay = fa
   const claimVerb = task.state === "done" ? "worked" : "working";
   const claimElapsed = task.claimed_at
     ? task.state === "done"
-      ? formatElapsedTime(task.claimed_at, task.updated_at)
+      ? task.completed_at
+        ? formatElapsedTime(task.claimed_at, task.completed_at)
+        : ""
       : formatElapsedTime(task.claimed_at)
     : "";
   const claimTitle = claimOwner
