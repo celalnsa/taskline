@@ -109,7 +109,7 @@ describe("TaskEditor markdown description editing", () => {
     }
   });
 
-  it("shows claim metadata for a claimed task", () => {
+  it("shows active claim work with a robot icon", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
 
@@ -121,9 +121,31 @@ describe("TaskEditor markdown description editing", () => {
     });
 
     expect(screen.getByText("Claim")).toBeTruthy();
-    expect(screen.getByText("codex-local")).toBeTruthy();
-    expect(screen.getByText("45 mins")).toBeTruthy();
+    const claimMetadata = screen.getByLabelText("Claim metadata for codex-local");
+    expect(claimMetadata.textContent).toContain("codex-local");
+    expect(within(claimMetadata).getByText("working")).toBeTruthy();
+    expect(within(claimMetadata).getByText("45 mins")).toBeTruthy();
+    expect(claimMetadata.querySelector(".lucide-bot")).not.toBeNull();
     expect(screen.getByText(/lease expires/i)).toBeTruthy();
+  });
+
+  it("freezes completed claim work at the completion time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-03T12:00:00.000Z"));
+
+    renderEditor(vi.fn(), {
+      ...task,
+      state: "done",
+      owner: "codex-local",
+      claimed_at: Date.parse("2026-01-01T11:15:00.000Z"),
+      completed_at: Date.parse("2026-01-01T12:00:00.000Z"),
+      lease_expires_at: Date.parse("2026-01-01T17:15:00.000Z"),
+    });
+
+    const claimMetadata = screen.getByLabelText("Claim metadata for codex-local");
+    expect(within(claimMetadata).getByText("worked")).toBeTruthy();
+    expect(within(claimMetadata).getByText("45 mins")).toBeTruthy();
+    expect(claimMetadata.textContent).not.toContain("days");
   });
 
   it("opens a markdown editor from the description field", async () => {
