@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { configDefaults } from "vitest/config";
 
 // Vite directly emits to ../server/web/dist so go:embed picks it up at
 // `go build` time. The prebuild script removes generated assets while
@@ -9,6 +10,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     environment: "jsdom",
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
   build: {
     outDir: "../server/web/dist",

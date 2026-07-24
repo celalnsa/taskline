@@ -25,6 +25,8 @@ language and invariants see `DOMAIN.md`; for architecture internals see
   the root Make targets.
 - `scripts/seed.sh` — deterministic CLI-only demo fixture for browser and
   integration tests.
+- `scripts/test-browser.sh` — isolated built-server + seed orchestration for
+  Playwright.
 - `scripts/install-local.sh` — user-local CLI install plus public skill
   symlink refresh.
 - `scripts/test-skill.sh` — smoke tests for public and internal skill docs.
@@ -74,9 +76,11 @@ make check
 make build
 
 # Focused checks (MODULE accepts all, server, cli, or web)
+make install-browser
 make lint MODULE=server
 make test MODULE=cli
 make build MODULE=web
+make test-browser
 make test-e2e
 make test-server-bundle
 make test-seed
@@ -97,6 +101,10 @@ new automation should call Make so local, agent, and CI behavior stays aligned.
 `make test-server-bundle` builds the production Web app and then runs the full
 server suite with the embedded entry assets required. `make check` and CI use
 that release-contract path.
+`make test-browser` builds the release artifacts, starts an isolated server,
+seeds a temporary project, and runs Chromium Playwright E2E. Install its frozen
+Web dependencies, browser, and browser system dependencies once with
+`make install-browser`; `make check` includes this gate.
 `scripts/seed.sh [project-name]` creates a fixed multi-state demo DAG through the
 public CLI and refuses to modify an existing project.
 
@@ -178,6 +186,8 @@ and are not installed globally.
 - `make test MODULE=cli` covers the CLI surface.
 - `make test-server-bundle` verifies the full server suite against the embedded
   production Web entrypoint and JavaScript asset.
+- `make test-browser` verifies critical drag/drop, blocked-dependency, and
+  Start/Pending creation workflows in Chromium.
 - `make test-skill` when skill docs or install behavior changes.
 - `make test-seed` when demo fixture or browser-test setup changes.
 - For UI changes, run `make lint MODULE=web`, `make test MODULE=web`, and

@@ -128,6 +128,10 @@ through the actual production code path on the running server.
   For a disposable browser fixture, run
   `TASKLINE_SERVER=<url> ./scripts/seed.sh <unique-project>` and consume the
   JSON manifest from stdout; never seed over an existing project.
+  Run `make test-browser` for the isolated Chromium regression suite. Install
+  frozen Web dependencies, the browser, and browser system dependencies once
+  with `make install-browser`.
+  On failure, inspect `web/test-results/` and `web/playwright-report/`.
 - **CLI**: run the actual command end-to-end against `:8787`, not
   just the Go test. Many CLI bugs hide in the JSON shape, the
   TTY-vs-pipe output detection, or env-var resolution — none of

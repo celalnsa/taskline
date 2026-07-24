@@ -311,6 +311,12 @@ connection initializer.
   `TASKLINE_REQUIRE_WEB_BUNDLE=1`, the E2E test requires the embedded app shell
   and its local JavaScript entry asset, catching API-only or incomplete bundle
   builds. CI's server test matrix entry and `make check` use this path.
+- **Browser E2E**: `scripts/test-browser.sh` owns the built server process,
+  random port, temporary SQLite data, CLI seed manifest, and cleanup.
+  `web/e2e/` uses Playwright with one Chromium worker for real pointer DnD,
+  blocked dependency metadata, and Start/Pending creation semantics. Failed
+  runs preserve Playwright and runtime evidence under stable ignored Web paths.
+  `make test-browser`, `make check`, and CI share the same runner.
 - **Seed fixture**: `scripts/seed.sh` composes only public CLI operations;
   `make test-seed` verifies its exact multi-state DAG against a real built
   server and CLI.
