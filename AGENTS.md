@@ -48,8 +48,8 @@ invoking a skill that requires user approval unless its own trigger applies.
   Update `DOMAIN.md` with the behavior change.
 
 Do not invoke `superpowers:writing-plans` for routine Taskline work: its default
-output is repository process files. Keep implementation plans and stage
-artifacts in Taskline task docs instead.
+output is repository process files. Keep routine planning in working context;
+put durable multi-step handoff plans and stage artifacts in Taskline task docs.
 
 Mechanical docs, formatting, or one-line configuration changes do not need the
 full workflow. Keep their verification proportional to risk.
