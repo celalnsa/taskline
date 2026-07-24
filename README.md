@@ -30,11 +30,12 @@ taskline/
 │   ├── main.go cmd/ client/
 ├── web/                    # React + Vite + Tailwind + dnd-kit + React Flow
 │   ├── src/{components,hooks,lib}/
+│   ├── e2e/ playwright.config.ts
 │   ├── package.json vite.config.ts
 ├── skills/taskline-management/SKILL.md   # for AI agents
 ├── .agents/skills/taskline-localtest/SKILL.md # repo-internal agent test guide
 ├── Makefile                 # canonical build/lint/test entrypoint
-├── scripts/{build,test,seed,start-local,install-local,test-skill}.sh
+├── scripts/{build,test,seed,test-browser,start-local,install-local,test-skill}.sh
 ├── dist/                   # build output: taskline-server, taskline
 ├── .env.example            # server runtime config
 ├── DOMAIN.md               # canonical vocabulary and domain invariants
@@ -225,6 +226,7 @@ make check
 make lint MODULE=server
 make test MODULE=cli
 make build MODULE=web
+make test-browser
 make test-e2e
 make test-server-bundle
 make test-seed
@@ -246,11 +248,27 @@ runs the complete server suite with the embedded index and JavaScript entry
 asset required. `make check` and CI's `go-test (server)` use this bundle-backed
 path.
 
+Install Chromium once before the full local gate, then run the isolated browser
+suite as needed. The install target also restores frozen Web dependencies in a
+new checkout:
+
+```bash
+make install-browser
+make test-browser
+```
+
+The Playwright runner starts the built server on a random port, seeds a temporary
+database through the CLI, exercises critical Kanban/create flows, and removes
+the fixture afterward. `make check` includes this browser gate. Failure traces,
+screenshots, video, server logs, and the seed manifest live under
+`web/test-results/` and `web/playwright-report/`.
+
 ## Stack
 
 - **Server**: Go + Hertz + SQLite (`modernc.org/sqlite`, no CGO)
 - **CLI**: Go + cobra
 - **Web**: React 19 + Vite + Tailwind 4 + TanStack Query + @dnd-kit + @xyflow/react
+- **Browser E2E**: Playwright + Chromium
 
 No external runtime services (no Redis/Postgres/Etcd/ES). SQLite is one file.
 

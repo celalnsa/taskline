@@ -4,8 +4,8 @@ SHELL := /bin/bash
 MODULE ?= all
 SUPPORTED_MODULES := all server cli web
 
-.PHONY: help check build lint test test-e2e test-server-bundle test-server-bundle-run
-.PHONY: test-seed test-seed-run test-skill validate-module
+.PHONY: help check build install-browser lint test test-browser test-browser-run test-e2e
+.PHONY: test-server-bundle test-server-bundle-run test-seed test-seed-run test-skill validate-module
 .PHONY: build-all build-server build-cli build-web
 .PHONY: lint-all lint-server lint-cli lint-web
 .PHONY: test-all test-server test-cli test-web
@@ -17,6 +17,8 @@ help:
 		'  make build [MODULE=...]     Build all, server, cli, or web' \
 		'  make lint [MODULE=...]      Lint all, server, cli, or web' \
 		'  make test [MODULE=...]      Test all, server, cli, or web' \
+		'  make install-browser        Install Web dependencies and Playwright Chromium' \
+		'  make test-browser           Run Playwright against an isolated built server' \
 		'  make test-e2e               Run the focused server e2e package' \
 		'  make test-server-bundle     Test server with the production web bundle' \
 		'  make test-seed              Build and verify the demo seed fixture' \
@@ -37,6 +39,7 @@ check:
 	@$(MAKE) --no-print-directory test-cli
 	@$(MAKE) --no-print-directory test-web
 	@$(MAKE) --no-print-directory test-seed-run
+	@$(MAKE) --no-print-directory test-browser-run
 	@$(MAKE) --no-print-directory test-skill
 
 build: validate-module
@@ -57,6 +60,10 @@ build-cli:
 build-web:
 	@echo "[build] web (pnpm build -> server/web/dist/)" >&2
 	@( cd web && pnpm install --frozen-lockfile --silent && pnpm build )
+
+install-browser:
+	@echo "[install] Playwright Chromium" >&2
+	@( cd web && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium )
 
 lint: validate-module
 	@$(MAKE) --no-print-directory lint-$(MODULE)
@@ -95,6 +102,13 @@ test-web:
 test-e2e:
 	@echo "[test] server e2e" >&2
 	@( cd server && go test ./tests -count=1 )
+
+test-browser: build-all
+	@$(MAKE) --no-print-directory test-browser-run
+
+test-browser-run:
+	@echo "[test] browser (Playwright + isolated seed)" >&2
+	@./scripts/test-browser.sh
 
 test-server-bundle: build-web
 	@$(MAKE) --no-print-directory test-server-bundle-run

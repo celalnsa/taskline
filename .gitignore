@@ -19,3 +19,5 @@
 .cache/
 .log/
 /.config/taskline/
+/web/playwright-report/
+/web/test-results/
