@@ -4,7 +4,7 @@ SHELL := /bin/bash
 MODULE ?= all
 SUPPORTED_MODULES := all server cli web
 
-.PHONY: help check build lint test test-e2e test-skill validate-module
+.PHONY: help check build lint test test-e2e test-seed test-seed-run test-skill validate-module
 .PHONY: build-all build-server build-cli build-web
 .PHONY: lint-all lint-server lint-cli lint-web
 .PHONY: test-all test-server test-cli test-web
@@ -17,6 +17,7 @@ help:
 		'  make lint [MODULE=...]      Lint all, server, cli, or web' \
 		'  make test [MODULE=...]      Test all, server, cli, or web' \
 		'  make test-e2e               Run the focused server e2e package' \
+		'  make test-seed              Build and verify the demo seed fixture' \
 		'  make test-skill             Validate public and internal skills' \
 		'' \
 		'MODULE defaults to all; accepted values: all, server, cli, web.'
@@ -31,6 +32,7 @@ check:
 	@$(MAKE) --no-print-directory lint MODULE=all
 	@$(MAKE) --no-print-directory test MODULE=all
 	@$(MAKE) --no-print-directory build MODULE=all
+	@$(MAKE) --no-print-directory test-seed-run
 	@$(MAKE) --no-print-directory test-skill
 
 build: validate-module
@@ -89,6 +91,13 @@ test-web:
 test-e2e:
 	@echo "[test] server e2e" >&2
 	@( cd server && go test ./tests -count=1 )
+
+test-seed: build-all
+	@$(MAKE) --no-print-directory test-seed-run
+
+test-seed-run:
+	@echo "[test] seed fixture" >&2
+	@./scripts/test-seed.sh
 
 test-skill:
 	@echo "[test] skills" >&2

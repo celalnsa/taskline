@@ -34,7 +34,7 @@ taskline/
 ├── skills/taskline-management/SKILL.md   # for AI agents
 ├── .agents/skills/taskline-localtest/SKILL.md # repo-internal agent test guide
 ├── Makefile                 # canonical build/lint/test entrypoint
-├── scripts/{build,test,start-local,install-local,test-skill}.sh
+├── scripts/{build,test,seed,start-local,install-local,test-skill}.sh
 ├── dist/                   # build output: taskline-server, taskline
 ├── .env.example            # server runtime config
 ├── DOMAIN.md               # canonical vocabulary and domain invariants
@@ -73,6 +73,29 @@ export TASKLINE_PROJECT=demo
 ./dist/taskline task next --claim --label onboarding
 ./dist/taskline task update <task-id> --add-label review --append-description "checked locally"
 ```
+
+## Demo data
+
+Seed a representative Kanban board and dependency graph through the public CLI:
+
+```bash
+./scripts/seed.sh
+```
+
+The default project is `taskline-demo`. Pass a different name for an isolated
+browser or integration test:
+
+```bash
+TASKLINE_SERVER=http://127.0.0.1:18790 \
+TASKLINE_BIN=./dist/taskline \
+./scripts/seed.sh browser-e2e > /tmp/taskline-seed-manifest.json
+```
+
+Success writes one JSON manifest to stdout; progress goes to stderr. The
+manifest has stable task keys and dependency edges while IDs and timestamps are
+server-generated. The target project must not already exist, so tests should use
+a unique name and disposable server. The fixture spans `pending` through `test`;
+`review` and `done` stay empty because they require live GitHub PR evidence.
 
 ## Web UI
 
@@ -203,6 +226,7 @@ make lint MODULE=server
 make test MODULE=cli
 make build MODULE=web
 make test-e2e
+make test-seed
 make test-skill
 
 # Shell-friendly test wrapper; accepts all, server, cli, or web
