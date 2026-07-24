@@ -62,6 +62,7 @@ json_id() {
 
 echo "[seed] server=$server_url project=$project_name" >&2
 
+"$taskline_bin" status --format json > "$tmp_dir/status.json"
 "$taskline_bin" project list --format json > "$tmp_dir/projects.json"
 if python3 - "$project_name" "$tmp_dir/projects.json" <<'PY'
 import json

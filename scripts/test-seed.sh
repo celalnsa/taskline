@@ -211,9 +211,18 @@ cat > "$tmp_dir/fake-taskline" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$1 $2" == "project list" ]]; then
+if [[ "$1" == "status" ]]; then
+    if [[ "${FAKE_STATUS_ERROR:-0}" == "1" ]]; then
+        echo "invalid agent token" >&2
+        exit 41
+    fi
+    echo '{"registered":false}'
+elif [[ "$1 $2" == "project list" ]]; then
     echo '{"projects":[]}'
 elif [[ "$1 $2" == "project create" ]]; then
+    if [[ -n "${FAKE_PROJECT_CREATE_MARKER:-}" ]]; then
+        printf 'called\n' > "$FAKE_PROJECT_CREATE_MARKER"
+    fi
     echo '{"id":"partial-project","name":"partial-demo"}'
 elif [[ "$1 $2" == "task create" ]]; then
     count=0
@@ -231,6 +240,27 @@ else
 fi
 SH
 chmod +x "$tmp_dir/fake-taskline"
+
+if (
+    cd "$tmp_dir"
+    FAKE_PROJECT_CREATE_MARKER="$tmp_dir/unexpected-project-create" \
+    FAKE_STATUS_ERROR=1 \
+    TASKLINE_BIN="$tmp_dir/fake-taskline" \
+    "$repo_root/scripts/seed.sh" stale-identity-demo \
+        > "$tmp_dir/stale-identity.out" 2> "$tmp_dir/stale-identity.err"
+); then
+    echo "error: stale identity preflight unexpectedly succeeded" >&2
+    exit 1
+fi
+if [[ -s "$tmp_dir/stale-identity.out" ]]; then
+    echo "error: stale identity preflight wrote a success manifest" >&2
+    exit 1
+fi
+if [[ -e "$tmp_dir/unexpected-project-create" ]]; then
+    echo "error: stale identity preflight created a project" >&2
+    exit 1
+fi
+grep -q "invalid agent token" "$tmp_dir/stale-identity.err"
 
 if (
     cd "$tmp_dir"
