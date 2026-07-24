@@ -33,7 +33,8 @@ taskline/
 │   ├── package.json vite.config.ts
 ├── skills/taskline-management/SKILL.md   # for AI agents
 ├── .agents/skills/taskline-localtest/SKILL.md # repo-internal agent test guide
-├── scripts/{build,start-local,install-local,test-skill}.sh
+├── Makefile                 # canonical build/lint/test entrypoint
+├── scripts/{build,test,start-local,install-local,test-skill}.sh
 ├── dist/                   # build output: taskline-server, taskline
 ├── .env.example            # server runtime config
 ├── DOMAIN.md               # canonical vocabulary and domain invariants
@@ -48,7 +49,7 @@ so deployment is one file.
 
 ```bash
 # One-shot build of everything (web → server bundle → both binaries)
-./scripts/build.sh
+make build
 
 # Boot the server (after copying .env.example, data lives under ./.cache/data)
 cp .env.example .env       # only needed first time
@@ -122,7 +123,7 @@ The server's embedded UI doesn't matter in this mode.
 When you want a release-style build:
 
 ```bash
-./scripts/build.sh   # produces dist/taskline-server + dist/taskline
+make build   # produces dist/taskline-server + dist/taskline
 ```
 
 ## Local user install
@@ -194,11 +195,25 @@ entire label set or description.
 ## Tests
 
 ```bash
-( cd server && go test ./... )    # unit + e2e (boots real server)
-( cd cli    && go test ./... )    # CLI module
-( cd web    && pnpm lint && pnpm test && pnpm build )
-./scripts/test-skill.sh           # public + internal skill smoke tests
+# Full repository gate: lint + tests + release build + skill validation
+make check
+
+# Focused entrypoints (MODULE defaults to all)
+make lint MODULE=server
+make test MODULE=cli
+make build MODULE=web
+make test-e2e
+make test-skill
+
+# Shell-friendly test wrapper; accepts all, server, cli, or web
+./scripts/test.sh web
 ```
+
+`make build`, `make lint`, and `make test` accept
+`MODULE=all|server|cli|web`. A server build includes the web bundle because the
+deployable binary embeds it. CI uses these same root targets instead of
+repeating module commands. `make lint` and `make check` require
+golangci-lint 2.12.2.
 
 ## Stack
 
