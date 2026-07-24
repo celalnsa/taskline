@@ -95,7 +95,7 @@ create_task() {
 
     args=(
         task create
-        --project "$project_name"
+        --project "$project_id"
         --title "$title"
         --description "$description"
         --type "$task_type"

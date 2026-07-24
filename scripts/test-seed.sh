@@ -89,11 +89,16 @@ with open(sys.argv[1], encoding="utf-8") as source:
 with open(sys.argv[2], encoding="utf-8") as source:
     task_rows = json.load(source)["tasks"]
 
-assert manifest["schema_version"] == 1
-assert manifest["project"]["name"] == "seed-integration"
-assert len(manifest["tasks"]) == 8
-assert len(manifest["edges"]) == 7
-assert len(task_rows) == 8
+def require(condition, message):
+    if not condition:
+        raise SystemExit(f"seed integration check failed: {message}")
+
+
+require(manifest["schema_version"] == 1, "unexpected manifest schema")
+require(manifest["project"]["name"] == "seed-integration", "unexpected project name")
+require(len(manifest["tasks"]) == 8, "manifest task count is not 8")
+require(len(manifest["edges"]) == 7, "manifest edge count is not 7")
+require(len(task_rows) == 8, "server task count is not 8")
 
 expected = {
     "mobile_notifications": ("Explore mobile notifications", "pending", 20, ["idea", "mobile"]),
@@ -109,27 +114,29 @@ expected = {
 rows_by_id = {row["id"]: row for row in task_rows}
 for key, (title, state, priority, labels) in expected.items():
     task_ref = manifest["tasks"][key]
+    require(task_ref["id"] in rows_by_id, f"{key} is missing from server task list")
     row = rows_by_id[task_ref["id"]]
-    assert task_ref["state"] == state
-    assert row["title"] == title
-    assert row["state"] == state
-    assert row["priority"] == priority
-    assert row["labels"] == labels
+    require(task_ref["state"] == state, f"{key} manifest state mismatch")
+    require(row["title"] == title, f"{key} title mismatch")
+    require(row["state"] == state, f"{key} server state mismatch")
+    require(row["priority"] == priority, f"{key} priority mismatch")
+    require(row["labels"] == labels, f"{key} labels mismatch")
 
 expected_dependencies = collections.defaultdict(list)
 for task_key, dependency_key in manifest["edges"]:
     expected_dependencies[task_key].append(manifest["tasks"][dependency_key]["id"])
 for key, task_ref in manifest["tasks"].items():
     row = rows_by_id[task_ref["id"]]
-    assert sorted(row.get("depends_on", [])) == sorted(expected_dependencies[key])
+    require(
+        sorted(row.get("depends_on", [])) == sorted(expected_dependencies[key]),
+        f"{key} dependencies mismatch",
+    )
 
-assert collections.Counter(row["state"] for row in task_rows) == {
-    "pending": 1,
-    "start": 2,
-    "spec": 2,
-    "dev": 2,
-    "test": 1,
-}
+require(
+    collections.Counter(row["state"] for row in task_rows)
+    == {"pending": 1, "start": 2, "spec": 2, "dev": 2, "test": 1},
+    "state distribution mismatch",
+)
 PY
 
 if (
@@ -158,23 +165,46 @@ import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as source:
-    assert len(json.load(source)["tasks"]) == 8
+    task_count = len(json.load(source)["tasks"])
+if task_count != 8:
+    raise SystemExit(f"duplicate seed changed task count to {task_count}")
 PY
 
 (
     cd "$tmp_dir"
     TASKLINE_SERVER="$server_url" \
     TASKLINE_BIN="$taskline_bin" \
-    "$repo_root/scripts/seed.sh" browser-e2e > "$tmp_dir/browser-manifest.json"
+    "$repo_root/scripts/seed.sh" "browser/e2e" > "$tmp_dir/browser-manifest.json"
 )
-python3 - "$tmp_dir/browser-manifest.json" <<'PY'
+browser_project_id="$(
+    python3 - "$tmp_dir/browser-manifest.json" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as source:
     manifest = json.load(source)
-assert manifest["project"]["name"] == "browser-e2e"
-assert len(manifest["tasks"]) == 8
+if manifest["project"]["name"] != "browser/e2e":
+    raise SystemExit("path-sensitive project name was not preserved")
+if len(manifest["tasks"]) != 8:
+    raise SystemExit("path-sensitive project manifest task count is not 8")
+print(manifest["project"]["id"])
+PY
+)"
+(
+    cd "$tmp_dir"
+    TASKLINE_SERVER="$server_url" \
+    "$taskline_bin" task list \
+        --project "$browser_project_id" \
+        --format json > "$tmp_dir/browser-tasks.json"
+)
+python3 - "$tmp_dir/browser-tasks.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    task_count = len(json.load(source)["tasks"])
+if task_count != 8:
+    raise SystemExit(f"path-sensitive project has {task_count} server tasks")
 PY
 
 cat > "$tmp_dir/fake-taskline" <<'SH'
