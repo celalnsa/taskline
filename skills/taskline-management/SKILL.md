@@ -312,10 +312,11 @@ more instructions:
 5. Loop back to step 1 — don't pause to ask the user whether to
    continue.
 
-Higher-order capabilities (brainstorming, planning, code review) are
-referenced by what they do, with a Superpowers skill name in
-parentheses if your harness has them; drop the parenthetical if not
-installed.
+Higher-order capabilities (brainstorming, planning, code review) below describe
+methods, not mandatory skill invocations. During autonomous queue work, do not
+invoke a skill that requires user approval or writes process files into the
+repository. Use a full interactive skill only when the user explicitly requests
+that workflow.
 
 ### start → spec
 
@@ -377,14 +378,14 @@ task description or implementation notes, then continue.
 - **Trigger:** product spec / acceptance criteria in hand.
 - **Actions** (test-first):
   1. Brainstorm the technical approach — list 2-3 implementation options,
-     pick one, and name the tradeoff. No human checkpoint. (capability:
-     brainstorming — `superpowers:brainstorming`)
+     pick one, and name the tradeoff. No human checkpoint.
   2. Run the architecture review described above, revise the choice if
      it finds a concrete issue, and keep the final plan simple,
      declarative, readable, and aligned with the project goals.
   3. Plan the technical work — architecture boundary, ordered steps, and
-     test strategy. (capability: plan writing —
-     `superpowers:writing-plans`)
+     test strategy. Keep routine planning in working context; for multi-step
+     handoff work, attach the plan as a Taskline task doc. Do not commit
+     repository process-plan files.
   4. Write or extend failing tests for the new behavior.
   5. Implement until the focused tests pass and the behavior is ready
      for full local verification.

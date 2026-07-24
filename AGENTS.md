@@ -25,6 +25,41 @@ language and invariants see `DOMAIN.md`; for architecture internals see
   symlink refresh.
 - `scripts/test-skill.sh` — smoke tests for public and internal skill docs.
 
+## Recommended skills and workflow
+
+For routine Taskline queue work, stay autonomous: use the methods below without
+invoking a skill that requires user approval unless its own trigger applies.
+
+- **Brainstorming method.** Before non-mechanical work, compare 2-3 approaches
+  and choose the simplest one that fits the product contract. Invoke the full
+  `superpowers:brainstorming` skill only when the user explicitly wants an
+  interactive design session and approval checkpoints.
+- **TDD method.** For behavior changes and bug fixes, work in small
+  red-green-refactor slices through public interfaces. Invoke `tdd` or
+  `superpowers:test-driven-development` only when the user explicitly requests
+  a test-first/TDD workflow; otherwise do not add user checkpoints.
+- **Codebase design.** Use an implementation-oriented `codebase-design` skill,
+  when available, for cross-module or ownership changes. Otherwise run the
+  architecture subagent/self-review required by the Taskline workflow.
+  `improve-codebase-architecture` is for an explicit architecture audit or
+  refactoring-opportunity request, not routine implementation planning.
+- **Domain modeling.** Invoke `domain-modeling`, when available and its trigger
+  matches, for vocabulary, lifecycle, queue, claim, or dependency changes.
+  Update `DOMAIN.md` with the behavior change.
+
+Do not invoke `superpowers:writing-plans` for routine Taskline work: its default
+output is repository process files. Keep routine planning in working context;
+put durable multi-step handoff plans and stage artifacts in Taskline task docs.
+
+Mechanical docs, formatting, or one-line configuration changes do not need the
+full workflow. Keep their verification proportional to risk.
+
+Skills have two publication layers. `skills/` contains public, installable
+agent contracts and is linked into user-level skill directories by
+`scripts/install-local.sh`. `.agents/skills/` contains repository-only skills
+with `metadata.internal: true`; they may depend on this checkout's internals and
+must not be installed globally.
+
 ## Build, run, test
 
 ```bash
