@@ -25,6 +25,33 @@ language and invariants see `DOMAIN.md`; for architecture internals see
   symlink refresh.
 - `scripts/test-skill.sh` — smoke tests for public and internal skill docs.
 
+## Recommended skills and workflow
+
+Use these general capabilities when the harness provides them:
+
+- **Brainstorming and planning** (`superpowers:brainstorming`,
+  `superpowers:writing-plans`) before non-mechanical product or technical work.
+  Resolve the product contract first, then choose the simplest viable approach.
+- **TDD** (`tdd` or `superpowers:test-driven-development`) for behavior changes
+  and bug fixes. Work in small red-green-refactor slices through public
+  interfaces.
+- **Codebase design** (`improve-codebase-architecture` or `codebase-design`)
+  when a change crosses modules, alters ownership, or proposes a refactor.
+  Preserve the `cmd → handler → service → store` direction and the CLI/server
+  module boundary.
+- **Domain modeling** (`domain-modeling`) when adding or changing vocabulary,
+  lifecycle states, queue rules, claims, or dependencies. Update `DOMAIN.md`
+  with the behavior change.
+
+Mechanical docs, formatting, or one-line configuration changes do not need the
+full workflow. Keep their verification proportional to risk.
+
+Skills have two publication layers. `skills/` contains public, installable
+agent contracts and is linked into user-level skill directories by
+`scripts/install-local.sh`. `.agents/skills/` contains repository-only skills
+with `metadata.internal: true`; they may depend on this checkout's internals and
+must not be installed globally.
+
 ## Build, run, test
 
 ```bash
