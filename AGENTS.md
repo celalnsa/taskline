@@ -78,6 +78,7 @@ make lint MODULE=server
 make test MODULE=cli
 make build MODULE=web
 make test-e2e
+make test-server-bundle
 make test-seed
 make test-skill
 
@@ -92,6 +93,10 @@ make test-skill
 `make build`, `make lint`, and `make test` default to `MODULE=all`.
 `scripts/build.sh` and `scripts/test.sh` remain shell-compatible wrappers, but
 new automation should call Make so local, agent, and CI behavior stays aligned.
+`make test MODULE=server` stays Go-only for focused backend work;
+`make test-server-bundle` builds the production Web app and then runs the full
+server suite with the embedded entry assets required. `make check` and CI use
+that release-contract path.
 `scripts/seed.sh [project-name]` creates a fixed multi-state demo DAG through the
 public CLI and refuses to modify an existing project.
 
@@ -171,6 +176,8 @@ and are not installed globally.
 - `make test MODULE=server` — unit + `tests/e2e_test.go` boots a
   real server on a random port.
 - `make test MODULE=cli` covers the CLI surface.
+- `make test-server-bundle` verifies the full server suite against the embedded
+  production Web entrypoint and JavaScript asset.
 - `make test-skill` when skill docs or install behavior changes.
 - `make test-seed` when demo fixture or browser-test setup changes.
 - For UI changes, run `make lint MODULE=web`, `make test MODULE=web`, and

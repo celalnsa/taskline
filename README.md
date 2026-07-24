@@ -226,6 +226,7 @@ make lint MODULE=server
 make test MODULE=cli
 make build MODULE=web
 make test-e2e
+make test-server-bundle
 make test-seed
 make test-skill
 
@@ -238,6 +239,12 @@ make test-skill
 deployable binary embeds it. CI uses these same root targets instead of
 repeating module commands. `make lint` and `make check` require
 golangci-lint 2.12.2.
+
+`make test MODULE=server` is the lightweight Go-only path. The release-contract
+gate is `make test-server-bundle`: it builds the production Web app first, then
+runs the complete server suite with the embedded index and JavaScript entry
+asset required. `make check` and CI's `go-test (server)` use this bundle-backed
+path.
 
 ## Stack
 
