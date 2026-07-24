@@ -100,9 +100,10 @@ heartbeats, and normal CLI updates derive owner from the bearer token registered
 for the current working directory; callers do not provide an owner string.
 
 The default lease is six hours. A heartbeat extends `lease_expires_at` for the
-recorded owner without changing content. A normal authenticated update also
-renews the lease. An explicit release clears owner, claim time, and lease
-expiry; without force, only the current owner may release.
+recorded owner without changing content. A normal authenticated update by the
+current owner also renews the lease; updating an unclaimed task does not create
+a claim. An explicit release clears owner, claim time, and lease expiry; without
+force, only the current owner may release.
 
 Lease expiry is lazy and is not an automatic release. No background worker
 clears `owner` or `claimed_at`. Once the expiry time is reached, another agent
@@ -143,8 +144,9 @@ not mutate the dependent task's state.
 
 Docs hold Markdown content owned by the task. Links point to external evidence.
 Images are binary task attachments. These resources are returned with task
-detail and are removed with the task; event history deliberately survives task
-deletion.
+detail. Deleting a task cascades dependency and attachment metadata in SQLite,
+but the current delete path does not remove backing doc or image files. Event
+history deliberately survives task deletion.
 
 Every successful task, claim, dependency, image, doc, or link mutation appends
 an event. Events preserve operation context and structured before/after details,

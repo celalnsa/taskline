@@ -229,7 +229,7 @@ queue order, sets claim metadata, and returns it. Same-owner claims are
 preferred so a restarted agent can pick up its own unfinished work first.
 
 The default lease is 6h. Use a shorter `--lease` for short tasks. Normal
-`task update` commands from a registered directory renew the lease;
+`task update` commands by the current owner renew the lease;
 `task heartbeat <id>` renews without changing task content. `task release <id>`
 gives work back immediately. Expired leases become reclaimable without a
 background worker, but stored owner metadata remains until release or a later
@@ -340,10 +340,11 @@ installed.
      for routine design approval; ask only when missing information
      makes safe implementation impossible.
   2. Capture that contract in a `Spec` task doc before advancing. The
-     doc must include product design, technical design (IDL/API
-     definitions and implementation plan), and test plan/test cases.
-     If you already wrote a Superpowers plan, upload that content as the
-     doc rather than duplicating it in the task description.
+     doc must include product design, scope, UX or interaction behavior,
+     acceptance criteria, and verification scenarios. Detailed technical
+     design, IDL/API decisions, and the implementation plan belong to `dev`.
+     If an existing plan already captures the product contract, upload the
+     relevant content rather than duplicating it in the task description.
 - **Advance:** `taskline task update <id> --state dev`
 - **Skip when:** the change is mechanical (rename, formatting,
   one-line config) — go straight to dev.
