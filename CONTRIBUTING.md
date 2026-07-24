@@ -17,14 +17,23 @@ Clone the public repository and prepare local configuration:
 ```bash
 git clone https://github.com/celalnsa/taskline.git
 cd taskline
-mise trust
-mise install
 cp .env.example .env
+```
+
+With Go, Node.js, and pnpm already active, build directly:
+
+```bash
 ./scripts/build.sh
 ```
 
-The `mise` commands are only needed when using mise; inspect `mise.toml` before
-trusting it. Otherwise, make sure Node.js 24 is already active.
+Alternatively, mise users can inspect `mise.toml`, trust it, and activate the
+declared Node.js version explicitly:
+
+```bash
+mise trust
+mise install
+mise exec -- ./scripts/build.sh
+```
 
 The example configuration keeps runtime data under ignored `.cache/data/`
 paths. Process environment variables override `.env`.
