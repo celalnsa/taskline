@@ -4,9 +4,9 @@ Guidance for agents (and humans) working in this repository.
 
 `CLAUDE.md` is a symlink to this file — keep updates here.
 
-For product overview and quick start, see `README.md`. For architecture
-internals see `ARCHITECTURE.md`; for the philosophy behind the product
-see `PRODUCT.md`.
+For product overview and quick start, see `README.md`. For canonical domain
+language and invariants see `DOMAIN.md`; for architecture internals see
+`ARCHITECTURE.md`; for the philosophy behind the product see `PRODUCT.md`.
 
 ## Repo layout (TL;DR)
 
@@ -73,22 +73,14 @@ and are not installed globally.
 
 - **No CGO.** SQLite via `modernc.org/sqlite`. Never introduce a CGO
   dependency — it breaks cross-compile and the `go run` workflow.
-- **State machine.** `pending → start → spec → dev → test → review → done`.
-  Movement in either direction is allowed (review surfacing a bug →
-  drop back to dev is a real workflow), but target states may have service-layer
-  entry rules. Entering `review` requires an attached, live GitHub PR;
-  entering `done` requires a merged PR with no unresolved review threads and
-  green or absent CI checks. `--force` only bypasses claim ownership and never
-  bypasses workflow evidence. `pending` is a non-runnable parking lot; the entry-point
-  state is `start` (formerly `created`). `spec` is for product
-  requirements, UX, scope, and acceptance criteria; technical design
-  and implementation start in `dev`; full local verification belongs in
-  `test`; code review and CI belong in `review`. Tasks created without
-  `auto_start` land in `pending`. Entering `done` sets `completed_at`; leaving
-  `done` clears it, while later edits and heartbeats must preserve it. Lives in `server/api/model/model.go`
-  (`CanTransitionTo`) and `server/internal/service/workflow.go` (entry rules).
-- **Dependency DAG.** `AddDependency` rejects cycles with 409. Any new
-  graph mutation MUST keep the cycle check.
+- **State machine.** Preserve the lifecycle and evidence invariants in
+  `DOMAIN.md`. State membership lives in `server/api/model/model.go`
+  (`CanTransitionTo`); target entry rules live in
+  `server/internal/service/workflow.go`. New rules belong in the service
+  registry, and `--force` must never bypass workflow evidence.
+- **Dependency DAG.** Preserve the graph invariants in `DOMAIN.md`.
+  `AddDependency` rejects cycles with 409; any new graph mutation MUST keep the
+  cycle check.
 - **Errors.** Store layer returns sentinel errors (`ErrNotFound`,
   `ErrConflict`); the handler maps them to HTTP statuses in
   `writeServiceError`. Don't let raw store errors leak status codes.
@@ -104,7 +96,7 @@ and are not installed globally.
   and are referenced by `task_docs.storage_path`. Keep file IO in the
   handler/config boundary; the store should only persist metadata and
   attach doc rows to task reads.
-- **Task labels.** Labels are task-local strings stored as JSON on the
+- **Task labels.** Labels follow `DOMAIN.md` and are stored as JSON on the
   `tasks` row. They are not a project-level registry yet; keep create/update
   support in the normal task API/CLI/editor flow.
 - **Task history.** Every task mutation appends a `task_events` row through

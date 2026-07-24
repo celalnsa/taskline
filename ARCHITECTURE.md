@@ -1,7 +1,8 @@
 # Architecture
 
-How taskline is wired together. For the *why* see `PRODUCT.md`; for
-build/test/contribution mechanics see `AGENTS.md`.
+How taskline is wired together. For domain vocabulary and invariants see
+`DOMAIN.md`; for the *why* see `PRODUCT.md`; for build/test/contribution
+mechanics see `AGENTS.md`.
 
 ## Components
 
@@ -71,8 +72,8 @@ once and passed through to the handler (for `ImagesDir` and `DocsDir`).
 ```sql
 projects(id, name UNIQUE, description, created_at, updated_at)
 tasks   (id, project_id → projects.id, title, description,
-         type ∈ {feature,bug,docs},
-         state ∈ {pending,start,spec,dev,test,review,done}, priority,
+         type TEXT constrained to the canonical task types,
+         state TEXT constrained to the canonical lifecycle, priority,
          labels JSON string array,
          owner, claimed_at, lease_expires_at, completed_at,
          created_at, updated_at)
@@ -87,8 +88,9 @@ task_links  (id, task_id → tasks.id, url, label, created_at)
 task_events (id, task_id, actor, action, summary, details JSON, created_at)
 ```
 
-Attachment and dependency FKs use `ON DELETE CASCADE`. Cascade is what makes
-`DELETE /api/v1/tasks/:id` "just work" without app-level cleanup.
+Attachment and dependency metadata FKs use `ON DELETE CASCADE`, so
+`DELETE /api/v1/tasks/:id` removes their database rows without app-level SQL.
+The current task-delete path does not remove backing image or doc files.
 `task_events.task_id` intentionally has no FK: append-only history remains
 queryable by task ID after the task itself is deleted.
 
@@ -123,58 +125,27 @@ content changed without duplicating full Markdown bodies into SQLite.
 
 ## State machine
 
-```
-pending ⇄ start ──▶ spec ──▶ dev ──▶ test ──▶ review ──▶ done
-              ▲         ▲         ▲        ▲          ▲
-              └─────────┴─────────┴────────┴──────────┘
-              any move between known states is allowed
-              any state may also transition into pending
-```
+The authoritative lifecycle, transition semantics, completion timestamp, and
+evidence gates live in [`DOMAIN.md`](DOMAIN.md#task-lifecycle).
 
-Implemented as a membership set in `model.stateOrder`. `CanTransitionTo`
-only rejects unknown state names — direction is the agent's call. The
-service layer enforces both membership and target-state entry rules before
-calling `store.UpdateTask`. Directional jumps remain legal, but they do not
-bypass evidence rules. Dropping `review → dev` is intentional (a review can
-surface a defect that legitimately reopens the implementation).
-`test` is the local verification stage after implementation and before
-PR/review: unit tests, API e2e, browser smoke, and test coverage review
-belong there, while code review and CI belong in `review`.
-
-The store records `completed_at` when a task enters `done`, clears it when the
-task leaves `done`, and preserves it across ordinary edits and heartbeats. This
-is the stable work-end timestamp; `updated_at` remains the timestamp of the most
-recent mutation and must not be used as completion evidence.
-
+In code, the canonical state set is `model.stateOrder` and
+`CanTransitionTo` performs membership validation. The service calls target
+entry rules before `store.UpdateTask`; the store persists the already-validated
+state and maintains `completed_at`.
 Entry rules are registered by target state in
 `server/internal/service/workflow.go`. They run only when the state actually
 changes, so ordinary edits and same-state updates do not call external
-systems. The built-in rules are:
-
-- `review`: an attached `https://github.com/<owner>/<repo>/pull/<n>` must
-  resolve to an open or merged PR.
-- `done`: an attached PR must be merged, have zero unresolved review threads,
-  and have a successful check rollup (or no configured checks).
-
-`PullRequestVerifier` is owned by the service package; the concrete GraphQL
-adapter lives in `server/internal/github`. This keeps GitHub transport and
-credential lookup outside workflow policy and gives future state rules the
-same registry without expanding the handler. Missing evidence is a 409;
-temporary verification/authentication failure is a 503. Store `Force` does
-not bypass these rules.
-
-`pending` lives off the main pipeline: tasks created without
-`auto_start=true` land there, and any state may transition into it to
-"park" work. The runnable query skips both `done` and `pending`.
-
-There's no automatic transition triggered by completing dependencies —
-"runnable" is a *query*, not a state. State only moves when an agent
-(or human) PATCHes the task.
+systems. `PullRequestVerifier` is owned by the service package; the concrete
+GraphQL adapter lives in `server/internal/github`. This keeps GitHub transport
+and credential lookup outside workflow policy and gives future state rules the
+same registry without expanding the handler. Missing evidence maps to 409;
+temporary verification/authentication failure maps to 503.
 
 ## Dependency DAG and the runnable query
 
-`task_deps` is a many-to-many edge table. The runnable filter is a
-single SQL query:
+The normative DAG, runnable, and claimable rules live in
+[`DOMAIN.md`](DOMAIN.md#dependencies-and-queue-selection). `task_deps` is a
+many-to-many edge table, and the runnable filter is a single SQL query:
 
 ```sql
 SELECT … FROM tasks t
@@ -254,7 +225,9 @@ independent of the server module. Domain shapes are duplicated and kept
 in sync by hand — drift here is the single most likely place for bugs,
 so a CLI-side e2e test suite exercises the round-trip.
 
-Agent preflight uses `GET /api/v1/status`. Without authorization it proves
+Agent identity and claim semantics are defined in
+[`DOMAIN.md`](DOMAIN.md#claims-and-leases). Agent preflight uses
+`GET /api/v1/status`. Without authorization it proves
 server reachability. With a bearer token it also validates the identity and
 returns that agent's live claims across projects. The store query uses the
 existing owner/lease index and returns only the compact status shape; local
@@ -308,9 +281,9 @@ CLI config:
 
 `db.SetMaxOpenConns(1)`. SQLite under `modernc.org/sqlite` doesn't
 reliably share PRAGMA state across connections, so we serialize access.
-For a single-user, single-agent workload this is the right tradeoff —
-correctness over throughput. WAL is enabled so reads don't block writes
-within that single connection's transaction queue.
+For a single-user local service that coordinates multiple agents, this is the
+current correctness-over-throughput tradeoff. WAL is enabled so reads don't
+block writes within that single connection's transaction queue.
 
 If contention ever matters, lift the cap and move PRAGMA setup into a
 connection initializer.

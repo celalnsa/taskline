@@ -104,23 +104,11 @@ server derives owner from the registered token.
 
 ## Domain model
 
-| Field         | Notes                                                                      |
-| ------------- | -------------------------------------------------------------------------- |
-| `id`          | UUID, generated for you on create                                          |
-| `project_id`  | UUID of owning project                                                     |
-| `title`       | required, short                                                            |
-| `description` | optional, longer prose                                                     |
-| `type`        | `feature` (default), `bug`, or `docs`                                      |
-| `state`       | `pending`, `start`, `spec`, `dev`, `test`, `review`, `done`                |
-| `priority`    | integer; **higher = runs sooner** (default 0)                              |
-| `labels`      | task-local GitHub-style text labels, ordered and deduped by the server     |
-| `owner`       | optional multi-agent owner; empty means unclaimed                          |
-| `claimed_at`  | unix milliseconds when the current owner claimed the task                  |
-| `lease_expires_at` | unix milliseconds when the current owner lease expires              |
-| `completed_at` | stable unix milliseconds when the task most recently entered `done`; zero otherwise |
-| `depends_on`  | list of task ids; the task is blocked until **every** dep reaches `done`  |
-| `images`      | optional binary attachments; each image includes a `url` for retrieval     |
-| `docs`        | optional Markdown docs; each doc includes a raw-content `url`              |
+Canonical vocabulary, lifecycle semantics, claims, leases, dependencies, queue
+ordering, labels, attachments, and event invariants live in the repository's
+[`DOMAIN.md`](../../DOMAIN.md). Treat that document as the stable domain
+contract and keep this skill focused on CLI sequencing and the stricter agent
+delivery policy.
 
 Every mutation also appends a task history event with `actor`, `action`,
 `summary`, structured `details`, and `created_at`. A registered agent token is
@@ -129,42 +117,10 @@ Use `taskline task history <id>` whenever you need durable operation context or
 the exact before/after values for title, description, state, type, priority, or
 labels.
 
-**State machine.** Any state may transition toward any other named state, but
-target-state evidence rules still apply. Drop-backs (`review` → `dev` when a
-defect surfaces) and directional jumps are legal; entering `review` requires
-an attached valid GitHub PR, and entering `done` requires that PR to be merged
-with review threads resolved and CI green or not configured. `--force` does
-not bypass these gates. Unknown state names are rejected — don't invent new
-ones.
-`test` is the local verification stage between implementation and
-review: test review, unit tests, API e2e, browser smoke, and any other
-checks that should pass before PR review/CI begins.
-
-**`pending` is the parking lot.** Tasks in `pending` are explicitly
-**not runnable**: `task next` and `task list --runnable` skip them.
-Use it when you want to capture work without offering it to the queue
-yet (rough drafts, future ideas, things that need refinement). Any
-state may transition into `pending` — drop a task back into the lot
-whenever it should stop being a candidate. Move it to `start` (or
-further along) when it's ready to be worked.
-
-**Runnable.** A task is runnable when its state is neither `done` nor
-`pending` AND every task it depends on has state `done`. Runnable
-queue-preview commands hide live claims owned by other agents by
-default. A registered agent sees its own live claims first, plus
-unclaimed or lease-expired tasks. Tasks are returned with same-owner
-claims first, then by `priority DESC`, then `created_at ASC`.
-Use `taskline task next --claim` to reserve the single highest-priority
-claimable task before doing any work. Plain `taskline task next` is
-only a preview and must not be treated as permission to start. Add
-repeated `--label` filters to `task next` or `task list --runnable` to
-pull from a labeled subset; labels use AND semantics, so
-`--label backend --label ui` returns tasks that have both labels.
-Matching is case-insensitive, like label deduplication.
-
-**Dependency DAG.** Adding an edge that would close a cycle is
-rejected. Self-deps are rejected. Re-adding an existing edge is a
-no-op.
+Before updating state, claiming work, or interpreting a queue result, use the
+definitions in `DOMAIN.md`. In particular, a preview is never permission to
+start, lease expiry is not an automatic release, and server evidence gates are
+not a substitute for this skill's review and CI requirements.
 
 ## CLI cheat sheet
 
@@ -228,7 +184,7 @@ taskline task update <id> --append-description "new note"
 taskline task update <id> --clear-labels                    # remove labels
 taskline task update <id> --state done --if-state review
 taskline task update <id> --state pending --force            # manual correction
-taskline task delete <id>                    # cascades deps + attachments
+taskline task delete <id>                    # cascades dep/attachment metadata; files remain
 
 # Multi-agent ownership
 taskline task claim <id> --lease 2h
@@ -268,18 +224,16 @@ project. Plain `task next` is a read-only preview and does **not**
 reserve work. Never begin implementation from a plain `task next`
 result; claim first.
 
-`task next --claim` atomically selects the highest-priority runnable task,
-sets `owner`, `claimed_at`, and `lease_expires_at`, and returns the claimed
-task. Claimable means runnable and either unclaimed, owned by the registered
-agent in this directory, or lease-expired. Same-owner claims are preferred so a
-restarted agent can pick up its own unfinished work first.
+`task next --claim` atomically selects the first claimable task in the canonical
+queue order, sets claim metadata, and returns it. Same-owner claims are
+preferred so a restarted agent can pick up its own unfinished work first.
 
 The default lease is 6h. Use a shorter `--lease` for short tasks. Normal
-`task update` commands from a registered directory renew the lease;
+`task update` commands by the current owner renew the lease;
 `task heartbeat <id>` renews without changing task content. `task release <id>`
-gives work back immediately. Expired leases are reclaimed without a background
-worker; the next successful claim/update observes the current owner and rejects
-stale non-owner writes.
+gives work back immediately. Expired leases become reclaimable without a
+background worker, but stored owner metadata remains until release or a later
+claim. A different agent must claim the task before attempting normal updates.
 
 Do not infer your identity from a returned task's `owner` field. That
 field says who currently owns the task; your identity is the agent
@@ -307,10 +261,9 @@ fetch full editable content with `taskline task doc get <doc-id>`.
 Create or update the stage doc before advancing out of the matching
 stage:
 
-- **spec → dev:** `Spec` doc with product design, technical design
-  (IDL/API definitions and implementation plan), and test plan/test
-  cases. If a Superpowers plan already exists, upload that content as
-  the task doc.
+- **spec → dev:** `Spec` doc with product design, scope, UX or interaction
+  behavior, acceptance criteria, and verification scenarios. Detailed
+  technical design and implementation planning begin in `dev`.
 - **dev → test:** `Dev Notes` doc summarizing implementation, issues
   encountered, and any divergence from the spec/technical design.
 - **test → review:** `Test Report` doc reviewing test cases, module
@@ -386,10 +339,11 @@ installed.
      for routine design approval; ask only when missing information
      makes safe implementation impossible.
   2. Capture that contract in a `Spec` task doc before advancing. The
-     doc must include product design, technical design (IDL/API
-     definitions and implementation plan), and test plan/test cases.
-     If you already wrote a Superpowers plan, upload that content as the
-     doc rather than duplicating it in the task description.
+     doc must include product design, scope, UX or interaction behavior,
+     acceptance criteria, and verification scenarios. Detailed technical
+     design, IDL/API decisions, and the implementation plan belong to `dev`.
+     If an existing plan already captures the product contract, upload the
+     relevant content rather than duplicating it in the task description.
 - **Advance:** `taskline task update <id> --state dev`
 - **Skip when:** the change is mechanical (rename, formatting,
   one-line config) — go straight to dev.

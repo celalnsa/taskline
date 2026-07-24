@@ -3,6 +3,10 @@
 Agent-friendly task management. Kanban for AI agents, with HTTP API + CLI +
 embedded React web UI.
 
+For canonical vocabulary and lifecycle invariants see
+[`DOMAIN.md`](DOMAIN.md). For product rationale and implementation structure see
+[`PRODUCT.md`](PRODUCT.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## What it is
 
 A small Go HTTP server (Hertz + SQLite) that exposes a state-machine + dep-DAG
@@ -32,6 +36,7 @@ taskline/
 ├── scripts/{build,start-local,install-local,test-skill}.sh
 ├── dist/                   # build output: taskline-server, taskline
 ├── .env.example            # server runtime config
+├── DOMAIN.md               # canonical vocabulary and domain invariants
 └── README.md
 ```
 
@@ -72,16 +77,17 @@ export TASKLINE_PROJECT=demo
 
 Two views, switchable from the toolbar:
 
-- **Kanban** — seven columns (pending / start / spec / dev / test /
-  review / done), each showing its task count in the column header.
+- **Kanban** — one column for each
+  [canonical lifecycle state](DOMAIN.md#task-lifecycle), with a task count in
+  every column header.
   All non-Done columns default to "next execution order" (unblocked first, then
   priority / FIFO), while Done defaults to recently updated first. Every
   column exposes sort controls for execution order, priority high-to-low,
   created oldest-first, and recently updated. Drag a card to
   change its state; the server accepts moves in either direction.
-  `pending` is a parking lot — tasks there are not runnable, and the
-  "+ New task" modal exposes an *Auto-start* toggle (on by default) to
-  decide whether a new task lands in `start` or `pending`.
+  The "+ New task" modal exposes an *Auto-start* toggle (on by default) to
+  choose between offered and
+  [parked work](DOMAIN.md#task-lifecycle).
   Task details include Labels, Images, Docs, Links, and Depends sections.
   Labels are GitHub-style task-local chips; Docs are Markdown files that
   can be opened and edited from the task editor.
@@ -145,9 +151,8 @@ TASKLINE_DOCS_DIR=./.cache/data/docs
 TASKLINE_GITHUB_TOKEN=
 ```
 
-Entering `review` requires an attached GitHub PR link. Entering `done` also
-verifies through GitHub that the PR is merged, all review threads are resolved,
-and CI is green or not configured. The token lookup order is
+Lifecycle evidence gates are defined in
+[`DOMAIN.md`](DOMAIN.md#evidence-gates). The GitHub token lookup order is
 `TASKLINE_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN`, then the local `gh` login.
 
 ## CLI environment
@@ -173,11 +178,9 @@ instead of silently appearing unregistered. Registration also rejects a request
 that already carries a valid agent token, preventing accidental identity
 replacement.
 
-`task next` and `task list --runnable` accept repeated `--label` filters with
-AND semantics so multiple agents can consume different labeled subsets from one
-project. Label matching is case-insensitive. Queue-preview commands hide live
-claims owned by other agents by default; a registered agent also sees its own
-claimed task first so it can resume work after a restart. Use
+Queue eligibility, ordering, label filters, and ownership are defined in
+[`DOMAIN.md`](DOMAIN.md#dependencies-and-queue-selection) and
+[`DOMAIN.md`](DOMAIN.md#claims-and-leases). Operationally, use
 `task next --claim` before starting work; plain `task next` is only a preview.
 Claim, heartbeat, release, and normal update flows derive owner from the
 registered token and do not accept an owner flag.
