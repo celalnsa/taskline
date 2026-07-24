@@ -184,7 +184,7 @@ taskline task update <id> --append-description "new note"
 taskline task update <id> --clear-labels                    # remove labels
 taskline task update <id> --state done --if-state review
 taskline task update <id> --state pending --force            # manual correction
-taskline task delete <id>                    # cascades deps + attachments
+taskline task delete <id>                    # cascades dep/attachment metadata; files remain
 
 # Multi-agent ownership
 taskline task claim <id> --lease 2h
@@ -261,10 +261,9 @@ fetch full editable content with `taskline task doc get <doc-id>`.
 Create or update the stage doc before advancing out of the matching
 stage:
 
-- **spec → dev:** `Spec` doc with product design, technical design
-  (IDL/API definitions and implementation plan), and test plan/test
-  cases. If a Superpowers plan already exists, upload that content as
-  the task doc.
+- **spec → dev:** `Spec` doc with product design, scope, UX or interaction
+  behavior, acceptance criteria, and verification scenarios. Detailed
+  technical design and implementation planning begin in `dev`.
 - **dev → test:** `Dev Notes` doc summarizing implementation, issues
   encountered, and any divergence from the spec/technical design.
 - **test → review:** `Test Report` doc reviewing test cases, module

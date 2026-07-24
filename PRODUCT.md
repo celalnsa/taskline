@@ -44,7 +44,9 @@ on top of the agent contract — never the source of truth.
 This shows up in dozens of small choices: the `task next` command
 returns a single object (not a paginated list); `--project` accepts
 either a name or a UUID (so an agent can pass whichever it has at
-hand); deletion cascades so an agent doesn't have to remember cleanup.
+hand); deletion cascades dependency and attachment metadata so an agent
+doesn't have to manage relationship rows, while backing files remain a storage
+lifecycle concern.
 
 ### 2. The model is the truth
 

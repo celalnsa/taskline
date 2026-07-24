@@ -88,8 +88,9 @@ task_links  (id, task_id → tasks.id, url, label, created_at)
 task_events (id, task_id, actor, action, summary, details JSON, created_at)
 ```
 
-Attachment and dependency FKs use `ON DELETE CASCADE`. Cascade is what makes
-`DELETE /api/v1/tasks/:id` "just work" without app-level cleanup.
+Attachment and dependency metadata FKs use `ON DELETE CASCADE`, so
+`DELETE /api/v1/tasks/:id` removes their database rows without app-level SQL.
+The current task-delete path does not remove backing image or doc files.
 `task_events.task_id` intentionally has no FK: append-only history remains
 queryable by task ID after the task itself is deleted.
 
