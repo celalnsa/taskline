@@ -17,7 +17,7 @@ help:
 		'  make build [MODULE=...]     Build all, server, cli, or web' \
 		'  make lint [MODULE=...]      Lint all, server, cli, or web' \
 		'  make test [MODULE=...]      Test all, server, cli, or web' \
-		'  make install-browser        Install Web dependencies and Playwright Chromium' \
+		'  make install-browser        Install Web, Chromium, and browser system dependencies' \
 		'  make test-browser           Run Playwright against an isolated built server' \
 		'  make test-e2e               Run the focused server e2e package' \
 		'  make test-server-bundle     Test server with the production web bundle' \
@@ -62,8 +62,8 @@ build-web:
 	@( cd web && pnpm install --frozen-lockfile --silent && pnpm build )
 
 install-browser:
-	@echo "[install] Playwright Chromium" >&2
-	@( cd web && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium )
+	@echo "[install] Playwright Chromium and system dependencies" >&2
+	@( cd web && pnpm install --frozen-lockfile --silent && pnpm exec playwright install --with-deps chromium )
 
 lint: validate-module
 	@$(MAKE) --no-print-directory lint-$(MODULE)

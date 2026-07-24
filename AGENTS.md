@@ -103,8 +103,8 @@ server suite with the embedded entry assets required. `make check` and CI use
 that release-contract path.
 `make test-browser` builds the release artifacts, starts an isolated server,
 seeds a temporary project, and runs Chromium Playwright E2E. Install its frozen
-Web dependencies and browser once with `make install-browser`; `make check`
-includes this gate.
+Web dependencies, browser, and browser system dependencies once with
+`make install-browser`; `make check` includes this gate.
 `scripts/seed.sh [project-name]` creates a fixed multi-state demo DAG through the
 public CLI and refuses to modify an existing project.
 

@@ -248,9 +248,9 @@ runs the complete server suite with the embedded index and JavaScript entry
 asset required. `make check` and CI's `go-test (server)` use this bundle-backed
 path.
 
-Install Chromium once before the full local gate, then run the isolated browser
-suite as needed. The install target also restores frozen Web dependencies in a
-new checkout:
+Install Chromium and its operating-system dependencies once before the full
+local gate, then run the isolated browser suite as needed. The install target
+also restores frozen Web dependencies in a new checkout:
 
 ```bash
 make install-browser
