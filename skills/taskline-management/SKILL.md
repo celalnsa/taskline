@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.17.0
+version: 0.17.1
 ---
 
 # taskline — task management for AI agents
@@ -404,10 +404,12 @@ task description or implementation notes, then continue.
   1. Review the tests you wrote or touched. Add coverage now if the
      behavior, migration path, CLI surface, or UI state can regress.
   2. Run the full project test suite for whatever you touched.
-     For this repo: `( cd server && go test ./... )`,
-     `( cd cli && go test ./... )`, `( cd web && pnpm lint && pnpm test && pnpm build )`.
-     Run `./scripts/test-skill.sh` when skill docs changed. Lint /
-     format as the project requires.
+     For this repo, `make check` is the complete gate. Use
+     `make lint MODULE=<server|cli|web>`,
+     `make test MODULE=<server|cli|web>`, and
+     `make build MODULE=<server|cli|web>` for focused reruns.
+     Run `make test-skill` when skill docs changed. Lint / format as
+     the project requires.
   3. For taskline itself, or any project with an embedded frontend,
      migrations, or runtime startup behavior, verify against the rebuilt
      running binary rather than only isolated tests.

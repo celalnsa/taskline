@@ -290,6 +290,9 @@ connection initializer.
 
 ## Test strategy
 
+- **Entrypoint**: the root `Makefile` is the canonical local, agent, and CI
+  contract. `make check` runs lint, tests, release build, and skill validation;
+  `MODULE=all|server|cli|web` narrows build, lint, and test targets.
 - **Unit**: `service_test.go` and `store_test.go` cover happy paths and
   edge cases (cycle rejection, invalid-state rejection, idempotent dep
   insert). `:memory:` SQLite for speed.
@@ -303,5 +306,5 @@ connection initializer.
 - **CLI**: lives in the CLI module; uses an `httptest.Server` to fake
   the backend.
 - **Web**: Vitest component tests, ESLint, and `pnpm build`.
-- **Skills**: `scripts/test-skill.sh` checks public and internal
-  `SKILL.md` frontmatter plus load-bearing section headings.
+- **Skills**: `make test-skill` calls `scripts/test-skill.sh` to check public
+  and internal `SKILL.md` frontmatter plus load-bearing section headings.

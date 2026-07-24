@@ -9,8 +9,10 @@ repository conventions, and verification requirements.
 Prerequisites:
 
 - Go 1.25 or newer
+- GNU Make
 - pnpm
 - Node.js 24, installed directly or through [mise](https://mise.jdx.dev/)
+- golangci-lint 2.12.2 for `make lint` and `make check`
 
 Clone the public repository and prepare local configuration:
 
@@ -23,7 +25,7 @@ cp .env.example .env
 With Go, Node.js, and pnpm already active, build directly:
 
 ```bash
-./scripts/build.sh
+make build
 ```
 
 Alternatively, mise users can inspect `mise.toml`, trust it, and activate the
@@ -32,7 +34,7 @@ declared Node.js version explicitly:
 ```bash
 mise trust
 mise install
-mise exec -- ./scripts/build.sh
+mise exec -- make build
 ```
 
 The example configuration keeps runtime data under ignored `.cache/data/`

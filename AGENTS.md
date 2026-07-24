@@ -20,7 +20,9 @@ language and invariants see `DOMAIN.md`; for architecture internals see
   the CLI. Source of truth for "how an agent should use taskline".
 - `.agents/skills/taskline-localtest/SKILL.md` — repo-internal skill for
   verifying changes against a rebuilt, running taskline binary.
-- `scripts/build.sh` — one-shot release build (web → server → CLI).
+- `Makefile` — canonical build, lint, test, and full-check entrypoint.
+- `scripts/build.sh` / `scripts/test.sh` — compatibility wrappers around
+  the root Make targets.
 - `scripts/install-local.sh` — user-local CLI install plus public skill
   symlink refresh.
 - `scripts/test-skill.sh` — smoke tests for public and internal skill docs.
@@ -63,8 +65,18 @@ must not be installed globally.
 ## Build, run, test
 
 ```bash
+# Full repository gate: lint, tests, release build, and skill validation
+make check
+
 # Full release-style build (writes ./dist/{taskline-server,taskline})
-./scripts/build.sh
+make build
+
+# Focused checks (MODULE accepts all, server, cli, or web)
+make lint MODULE=server
+make test MODULE=cli
+make build MODULE=web
+make test-e2e
+make test-skill
 
 # Server only (without web bundle — fine for backend work)
 ( cd server && go run ./cmd/taskline-server )
@@ -72,12 +84,11 @@ must not be installed globally.
 # Frontend with HMR (proxies /api → :8787)
 ( cd web && pnpm install && pnpm dev )
 
-# Tests
-( cd server && go test ./... )    # unit + e2e (boots a real server)
-( cd cli    && go test ./... )
-( cd web    && pnpm lint && pnpm test && pnpm build )
-./scripts/test-skill.sh
 ```
+
+`make build`, `make lint`, and `make test` default to `MODULE=all`.
+`scripts/build.sh` and `scripts/test.sh` remain shell-compatible wrappers, but
+new automation should call Make so local, agent, and CI behavior stays aligned.
 
 `scripts/start-local.sh` builds the binaries and (re)starts the server in
 the background, logging to `.log/server.log` and writing the PID to
@@ -151,11 +162,13 @@ and are not installed globally.
 
 ## Tests you should run before declaring done
 
-- `( cd server && go test ./... )` — unit + `tests/e2e_test.go` boots a
+- `make check` is the complete repository gate.
+- `make test MODULE=server` — unit + `tests/e2e_test.go` boots a
   real server on a random port.
-- `( cd cli && go test ./... )` — covers the CLI surface.
-- `./scripts/test-skill.sh` when skill docs or install behavior changes.
-- For UI changes, `( cd web && pnpm lint && pnpm test && pnpm build )`.
+- `make test MODULE=cli` covers the CLI surface.
+- `make test-skill` when skill docs or install behavior changes.
+- For UI changes, run `make lint MODULE=web`, `make test MODULE=web`, and
+  `make build MODULE=web`.
   Manual smoke-test in the browser if the change touches the kanban DnD
   or the React Flow graph.
 

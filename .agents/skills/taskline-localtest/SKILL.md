@@ -59,8 +59,8 @@ Concrete test placement by area:
 | Server end-to-end (HTTP) | `server/tests/e2e_test.go` (boots a real Hertz instance)          |
 | Migration / schema       | `server/internal/store/store_test.go` against `t.TempDir()` file  |
 | CLI surface              | `cli/...` (uses `httptest.Server`)                                |
-| Web                      | TS strict + `pnpm build` is the floor; visual smoke in the browser is the ceiling |
-| Skill artifacts          | `scripts/test-skill.sh` (frontmatter + section presence)          |
+| Web                      | `make build MODULE=web` is the floor; visual smoke in the browser is the ceiling |
+| Skill artifacts          | `make test-skill` (frontmatter + section presence)                 |
 
 Run the failing test, confirm the failure message matches what you
 expected, then implement.
@@ -108,7 +108,7 @@ Vite serves on `:5173` during HMR development.
 "Full" here means: the surfaces affected by this change, exercised
 through the actual production code path on the running server.
 
-- **Server code**: `( cd server && go test ./... )` AND a real HTTP
+- **Server code**: `make test MODULE=server` AND a real HTTP
   call against `:8787` covering at least the modified endpoint.
 - **Migration**: read `PRAGMA user_version` against the live DB and
   confirm it matches the expected post-migration version. Use the
