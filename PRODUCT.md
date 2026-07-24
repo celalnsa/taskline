@@ -1,7 +1,8 @@
 # Product
 
-The motivation behind taskline. For *what's wired to what* see
-`ARCHITECTURE.md`; for *how to work in the repo* see `AGENTS.md`.
+The motivation behind taskline. For canonical domain language see `DOMAIN.md`;
+for *what's wired to what* see `ARCHITECTURE.md`; for *how to work in the repo*
+see `AGENTS.md`.
 
 (Previously named `DESIGN.md`; renamed because that filename is
 conventionally a UI / visual design spec, while this doc is the
@@ -63,11 +64,10 @@ drop back to `spec`. Forcing the agent to delete-and-recreate in those cases
 destroys history (description, dependencies, attachments) that is
 exactly the context a future agent needs.
 
-Skipping intermediate states is structurally allowed, but entering a target
-state may require evidence. `review` requires a real linked PR; `done` requires
-that PR to be merged with review threads resolved and CI green (or not
-configured). The *direction* of motion remains an agent choice, while the
-service prevents documentation from substituting for shipped work.
+Skipping intermediate states is structurally allowed, but the target-state
+[evidence gates](DOMAIN.md#evidence-gates) still apply. The *direction* of
+motion remains an agent choice, while the service prevents documentation from
+substituting for shipped work.
 
 `pending` lives off the main pipeline. It captures the difference
 between "I want to work on this" and "I want to remember this". A
@@ -151,16 +151,15 @@ shapes were considered:
   poll repositories in the background. It does synchronously read linked PR
   facts when a caller asks to enter `review` or `done`; the caller still owns
   every state change.
-- **Spec authoring.** A task has a title and a description. If you want
-  spec-style requirements, write them in the description or link to a
-  doc. taskline tracks *that work exists*, not *what the work is*.
-- **Multi-user collaboration.** No accounts, no permissions, no audit
-  log. Single user, single machine. If multiple humans need to share a
-  taskline, they share the database file (or stand up one instance per
-  human and don't pretend it's the same workspace).
-- **History / time travel.** `updated_at` is the only nod to history.
-  No event log, no "show me what this task looked like yesterday". If
-  this matters to you, taskline is the wrong abstraction — use Git.
+- **Spec authoring.** Taskline stores attached Markdown docs but does not write
+  requirements for you. Put spec-style content in a task doc or description;
+  taskline tracks *that work exists*, not *what the work is*.
+- **Multi-user collaboration.** No accounts or permission system. One local
+  user may register multiple agent identities for claim coordination, but those
+  identities are not a security boundary between humans.
+- **Full time travel.** Append-only task events explain successful mutations
+  and preserve structured field changes, but taskline does not reconstruct an
+  arbitrary historical database snapshot. Use Git for source history.
 
 ## What the web UI is for
 
