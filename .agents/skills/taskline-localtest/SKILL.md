@@ -125,6 +125,9 @@ through the actual production code path on the running server.
   the golden path *and* the most likely regressions in adjacent UI
   (drag-and-drop still works, kanban still drops `review → dev` for
   a defect, the URL `?project=<x>` still resolves).
+  For a disposable browser fixture, run
+  `TASKLINE_SERVER=<url> ./scripts/seed.sh <unique-project>` and consume the
+  JSON manifest from stdout; never seed over an existing project.
 - **CLI**: run the actual command end-to-end against `:8787`, not
   just the Go test. Many CLI bugs hide in the JSON shape, the
   TTY-vs-pipe output detection, or env-var resolution — none of

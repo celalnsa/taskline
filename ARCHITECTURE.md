@@ -306,5 +306,8 @@ connection initializer.
 - **CLI**: lives in the CLI module; uses an `httptest.Server` to fake
   the backend.
 - **Web**: Vitest component tests, ESLint, and `pnpm build`.
+- **Seed fixture**: `scripts/seed.sh` composes only public CLI operations;
+  `make test-seed` verifies its exact multi-state DAG against a real built
+  server and CLI.
 - **Skills**: `make test-skill` calls `scripts/test-skill.sh` to check public
   and internal `SKILL.md` frontmatter plus load-bearing section headings.

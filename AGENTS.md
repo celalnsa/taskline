@@ -23,6 +23,8 @@ language and invariants see `DOMAIN.md`; for architecture internals see
 - `Makefile` — canonical build, lint, test, and full-check entrypoint.
 - `scripts/build.sh` / `scripts/test.sh` — compatibility wrappers around
   the root Make targets.
+- `scripts/seed.sh` — deterministic CLI-only demo fixture for browser and
+  integration tests.
 - `scripts/install-local.sh` — user-local CLI install plus public skill
   symlink refresh.
 - `scripts/test-skill.sh` — smoke tests for public and internal skill docs.
@@ -76,6 +78,7 @@ make lint MODULE=server
 make test MODULE=cli
 make build MODULE=web
 make test-e2e
+make test-seed
 make test-skill
 
 # Server only (without web bundle — fine for backend work)
@@ -89,6 +92,8 @@ make test-skill
 `make build`, `make lint`, and `make test` default to `MODULE=all`.
 `scripts/build.sh` and `scripts/test.sh` remain shell-compatible wrappers, but
 new automation should call Make so local, agent, and CI behavior stays aligned.
+`scripts/seed.sh [project-name]` creates a fixed multi-state demo DAG through the
+public CLI and refuses to modify an existing project.
 
 `scripts/start-local.sh` builds the binaries and (re)starts the server in
 the background, logging to `.log/server.log` and writing the PID to
@@ -167,6 +172,7 @@ and are not installed globally.
   real server on a random port.
 - `make test MODULE=cli` covers the CLI surface.
 - `make test-skill` when skill docs or install behavior changes.
+- `make test-seed` when demo fixture or browser-test setup changes.
 - For UI changes, run `make lint MODULE=web`, `make test MODULE=web`, and
   `make build MODULE=web`.
   Manual smoke-test in the browser if the change touches the kanban DnD
