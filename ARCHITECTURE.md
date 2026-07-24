@@ -306,6 +306,11 @@ connection initializer.
 - **CLI**: lives in the CLI module; uses an `httptest.Server` to fake
   the backend.
 - **Web**: Vitest component tests, ESLint, and `pnpm build`.
+- **Embedded Web contract**: `make test-server-bundle` builds the Vite
+  production assets before compiling the complete server suite. With
+  `TASKLINE_REQUIRE_WEB_BUNDLE=1`, the E2E test requires the embedded app shell
+  and its local JavaScript entry asset, catching API-only or incomplete bundle
+  builds. CI's server test matrix entry and `make check` use this path.
 - **Seed fixture**: `scripts/seed.sh` composes only public CLI operations;
   `make test-seed` verifies its exact multi-state DAG against a real built
   server and CLI.

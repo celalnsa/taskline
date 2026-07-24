@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -159,6 +160,54 @@ func jsonReqWithHeaders(t *testing.T, method, url string, body any, out any, tok
 		require.NoError(t, json.Unmarshal(raw, out), "decode body: %s", string(raw))
 	}
 	return resp.StatusCode
+}
+
+func TestEmbeddedWebBundleServesEntryAsset(t *testing.T) {
+	if os.Getenv("TASKLINE_REQUIRE_WEB_BUNDLE") != "1" {
+		t.Skip("set TASKLINE_REQUIRE_WEB_BUNDLE=1 for the release bundle gate")
+	}
+
+	base, stop := startServer(t)
+	defer stop()
+
+	indexResponse, err := http.Get(base + "/")
+	require.NoError(t, err)
+	defer indexResponse.Body.Close()
+	indexBody, err := io.ReadAll(indexResponse.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, indexResponse.StatusCode)
+
+	indexHTML := string(indexBody)
+	require.Contains(t, indexHTML, `id="root"`, "embedded index is not the production app shell")
+	scriptStart := strings.Index(indexHTML, "<script")
+	require.NotEqual(t, -1, scriptStart, "embedded index has no script element")
+	scriptEnd := strings.Index(indexHTML[scriptStart:], ">")
+	require.NotEqual(t, -1, scriptEnd, "embedded script element is unterminated")
+	scriptTag := indexHTML[scriptStart : scriptStart+scriptEnd+1]
+	require.Contains(t, scriptTag, `type="module"`, "embedded entry script is not a module")
+	srcStart := strings.Index(scriptTag, `src="`)
+	require.NotEqual(t, -1, srcStart, "embedded module script has no src")
+	srcStart += len(`src="`)
+	srcEnd := strings.Index(scriptTag[srcStart:], `"`)
+	require.NotEqual(t, -1, srcEnd, "embedded module script src is unterminated")
+	entryAsset := scriptTag[srcStart : srcStart+srcEnd]
+	require.True(t, strings.HasPrefix(entryAsset, "/assets/"), "entry asset is not local: %q", entryAsset)
+	require.True(t, strings.HasSuffix(entryAsset, ".js"), "entry asset is not JavaScript: %q", entryAsset)
+
+	assetResponse, err := http.Get(base + entryAsset)
+	require.NoError(t, err)
+	defer assetResponse.Body.Close()
+	assetBody, err := io.ReadAll(assetResponse.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, assetResponse.StatusCode, "entry asset %s", entryAsset)
+	require.NotEmpty(t, strings.TrimSpace(string(assetBody)), "entry asset %s is empty", entryAsset)
+	require.NotContains(t, string(assetBody), "<!doctype html>", "entry asset %s fell back to index.html", entryAsset)
+
+	contentType := assetResponse.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	require.NoError(t, err, "entry asset %s has invalid Content-Type %q", entryAsset, contentType)
+	require.Contains(t, []string{"text/javascript", "application/javascript"}, mediaType,
+		"entry asset %s has Content-Type %q", entryAsset, contentType)
 }
 
 func TestTaskHistoryTracksActorsChangesAndSurvivesDeletion(t *testing.T) {

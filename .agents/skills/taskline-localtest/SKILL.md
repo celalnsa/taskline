@@ -132,6 +132,11 @@ through the actual production code path on the running server.
   just the Go test. Many CLI bugs hide in the JSON shape, the
   TTY-vs-pipe output detection, or env-var resolution — none of
   which `go test` exercises.
+- **Embedded bundle / single-binary delivery**: run
+  `make test-server-bundle`. It builds the production Web assets before
+  compiling the complete server suite and requires the embedded index plus
+  JavaScript entry asset. `make test MODULE=server` remains the faster Go-only
+  path for focused backend work.
 
 If a step fails, drop the taskline task back to `dev` with
 `taskline task update <id> --state dev` and fix the root cause.

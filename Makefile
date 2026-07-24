@@ -4,7 +4,8 @@ SHELL := /bin/bash
 MODULE ?= all
 SUPPORTED_MODULES := all server cli web
 
-.PHONY: help check build lint test test-e2e test-seed test-seed-run test-skill validate-module
+.PHONY: help check build lint test test-e2e test-server-bundle test-server-bundle-run
+.PHONY: test-seed test-seed-run test-skill validate-module
 .PHONY: build-all build-server build-cli build-web
 .PHONY: lint-all lint-server lint-cli lint-web
 .PHONY: test-all test-server test-cli test-web
@@ -17,6 +18,7 @@ help:
 		'  make lint [MODULE=...]      Lint all, server, cli, or web' \
 		'  make test [MODULE=...]      Test all, server, cli, or web' \
 		'  make test-e2e               Run the focused server e2e package' \
+		'  make test-server-bundle     Test server with the production web bundle' \
 		'  make test-seed              Build and verify the demo seed fixture' \
 		'  make test-skill             Validate public and internal skills' \
 		'' \
@@ -30,8 +32,10 @@ validate-module:
 
 check:
 	@$(MAKE) --no-print-directory lint MODULE=all
-	@$(MAKE) --no-print-directory test MODULE=all
 	@$(MAKE) --no-print-directory build MODULE=all
+	@$(MAKE) --no-print-directory test-server-bundle-run
+	@$(MAKE) --no-print-directory test-cli
+	@$(MAKE) --no-print-directory test-web
 	@$(MAKE) --no-print-directory test-seed-run
 	@$(MAKE) --no-print-directory test-skill
 
@@ -91,6 +95,13 @@ test-web:
 test-e2e:
 	@echo "[test] server e2e" >&2
 	@( cd server && go test ./tests -count=1 )
+
+test-server-bundle: build-web
+	@$(MAKE) --no-print-directory test-server-bundle-run
+
+test-server-bundle-run:
+	@echo "[test] server (embedded production web bundle)" >&2
+	@( cd server && TASKLINE_REQUIRE_WEB_BUNDLE=1 go test ./... -count=1 )
 
 test-seed: build-all
 	@$(MAKE) --no-print-directory test-seed-run
