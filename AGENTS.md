@@ -27,21 +27,29 @@ language and invariants see `DOMAIN.md`; for architecture internals see
 
 ## Recommended skills and workflow
 
-Use these general capabilities when the harness provides them:
+For routine Taskline queue work, stay autonomous: use the methods below without
+invoking a skill that requires user approval unless its own trigger applies.
 
-- **Brainstorming and planning** (`superpowers:brainstorming`,
-  `superpowers:writing-plans`) before non-mechanical product or technical work.
-  Resolve the product contract first, then choose the simplest viable approach.
-- **TDD** (`tdd` or `superpowers:test-driven-development`) for behavior changes
-  and bug fixes. Work in small red-green-refactor slices through public
-  interfaces.
-- **Codebase design** (`improve-codebase-architecture` or `codebase-design`)
-  when a change crosses modules, alters ownership, or proposes a refactor.
-  Preserve the `cmd → handler → service → store` direction and the CLI/server
-  module boundary.
-- **Domain modeling** (`domain-modeling`) when adding or changing vocabulary,
-  lifecycle states, queue rules, claims, or dependencies. Update `DOMAIN.md`
-  with the behavior change.
+- **Brainstorming method.** Before non-mechanical work, compare 2-3 approaches
+  and choose the simplest one that fits the product contract. Invoke the full
+  `superpowers:brainstorming` skill only when the user explicitly wants an
+  interactive design session and approval checkpoints.
+- **TDD method.** For behavior changes and bug fixes, work in small
+  red-green-refactor slices through public interfaces. Invoke `tdd` or
+  `superpowers:test-driven-development` only when the user explicitly requests
+  a test-first/TDD workflow; otherwise do not add user checkpoints.
+- **Codebase design.** Use an implementation-oriented `codebase-design` skill,
+  when available, for cross-module or ownership changes. Otherwise run the
+  architecture subagent/self-review required by the Taskline workflow.
+  `improve-codebase-architecture` is for an explicit architecture audit or
+  refactoring-opportunity request, not routine implementation planning.
+- **Domain modeling.** Invoke `domain-modeling`, when available and its trigger
+  matches, for vocabulary, lifecycle, queue, claim, or dependency changes.
+  Update `DOMAIN.md` with the behavior change.
+
+Do not invoke `superpowers:writing-plans` for routine Taskline work: its default
+output is repository process files. Keep implementation plans and stage
+artifacts in Taskline task docs instead.
 
 Mechanical docs, formatting, or one-line configuration changes do not need the
 full workflow. Keep their verification proportional to risk.
