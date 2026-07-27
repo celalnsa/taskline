@@ -57,6 +57,13 @@ Do not invoke `superpowers:writing-plans` for routine Taskline work: its default
 output is repository process files. Keep routine planning in working context;
 put durable multi-step handoff plans and stage artifacts in Taskline task docs.
 
+Write repository docs and Taskline task descriptions as instructions an agent
+acts on: state the rule, invariant, or current behavior directly. Do not cite
+external articles or methodology as the justification, and do not paraphrase
+human-facing methodology narration in place of a concrete rule. Product
+rationale and philosophy belong in `PRODUCT.md`, not in operational docs or task
+descriptions.
+
 Mechanical docs, formatting, or one-line configuration changes do not need the
 full workflow. Keep their verification proportional to risk.
 
