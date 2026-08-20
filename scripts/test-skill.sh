@@ -14,6 +14,9 @@
 #   2. If the skill has an entry in `required_sections`, every listed
 #      section is present in the body — guards against structural
 #      rewrites silently dropping load-bearing headings.
+#   3. Selected skills retain required workflow rules and reject obsolete
+#      rules. These semantic smoke checks intentionally use regexes rather
+#      than pinning the whole document verbatim.
 #
 # Has zero non-stdlib dependencies (python3 only).
 set -euo pipefail
@@ -40,6 +43,58 @@ required_sections = {
         "### 1. Write the test FIRST",
         "### 2. Rebuild AND restart the running server",
         "### 3. Run the FULL test on the restarted binary",
+    ],
+}
+
+# Named rules make failures actionable and double as small policy fixtures for
+# the PR scenarios the public taskline skill must handle. Patterns use DOTALL
+# where a rule may be wrapped across Markdown lines.
+required_rules = {
+    "skills/taskline-management/SKILL.md": [
+        ("latest-head settle window",
+         r"10-minute review settle window.*latest PR head"),
+        ("required CI and settle window run together",
+         r"required CI.*concurrently.*10-minute review settle window"),
+        ("new push resets settle window",
+         r"new push.*fresh 10-minute review settle window.*new head"),
+        ("no review before window remains blocked",
+         r"no review.*settle window.*has not ended.*must not merge"),
+        ("no review after window may proceed",
+         r"settle window.*ended.*no review.*not a blocker"),
+        ("refresh every GitHub evidence surface",
+         r"refresh.*required checks.*review summaries.*review threads.*top-level PR comments"),
+        ("merge uses the server-compatible aggregate rollup",
+         r"statusCheckRollup\s*\{\s*state\s*\}.*aggregate.*SUCCESS.*absent.*before merge"),
+        ("merge pins the reviewed head",
+         r"gh pr merge.*--match-head-commit <recorded-head-oid>"),
+        ("review evidence queries paginate",
+         r"gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews.*gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments.*gh api --paginate repos/<owner>/<repo>/issues/<n>/comments.*gh api graphql --paginate"),
+        ("repository automatic review is the default",
+         r"repository-configured automatic review.*Do not run a local review-agent command.*manually summon a review bot"),
+        ("P0 and P1 findings block",
+         r"P0/P1.*fix.*reasoned rebuttal.*resolve.*thread"),
+        ("P2 and P3 threads may be resolved without reply",
+         r"P2/P3.*do not require.*code change.*reply.*resolve.*thread"),
+        ("unprioritized human findings block",
+         r"unprioritized human.*fix.*reasoned rebuttal"),
+        ("ordinary review fixes stay in review",
+         r"Ordinary review fixes.*stay in `review`"),
+        ("material design changes return to dev",
+         r"material.*product scope.*architecture.*solution.*return.*`dev`"),
+        ("stage docs use batched local copies",
+         r"local working cop.*taskline task doc update.*logical batch"),
+        ("architecture subagent is conditional",
+         r"architecture subagent.*only.*cross-module.*genuine.*alternatives"),
+    ],
+}
+
+prohibited_rules = {
+    "skills/taskline-management/SKILL.md": [
+        ("mandatory posted review", r"Wait for at least one review"),
+        ("local codex review command", r"\bcodex\s+review\b"),
+        ("manual codex mention", r"@codex\b"),
+        ("default architecture subagent",
+         r"Prefer a separate architect-style subagent when your harness supports subagents"),
     ],
 }
 
@@ -79,6 +134,25 @@ for path in paths:
     if missing:
         print(f"FAIL: {path} missing sections: " + ", ".join(missing))
         failed = True
+        continue
+
+    flags = re.IGNORECASE | re.DOTALL
+    normalized_body = re.sub(r"\s+", " ", body)
+    missing_rules = [name for name, pattern in required_rules.get(path, [])
+                     if re.search(pattern, normalized_body, flags) is None]
+    if missing_rules:
+        print(f"FAIL: {path} missing workflow rules: "
+              + ", ".join(missing_rules))
+        failed = True
+
+    obsolete_rules = [name for name, pattern in prohibited_rules.get(path, [])
+                      if re.search(pattern, normalized_body, flags) is not None]
+    if obsolete_rules:
+        print(f"FAIL: {path} contains obsolete workflow rules: "
+              + ", ".join(obsolete_rules))
+        failed = True
+
+    if missing_rules or obsolete_rules:
         continue
 
     print(f"ok: {path}")
