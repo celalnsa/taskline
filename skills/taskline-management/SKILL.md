@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.18.0
+version: 0.18.1
 ---
 
 # taskline — task management for AI agents
@@ -465,11 +465,17 @@ task description or implementation notes, then continue.
      ```bash
      gh pr view <n> --json headRefOid,reviews,reviewDecision,statusCheckRollup
      gh pr checks <n> --required
-     gh api repos/<owner>/<repo>/pulls/<n>/reviews     # bot summaries
-     gh api repos/<owner>/<repo>/pulls/<n>/comments    # inline review comments
-     gh api repos/<owner>/<repo>/issues/<n>/comments   # top-level PR conversation
-     gh api graphql -F owner=<owner> -F repo=<repo> -F number=<n> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved comments(first:100){nodes{author{login} body url}}}}}}}'
+     gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews
+     gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments
+     gh api --paginate repos/<owner>/<repo>/issues/<n>/comments
+     gh api graphql --paginate -F owner=<owner> -F repo=<repo> -F number=<n> -F endCursor=null -f query='query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}'
      ```
+
+     Required checks are the early wait set, not the final merge gate. Inspect
+     the full `statusCheckRollup`: every current entry must be completed with
+     conclusion `SUCCESS`, or the rollup must be empty, before merge. This
+     matches the Taskline server's `done` verification and prevents a
+     non-required pending or failed check from stranding an already-merged PR.
 
      Once the settle window has ended, no review is not a blocker. If reviews or
      comments do exist, apply this finding policy:
@@ -489,7 +495,8 @@ task description or implementation notes, then continue.
      implementation work.
   3. Merge with `gh pr merge --squash --delete-branch` (or the project's
      required merge style) only after the latest head's required CI succeeds,
-     its settle window ends, and every currently blocking finding is handled.
+     its full check rollup satisfies the server-compatible rule above, its
+     settle window ends, and every currently blocking finding is handled.
   4. Confirm the remote result with
      `gh pr view <n> --json state,mergedAt,statusCheckRollup`.
   5. Create or update the local `Review Report`, then upload it once for this
@@ -499,10 +506,11 @@ task description or implementation notes, then continue.
      justified change or drop back to `dev` for rework.
 - **Advance:** `taskline task update <id> --state done` *only after*
   (a) the latest head's required CI is green or N/A, (b) its 10-minute settle
-  window ended, (c) every blocking finding is fixed or rebutted and every
-  review thread is resolved, and (d) the PR is confirmed merged. A posted
-  review is not required. The server queries GitHub and rejects `done` when
-  merge, review-thread, or CI evidence is incomplete.
+  window ended, (c) the full check rollup is successful or empty, (d) every
+  blocking finding is fixed or rebutted and every review thread is resolved,
+  and (e) the PR is confirmed merged. A posted review is not required. The
+  server queries GitHub and rejects `done` when merge, review-thread, or CI
+  evidence is incomplete.
 - **Drop back to dev** with `taskline task update <id> --state dev` only when
   review changes product scope, architecture, or the chosen solution
   materially. Keep ordinary defect fixes in `review`; do not delete and
@@ -558,8 +566,9 @@ substitutes for delivery evidence.
   error, then retry the state update.
 - **`cannot enter done`** — follow the listed blocker: resolve every review
   thread, finish required CI and the settle window for the latest PR head,
-  merge the PR, update task docs/links, then retry. Do not use `--force`; it
-  cannot bypass delivery evidence.
+  confirm its complete check rollup is successful or empty, merge the PR,
+  update task docs/links, then retry. Do not use `--force`; it cannot bypass
+  delivery evidence.
 - **No review after the settle window** — refresh every evidence surface; if
   required CI is green and no blocking finding exists, the absence of a review
   does not prevent merge.
