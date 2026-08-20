@@ -83,11 +83,13 @@ unavailability is distinct from missing evidence. `--force` can bypass claim
 ownership where supported, but never these evidence gates.
 
 The agent delivery policy is intentionally stricter: it requires a real push
-and PR, all configured CI checks, at least one posted review, inspection and
-resolution of every review/comment surface, and a merge before `done`. The
-mechanical-change fast path may omit a dedicated Spec stage, but it does not
-omit those delivery gates. The exact fast-path boundary and stage artifacts
-belong to `skills/taskline-management/SKILL.md`, not the service state machine.
+and PR, required CI for the latest head, a fixed review settle window,
+inspection of every review/comment surface, handling of blocking findings,
+resolution of every review thread, and a merge before `done`. It does not
+require that a review be posted. The mechanical-change fast path may omit a
+dedicated Spec stage, but it does not omit those delivery gates. The exact
+settle-window, finding-priority, fast-path, and stage-artifact rules belong to
+`skills/taskline-management/SKILL.md`, not the service state machine.
 
 ## Claims and leases
 

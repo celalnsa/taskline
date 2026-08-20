@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.17.1
+version: 0.18.0
 ---
 
 # taskline — task management for AI agents
@@ -255,6 +255,11 @@ belong with it. Use task docs for Markdown content owned by the task
 itself, and links for external URLs such as PRs, commits, design tools,
 or chat threads. Do not keep stage deliverables only in chat history.
 
+Keep a local working copy of each `Spec`, `Dev Notes`, `Test Report`, and
+`Review Report`. Edit that copy incrementally, then upload it with
+`taskline task doc update <doc-id> --file <path>` once per logical batch. Do
+not rewrite and upload the full document separately for every review comment.
+
 Task docs are first-class Markdown files. They surface inline on
 `task get` with `url` fields under `/api/v1/docs/<doc-id>/content`;
 fetch full editable content with `taskline task doc get <doc-id>`.
@@ -312,11 +317,11 @@ more instructions:
 5. Loop back to step 1 — don't pause to ask the user whether to
    continue.
 
-Higher-order capabilities (brainstorming, planning, code review) below describe
-methods, not mandatory skill invocations. During autonomous queue work, do not
-invoke a skill that requires user approval or writes process files into the
-repository. Use a full interactive skill only when the user explicitly requests
-that workflow.
+Higher-order capabilities (brainstorming, planning, code review) below are
+optional thinking methods, not mandatory external skill invocations. During
+autonomous queue work, do not invoke a skill that requires user approval or
+writes process files into the repository. Use a full interactive skill only
+when the user explicitly requests that workflow.
 
 ### start → spec
 
@@ -349,22 +354,20 @@ that workflow.
 - **Skip when:** the change is mechanical (rename, formatting,
   one-line config) — go straight to dev.
 
-### Architecture review without user checkpoints
+### Architecture review when warranted
 
-For routine product/technical choices, do not pause for user approval.
-High-quality autonomy still needs a second pass: after you identify
-2-3 viable approaches, choose the simplest one that fits the product
-goal, then run an architecture review before implementation.
+For routine product or technical choices, do not pause for user approval.
+After identifying viable approaches, choose the simplest one that fits the
+product goal and perform a second-pass boundary and testability check yourself.
 
-Prefer a separate architect-style subagent when your harness supports
-subagents. Give it the task title, description, proposed options,
-recommended option, and relevant repo constraints; ask it to check for
-over-engineering, unclear boundaries, hidden coupling, performance
-risks, testability gaps, and violations of the project's philosophy. If
-subagents are not available, perform the same review yourself as an
-explicit second pass. The final choice should be simple, declarative,
-readable, performant enough for the expected workload, and aligned with
-existing module boundaries.
+Use an architecture subagent only for cross-module work with genuine
+implementation alternatives where an independent boundary review could change
+the approach. Give it the task title, description, options, recommendation, and
+relevant repository constraints. Ask it to check for over-engineering, unclear
+ownership, hidden coupling, performance risks, testability gaps, and violations
+of the project's philosophy. The final choice should be simple, declarative,
+readable, performant enough for the expected workload, and aligned with existing
+module boundaries.
 
 Ask the user only when the product intent is genuinely unknowable from
 the task, the decision has external/business consequences, credentials
@@ -379,9 +382,9 @@ task description or implementation notes, then continue.
 - **Actions** (test-first):
   1. Brainstorm the technical approach — list 2-3 implementation options,
      pick one, and name the tradeoff. No human checkpoint.
-  2. Run the architecture review described above, revise the choice if
-     it finds a concrete issue, and keep the final plan simple,
-     declarative, readable, and aligned with the project goals.
+  2. Apply the architecture-review threshold above. Most tasks need only the
+     local second-pass boundary check; use an architecture subagent only when
+     the task meets the cross-module / genuine-alternatives condition.
   3. Plan the technical work — architecture boundary, ordered steps, and
      test strategy. Keep routine planning in working context; for multi-step
      handoff work, attach the plan as a Taskline task doc. Do not commit
@@ -435,45 +438,75 @@ task description or implementation notes, then continue.
 
 - **Trigger:** a PR exists for the committed implementation.
 - **Actions:**
-  1. **Wait for CI** if configured. If it fails, drop the task back to
-     `dev`, fix the root cause locally, re-run tests, and push.
-  2. **Wait for at least one review** — human or bot
-     (`gemini-code-assist`, etc.). Don't merge before any review has
-     posted; the whole point of opening a PR is the second pair of
-     eyes. Poll with:
+  1. **Start the latest-head clock after every push.** Record the current PR
+     `headRefOid` and the push time. Wait for required CI and, concurrently, a
+     10-minute review settle window measured from that latest PR head. A new
+     push invalidates the earlier evidence and starts a fresh 10-minute review
+     settle window for the new head. If no review has appeared and the settle
+     window has not ended, you must not merge.
+
+     Use the repository's required checks rather than inventing an extra local
+     review gate:
 
      ```bash
-     gh pr view <n> --json reviews,reviewDecision,statusCheckRollup
+     gh pr view <n> --json headRefOid,statusCheckRollup
+     gh pr checks <n> --required --watch
      ```
 
-     Re-check periodically until `reviews` is non-empty.
-  3. Read **every** comment surface — one endpoint isn't enough:
+     Rely on repository-configured automatic review. Do not run a local
+     review-agent command or manually summon a review bot as part of the
+     default flow.
+  2. **Refresh evidence after both waits finish.** Confirm `headRefOid` is still
+     the recorded head, then refresh required checks, review summaries, review
+     threads, and top-level PR comments. The REST calls below cover summaries
+     and comments; use GitHub GraphQL to read each review thread's resolution
+     state because inline comments alone do not expose it:
 
      ```bash
+     gh pr view <n> --json headRefOid,reviews,reviewDecision,statusCheckRollup
+     gh pr checks <n> --required
      gh api repos/<owner>/<repo>/pulls/<n>/reviews     # bot summaries
      gh api repos/<owner>/<repo>/pulls/<n>/comments    # inline review comments
      gh api repos/<owner>/<repo>/issues/<n>/comments   # top-level PR conversation
+     gh api graphql -F owner=<owner> -F repo=<repo> -F number=<n> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved comments(first:100){nodes{author{login} body url}}}}}}}'
      ```
 
-     Address each finding; for real defects, drop the task back to
-     `dev`, re-run tests after each batch, and push. If a comment is
-     wrong, **reply with reasoning** rather than silently ignoring it.
-  4. Merge with `gh pr merge --squash --delete-branch` (or the project's
-     required merge style) only after reviews and CI are ready.
-  5. Confirm the remote result with
+     Once the settle window has ended, no review is not a blocker. If reviews or
+     comments do exist, apply this finding policy:
+
+     - A P0/P1 finding requires a fix or reasoned rebuttal, followed by
+       resolving its review thread.
+     - An unprioritized human finding also requires a fix or reasoned rebuttal;
+       never ignore it merely because it lacks a `P` label.
+     - P2/P3 findings do not require a code change or reply. Resolve any inline
+       thread directly so the server's zero-unresolved-thread `done` gate can
+       pass.
+
+     Ordinary review fixes should stay in `review`: edit the local stage docs,
+     run the relevant tests, push, and restart the latest-head settle window.
+     Only a material change to product scope, architecture, or the chosen
+     solution should return the task to `dev` for renewed design and
+     implementation work.
+  3. Merge with `gh pr merge --squash --delete-branch` (or the project's
+     required merge style) only after the latest head's required CI succeeds,
+     its settle window ends, and every currently blocking finding is handled.
+  4. Confirm the remote result with
      `gh pr view <n> --json state,mergedAt,statusCheckRollup`.
-  6. Create or update a `Review Report` task doc covering PR comments,
+  5. Create or update the local `Review Report`, then upload it once for this
+     logical batch. Cover PR comments,
      CI status, merge result, and whether the implementation still matches
      the original design. If not, either update the design doc with the
      justified change or drop back to `dev` for rework.
 - **Advance:** `taskline task update <id> --state done` *only after*
-  (a) CI green or N/A, (b) at least one review posted, and
-  (c) every reviewer comment addressed or rebutted, and (d) the PR is merged.
-  The server queries GitHub and rejects `done` when merge, review-thread, or CI
-  evidence is incomplete.
-- **Drop back to dev** with `taskline task update <id> --state dev`
-  when review or CI surfaces a real defect. The bidirectional state
-  machine exists for exactly this — don't delete-and-recreate.
+  (a) the latest head's required CI is green or N/A, (b) its 10-minute settle
+  window ended, (c) every blocking finding is fixed or rebutted and every
+  review thread is resolved, and (d) the PR is confirmed merged. A posted
+  review is not required. The server queries GitHub and rejects `done` when
+  merge, review-thread, or CI evidence is incomplete.
+- **Drop back to dev** with `taskline task update <id> --state dev` only when
+  review changes product scope, architecture, or the chosen solution
+  materially. Keep ordinary defect fixes in `review`; do not delete and
+  recreate the task.
 
 ### done — wrap-up
 
@@ -524,8 +557,18 @@ substitutes for delivery evidence.
   PR, attach it with the exact `taskline task link ...` command shown in the
   error, then retry the state update.
 - **`cannot enter done`** — follow the listed blocker: resolve every review
-  thread, wait for CI, merge the PR, update task docs/links, then retry. Do not
-  use `--force`; it cannot bypass delivery evidence.
+  thread, finish required CI and the settle window for the latest PR head,
+  merge the PR, update task docs/links, then retry. Do not use `--force`; it
+  cannot bypass delivery evidence.
+- **No review after the settle window** — refresh every evidence surface; if
+  required CI is green and no blocking finding exists, the absence of a review
+  does not prevent merge.
+- **A push lands during review** — the previous timer and evidence belong to
+  the old head. Start a new 10-minute settle window and refresh checks and
+  review surfaces for the new head.
+- **Only P2/P3 inline findings remain** — no code change or reply is required,
+  but resolve those threads before `done` because the server gate requires zero
+  unresolved review threads.
 - **`state entry verification unavailable`** — GitHub could not be queried.
   Configure `TASKLINE_GITHUB_TOKEN`/`GITHUB_TOKEN`/`GH_TOKEN` for the server or
   run `gh auth login` on the server host, then retry.
