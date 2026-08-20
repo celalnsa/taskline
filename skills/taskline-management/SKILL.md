@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.18.1
+version: 0.18.2
 ---
 
 # taskline — task management for AI agents
@@ -468,14 +468,15 @@ task description or implementation notes, then continue.
      gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews
      gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments
      gh api --paginate repos/<owner>/<repo>/issues/<n>/comments
-     gh api graphql --paginate -F owner=<owner> -F repo=<repo> -F number=<n> -F endCursor=null -f query='query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}'
+     gh api graphql --paginate -F owner=<owner> -F repo=<repo> -F number=<n> -F endCursor=null -f query='query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{id isResolved} pageInfo{hasNextPage endCursor}} commits(last:1){nodes{commit{statusCheckRollup{state}}}}}}}'
      ```
 
      Required checks are the early wait set, not the final merge gate. Inspect
-     the full `statusCheckRollup`: every current entry must be completed with
-     conclusion `SUCCESS`, or the rollup must be empty, before merge. This
-     matches the Taskline server's `done` verification and prevents a
-     non-required pending or failed check from stranding an already-merged PR.
+     the same GraphQL aggregate used by the server. The
+     `statusCheckRollup { state }` aggregate must be `SUCCESS`, or the rollup
+     must be absent, before merge. This accepts GitHub-successful rollups that
+     contain neutral or skipped individual checks while still preventing a
+     non-required pending or failed rollup from stranding an already-merged PR.
 
      Once the settle window has ended, no review is not a blocker. If reviews or
      comments do exist, apply this finding policy:
@@ -493,10 +494,17 @@ task description or implementation notes, then continue.
      Only a material change to product scope, architecture, or the chosen
      solution should return the task to `dev` for renewed design and
      implementation work.
-  3. Merge with `gh pr merge --squash --delete-branch` (or the project's
-     required merge style) only after the latest head's required CI succeeds,
-     its full check rollup satisfies the server-compatible rule above, its
-     settle window ends, and every currently blocking finding is handled.
+  3. Merge only after the latest head's required CI succeeds, its aggregate
+     check rollup satisfies the server-compatible rule above, its settle window
+     ends, and every currently blocking finding is handled. Pin the inspected
+     head so a concurrent push aborts instead of merging unreviewed work:
+
+     ```bash
+     gh pr merge <n> --squash --delete-branch --match-head-commit <recorded-head-oid>
+     ```
+
+     Substitute the project's required merge style when it is not squash, but
+     keep `--match-head-commit`.
   4. Confirm the remote result with
      `gh pr view <n> --json state,mergedAt,statusCheckRollup`.
   5. Create or update the local `Review Report`, then upload it once for this
@@ -506,11 +514,11 @@ task description or implementation notes, then continue.
      justified change or drop back to `dev` for rework.
 - **Advance:** `taskline task update <id> --state done` *only after*
   (a) the latest head's required CI is green or N/A, (b) its 10-minute settle
-  window ended, (c) the full check rollup is successful or empty, (d) every
-  blocking finding is fixed or rebutted and every review thread is resolved,
-  and (e) the PR is confirmed merged. A posted review is not required. The
-  server queries GitHub and rejects `done` when merge, review-thread, or CI
-  evidence is incomplete.
+  window ended, (c) the aggregate check-rollup state is `SUCCESS` or absent,
+  (d) every blocking finding is fixed or rebutted and every review thread is
+  resolved, and (e) the reviewed head is confirmed merged. A posted review is
+  not required. The server queries GitHub and rejects `done` when merge,
+  review-thread, or CI evidence is incomplete.
 - **Drop back to dev** with `taskline task update <id> --state dev` only when
   review changes product scope, architecture, or the chosen solution
   materially. Keep ordinary defect fixes in `review`; do not delete and
@@ -566,7 +574,7 @@ substitutes for delivery evidence.
   error, then retry the state update.
 - **`cannot enter done`** — follow the listed blocker: resolve every review
   thread, finish required CI and the settle window for the latest PR head,
-  confirm its complete check rollup is successful or empty, merge the PR,
+  confirm its aggregate check-rollup state is `SUCCESS` or absent, merge the PR,
   update task docs/links, then retry. Do not use `--force`; it cannot bypass
   delivery evidence.
 - **No review after the settle window** — refresh every evidence surface; if
