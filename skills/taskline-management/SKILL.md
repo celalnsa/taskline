@@ -16,7 +16,7 @@ description: |
   project queue" and proactively drain runnable tasks to completion.
   Skip for one-off todo notes with no state, dependencies, or follow-up
   — just answer those directly.
-version: 0.18.2
+version: 0.18.3
 ---
 
 # taskline — task management for AI agents
@@ -438,12 +438,11 @@ task description or implementation notes, then continue.
 
 - **Trigger:** a PR exists for the committed implementation.
 - **Actions:**
-  1. **Start the latest-head clock after every push.** Record the current PR
-     `headRefOid` and the push time. Wait for required CI and, concurrently, a
-     10-minute review settle window measured from that latest PR head. A new
-     push invalidates the earlier evidence and starts a fresh 10-minute review
-     settle window for the new head. If no review has appeared and the settle
-     window has not ended, you must not merge.
+  1. **Wait only for the latest PR head's CI checks.** Record the current PR
+     `headRefOid`, then wait for its configured CI checks to complete. A new
+     push invalidates all earlier-head CI and review evidence: record the new
+     `headRefOid` and wait for the new head's CI to complete. Do not add a
+     separate time-based gate or wait for a review to appear.
 
      Use the repository's required checks rather than inventing an extra local
      review gate:
@@ -456,8 +455,8 @@ task description or implementation notes, then continue.
      Rely on repository-configured automatic review. Do not run a local
      review-agent command or manually summon a review bot as part of the
      default flow.
-  2. **Refresh evidence after both waits finish.** Confirm `headRefOid` is still
-     the recorded head, then refresh required checks, review summaries, review
+  2. **Refresh comments after CI completes.** Confirm `headRefOid` is still the
+     recorded head, then refresh required checks, review summaries, review
      threads, and top-level PR comments. The REST calls below cover summaries
      and comments; use GitHub GraphQL to read each review thread's resolution
      state because inline comments alone do not expose it:
@@ -478,26 +477,29 @@ task description or implementation notes, then continue.
      contain neutral or skipped individual checks while still preventing a
      non-required pending or failed rollup from stranding an already-merged PR.
 
-     Once the settle window has ended, no review is not a blocker. If reviews or
-     comments do exist, apply this finding policy:
+     If there are no reviews or comments, continue to the aggregate rollup and
+     merge checks without any further review wait. If reviews or comments do
+     exist, apply this finding policy:
 
      - A P0/P1 finding requires a fix or reasoned rebuttal, followed by
        resolving its review thread.
-     - An unprioritized human finding also requires a fix or reasoned rebuttal;
-       never ignore it merely because it lacks a `P` label.
+     - An unprioritized finding, whether human or automated, also requires a
+       fix or reasoned rebuttal; never ignore it merely because it lacks a `P`
+       label.
      - P2/P3 findings do not require a code change or reply. Resolve any inline
        thread directly so the server's zero-unresolved-thread `done` gate can
        pass.
 
      Ordinary review fixes should stay in `review`: edit the local stage docs,
-     run the relevant tests, push, and restart the latest-head settle window.
-     Only a material change to product scope, architecture, or the chosen
-     solution should return the task to `dev` for renewed design and
-     implementation work.
+     run the relevant tests, push, wait for the new head's CI, and refresh the
+     comment surfaces again. Only a material change to product scope,
+     architecture, or the chosen solution should return the task to `dev` for
+     renewed design and implementation work.
   3. Merge only after the latest head's required CI succeeds, its aggregate
-     check rollup satisfies the server-compatible rule above, its settle window
-     ends, and every currently blocking finding is handled. Pin the inspected
-     head so a concurrent push aborts instead of merging unreviewed work:
+     check rollup satisfies the server-compatible rule above, the current
+     comment surfaces have been inspected, and every blocking finding is
+     handled. Pin the inspected head so a concurrent push aborts instead of
+     merging unchecked work:
 
      ```bash
      gh pr merge <n> --squash --delete-branch --match-head-commit <recorded-head-oid>
@@ -513,12 +515,12 @@ task description or implementation notes, then continue.
      the original design. If not, either update the design doc with the
      justified change or drop back to `dev` for rework.
 - **Advance:** `taskline task update <id> --state done` *only after*
-  (a) the latest head's required CI is green or N/A, (b) its 10-minute settle
-  window ended, (c) the aggregate check-rollup state is `SUCCESS` or absent,
-  (d) every blocking finding is fixed or rebutted and every review thread is
-  resolved, and (e) the reviewed head is confirmed merged. A posted review is
-  not required. The server queries GitHub and rejects `done` when merge,
-  review-thread, or CI evidence is incomplete.
+  (a) the latest head's required CI is green or N/A, (b) the aggregate
+  check-rollup state is `SUCCESS` or absent, (c) the current comment surfaces
+  have been inspected, (d) every blocking finding is fixed or rebutted and
+  every review thread is resolved, and (e) the inspected head is confirmed
+  merged. A posted review is not required. The server queries GitHub and rejects
+  `done` when merge, review-thread, or CI evidence is incomplete.
 - **Drop back to dev** with `taskline task update <id> --state dev` only when
   review changes product scope, architecture, or the chosen solution
   materially. Keep ordinary defect fixes in `review`; do not delete and
@@ -573,16 +575,16 @@ substitutes for delivery evidence.
   PR, attach it with the exact `taskline task link ...` command shown in the
   error, then retry the state update.
 - **`cannot enter done`** — follow the listed blocker: resolve every review
-  thread, finish required CI and the settle window for the latest PR head,
-  confirm its aggregate check-rollup state is `SUCCESS` or absent, merge the PR,
-  update task docs/links, then retry. Do not use `--force`; it cannot bypass
-  delivery evidence.
-- **No review after the settle window** — refresh every evidence surface; if
-  required CI is green and no blocking finding exists, the absence of a review
-  does not prevent merge.
-- **A push lands during review** — the previous timer and evidence belong to
-  the old head. Start a new 10-minute settle window and refresh checks and
-  review surfaces for the new head.
+  thread, finish required CI for the latest PR head, confirm its aggregate
+  check-rollup state is `SUCCESS` or absent, inspect the current comment
+  surfaces, merge the PR, update task docs/links, then retry. Do not use
+  `--force`; it cannot bypass delivery evidence.
+- **No review or comments after CI** — once the latest head's CI is complete,
+  refresh every evidence surface. If nothing requires action, proceed to the
+  aggregate rollup and merge checks immediately.
+- **A push lands during review** — all CI and review evidence for the previous
+  head is stale. Wait for the new head's CI, then refresh the review and comment
+  surfaces again.
 - **Only P2/P3 inline findings remain** — no code change or reply is required,
   but resolve those threads before `done` because the server gate requires zero
   unresolved review threads.
